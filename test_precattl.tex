@@ -1,0 +1,37 @@
+%! TEX program = lualatex
+\documentclass[12pt]{article}
+\usepackage[paper=a4paper,margin=0.6cm]{geometry}
+\usepackage{luacode}
+
+
+\errorstopmode
+\errorcontextlines=999
+
+\usepackage{pretty}
+\usepackage{precattl}
+\usepackage{genvar}
+\AutoGenerateVariants
+\begin{document}
+
+
+\ExplSyntaxOn
+\precatTL_set:Nn \__tmp {
+	\cC {abc ^ \ def}
+	\cB \a \cE \z
+	\cB \{ \cE \}
+	\cB \( \cE \)
+	\cM \b
+	\cT \c
+	\cP \d
+	\cU \e
+	\cD \f
+	\cS \j
+	\cL \g
+	\cO \h
+	\cA \i \cA {\~\ }
+	%\pretty:n {content \cO{something123~?[]} \cO\\ \cO\~ \cO\  \cS\a \cS\   }
+}
+\pretty:V \__tmp
+\ExplSyntaxOff
+
+\end{document}

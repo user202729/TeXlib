@@ -1,0 +1,109 @@
+\RequirePackage{expl3}
+\RequirePackage[abspath]{currfile}
+\ProvidesExplPackage{genvar}{2022/01/20}{0.0.0}{Automatically generate variants for expl3 commands}
+
+% Use: call \AutoGenerateVariants at start
+
+\cs_generate_variant:Nn \file_get:nnNTF {xnNTF}
+\cs_generate_variant:Nn \token_if_cs:NTF {cTF}
+\cs_generate_variant:Nn \tl_put_right:Nn {Nv}
+\cs_generate_variant:Nn \tl_to_str:n {x}
+
+
+% process the contents within \_GV_tokens.
+\cs_set_protected:Npn \GenerateVariantsTL:N #1 {  % callback
+	\tl_set:Nn \_GV_tokensii {}
+	\tl_analysis_map_inline:Nn \_GV_tokens {
+		\str_if_eq:nnTF {##3} {0} {
+			\tl_put_right:No \_GV_tokensii {##1}
+		} {
+		}
+	}
+
+	\tl_set:Nn \_GV_parentofc {N}
+
+	\tl_set:Nn \_GV_parentofo {n}
+	\tl_set:Nn \_GV_parentofV {n}
+	\tl_set:Nn \_GV_parentofv {n}
+	\tl_set:Nn \_GV_parentoff {n}
+	\tl_set:Nn \_GV_parentofe {n}
+	\tl_set:Nn \_GV_parentofx {n}
+
+	\tl_set:Nn \_GV_parentofN {N}
+	\tl_set:Nn \_GV_parentofn {n}
+	\tl_set:Nn \_GV_parentofT {T}
+	\tl_set:Nn \_GV_parentofF {F}
+	\tl_set:Nn \_GV_parentofp {p}
+
+	%\cs_set:Nn \_GV_getparent:N {
+	%	\use:c {_GV_parentof##1}
+	%}
+
+	\cs_set_protected:Nn \_GV_process:nnn {
+		\bool_if:nTF {##3} {
+			%\pretty:n {\cs_generate_variant:cn {##1 : \tl_map_function:nN {##2} \_GV_getparent:N} {##2}}
+			%\cs_generate_variant:cn {##1 : \tl_map_function:nN {##2} \_GV_getparent:N} {##2}
+
+			\cs_gset_eq:NN \_GV_okay \c_true_bool
+			\tl_set:Nn \_GV_baseform {}
+
+			\tl_map_inline:nn {##2} {
+				\cs_if_exist:cTF {_GV_parentof ####1} {
+					\tl_put_right:Nv \_GV_baseform {_GV_parentof ####1}
+				} {
+					\cs_gset_eq:NN \_GV_okay \c_false_bool
+					\tl_map_break:
+				}
+			}
+
+			\bool_if:NTF \_GV_okay {
+				\str_if_eq:VnTF {\_GV_baseform} {##2} {
+				}
+				{
+					%\pretty:x {\cs_generate_variant:cn {##1 : \_GV_baseform} {##2}}
+					#1 {\cs_generate_variant:cn {##1 : \_GV_baseform} {##2}}
+				}
+			} {
+			}
+		} {
+		}
+	}
+	\tl_map_inline:Nn \_GV_tokensii {
+		\exp_last_unbraced:Nx \_GV_process:nnn {\cs_split_function:N ##1}
+	}
+}
+
+\cs_set_protected:Npn \GenerateVariantsTL: {
+	\GenerateVariantsTL:N \use:n
+}
+
+% file name will be x-expanded.
+% #1: callback function
+\cs_set_protected:Npn \GenerateVariantsFile:Nn #1 #2 {
+	\sys_if_engine_luatex:T { \directlua{tex.set_synctex_no_files(1)} }  % temporary, bug https://github.com/jlaurens/synctex/issues/45
+	\file_get:xnNTF {#2} {\ExplSyntaxOn} \_GV_tokens {} {
+		\msg_error:nn {genvar} {Error:~File~specified~by~currfileabspath~\tl_to_str:n{#2}~not~found!}
+	}
+	\sys_if_engine_luatex:T { \directlua{tex.set_synctex_no_files(0)} }
+	\GenerateVariantsTL:N #1
+}
+
+\cs_set_protected:Npn \GenerateVariantsFile:n #1 {
+	\GenerateVariantsFile:Nn \use:n {#1}
+}
+
+\def \_GV_LogDetokenized:n #1 {
+	\wlog {#1}
+}
+
+\cs_set_protected:Npn \GenerateVariantsFileLog:n #1 {
+	\wlog {========start}
+	\GenerateVariantsFile:Nn \_GV_LogDetokenized:n {#1}
+	\wlog {========end}
+}
+
+\cs_gset_protected:Npn \AutoGenerateVariants {
+	%\exp_args:Nx \pretty:n {file ~= ~\currfilename}
+	%\pretty:x {file ~= ~\currfileabspath}
+	\GenerateVariantsFile:n {\currfileabspath}
+}

@@ -1,0 +1,26 @@
+%! TEX program = lualatex
+\documentclass[12pt]{article}
+\usepackage[paper=a4paper,margin=0.6cm]{geometry}
+\usepackage{luacode}
+\usepackage{miscellaneous}
+\begin{document}
+
+\ExplSyntaxOn
+% some assertions~
+\str_if_startswith:nnTF {abc} {a}
+{
+}
+{
+	\msg_error:nn {module} {ERROR}
+}
+
+\str_if_startswith:nnTF {abc} {b}
+{
+	\msg_error:nn {module} {ERROR}
+}
+{
+}
+\ExplSyntaxOff
+all okay
+
+\end{document}

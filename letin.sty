@@ -1,0 +1,36 @@
+\ProvidesExplPackage{letin}{2022/03/27}{0.0.0}{let-in macro}
+
+\cs_generate_variant:cn {tl_gset:Nn}{No}
+\cs_generate_variant:cn {regex_replace_all:nnN}{xnN}
+\cs_generate_variant:cn {cs_set:Nn}{NV}
+
+% ======== internal macro.
+% For example if #1 is \i and #2 is \pretty:n {\i},
+% then define \letin_subs:n to be \pretty:n {#1}.
+\cs_set_protected:Npn \letinprepare:Nn #1 #2 {
+	\begingroup
+		\escapechar=-1 
+		\tl_gset:No \g_letin_string_tl {\string #1}
+	\endgroup
+	\tl_set:Nn \l_letin_internal_tl {#2}
+	\regex_replace_all:xnN {\noexpand \c { \g_letin_string_tl }} {\cP\# 1} \l_letin_internal_tl
+	\cs_set:NV \letin_subs:n \l_letin_internal_tl
+}
+
+% ======== API: see example below
+\cs_set_protected:Npn \letin:nNn #1 #2 #3 {
+	\letinprepare:Nn #2 {#3}
+	\letin_subs:n {#1}
+}
+
+\let \letin:NNn \letin:nNn
+
+% grab one future n-type argument.
+% example below
+% for grabbing other types instead, use \peek_after:Nw and friends.
+\cs_set_protected:Npn \letinfuture:n #1 {
+	\cs_set:Nn \letin_subs:n {#1}
+	\letin_subs:n
+}
+% Example
+%\letinfuture:n{\pretty:n{stuff is #1}}{123}

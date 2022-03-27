@@ -1,0 +1,22 @@
+\ProvidesExplPackage{filecontentsdefx}{2022/03/27}{0.0.0}{Filecontentsdef environment extension to work in ExplSyntaxOn region}
+\RequirePackage{precattl}
+
+\precattl_exec:n {
+	\long \def \filecontentsdefxmacro_special #1 \cS\ {
+		\filecontentsdefmacro {#1} \cA\^^M
+	}
+
+	\newenvironment{filecontentsdefxmacro}[1]{
+		\ifnum \endlinechar = 32 \relax
+			% there's already an un-tokenized <32> at the end of this line
+		\ExplSyntaxOff
+			\expandafter \filecontentsdefxmacro_special
+		\else
+			\ifnum \endlinechar = 13 \else \msg_error:nn {filecontentsdefx} {cannot-endline-as-\endlinechar} \fi
+			\expandafter \filecontentsdefmacro
+		\fi
+		{#1}
+	} {
+		\endfilecontentsdefmacro
+	}
+}

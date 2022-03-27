@@ -1,0 +1,46 @@
+\ProvidesExplPackage{tlanalysispatch}{2022/03/27}{0.0.0}{Patch tl_analysis_map_inline bug}
+% https://github.com/latex3/latex3/commit/58a18eb422c96d045c77641ec38390466c9b3dd3
+
+
+
+% \begin{macro}{\tl_analysis_map_inline:Nn, \tl_analysis_map_inline:nn}
+% \begin{macro}{\__tl_analysis_map:Nn}
+% \begin{macro}{\__tl_analysis_map:NwNw}
+%   First obtain the analysis of the token list into
+%   \cs{g__tl_analysis_result_tl}. To allow nested mappings, increase the
+%   nesting depth \cs{g__kernel_prg_map_int} (shared between all
+%   modules), then define the payload macro, which runs the user code
+%   and has a name specific to that nesting depth. The looping macro
+%   grabs the \meta{tokens}, \meta{catcode} and \meta{char code}; it
+%   checks for the end of the loop with \cs{use_none:n} |##2|, normally
+%   empty, but which becomes \cs{tl_map_break:} at the end; it then
+%   calls the payload macro with the arguments in the correct order
+%   (this is the reason why we cannot directly use the same macro for
+%   looping and payload), and loops by calling itself. When the loop
+%   ends, remember to decrease the nesting depth.
+%    \begin{macrocode}
+\cs_set_protected:Npn \tl_analysis_map_inline:Nn #1
+  { \exp_args:No \tl_analysis_map_inline:nn #1 }
+\cs_set_protected:Npn \tl_analysis_map_inline:nn #1
+  {
+    \__tl_analysis:n {#1}
+    \int_gincr:N \g__kernel_prg_map_int
+    \exp_args:Nc \__tl_analysis_map:Nn
+      { _tl_analysis_map_inline_ \int_use:N \g__kernel_prg_map_int :wNw }
+  }
+\cs_set_protected:Npn \__tl_analysis_map:Nn #1#2
+  {
+    \cs_gset_protected:Npn #1 ##1##2##3 {#2}
+    \exp_after:wN \__tl_analysis_map:NwNw \exp_after:wN #1
+      \g__tl_analysis_result_tl
+      \s__tl { ? \tl_map_break: } \s__tl
+    \prg_break_point:Nn \tl_map_break:
+      { \int_gdecr:N \g__kernel_prg_map_int }
+  }
+\cs_set_protected:Npn \__tl_analysis_map:NwNw #1 #2 \s__tl #3 #4 \s__tl
+  {
+    \use_none:n #3
+    #1 {#2} {#4} {#3}
+    \__tl_analysis_map:NwNw #1
+  }
+%    \end{macrocode}

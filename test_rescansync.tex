@@ -1,0 +1,32 @@
+%! TEX program = lualatex
+\documentclass[12pt]{article}
+%\usepackage[paper=a4paper,margin=0.6cm]{geometry}
+%\usepackage{luacode}
+%\usepackage{pretty}
+%\usepackage[abspath]{currfile}
+\usepackage{rescansync}
+\usepackage{filecontentsdef}
+\usepackage{genvar}
+\AutoGenerateVariants
+\begin{document}
+
+content
+
+content
+
+
+\edef\aalineno{1+\the\inputlineno}
+\begin{filecontentsdefmacro}{\aa}
+\ExplSyntaxOff
+123
+
+456
+
+789
+\end{filecontentsdefmacro}
+
+\ExplSyntaxOn
+\exp_args:NV \rescansync:nn \aa {\aalineno}
+\ExplSyntaxOff
+
+\end{document}

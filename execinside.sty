@@ -1,0 +1,107 @@
+\ProvidesPackage{execinside}[2022/03/27]
+\RequirePackage{module}
+\RequirePackage{filecontentsdef}
+\RequirePackage{letin}
+\RequirePackage{tlanalysispatch}
+\begin{module}{\ExplSyntaxOn}{EI}
+	
+\cs_generate_variant:cn {cs_if_exist:NT}{cT}
+\cs_generate_variant:cn {EI_append:n}{x}
+\cs_generate_variant:cn {exp_args:NNN}{NNc}
+\cs_generate_variant:cn {letin:nNn}{xNn}
+\cs_generate_variant:cn {tl_set:Nn}{Nx}
+
+% ======== define handler functions.
+% a few things it can do:
+% • \tl_build_gput_right:Nn  to \__result (content being put there must be wrapped in \unexpanded i.e. x-expand to the desired result
+
+\def \EI_append_raw:n #1 {
+	\tl_build_gput_right:Nn \__result {#1}
+}
+
+\def \EI_append:n #1 {
+	\EI_append_raw:n {\exp_not:n {#1}}
+}
+
+
+\def \EIhandler_EIexpand #1 {
+	\EI_append:x {#1}
+}
+
+\def \EIhandler_EIexecute #1 {
+	#1
+}
+
+\def \execinsideprepare:n #1 {
+	\tl_build_gbegin:N \__result
+	\let \__collecting_balanced \c_false_bool
+	
+	\tl_analysis_map_inline:nn {#1} {
+		% reminder: ##1: token, ##2: char code (int), ##3: cat code (hex digit)
+
+		\bool_if:nTF \__collecting_balanced {
+			% collecting content.
+
+			\tl_build_gput_right:Nn \__balanced_content {##1}
+			\str_case:nn {##3} {
+				{1} { \tl_set:Nx \__balance_level {\__balance_level+1} }
+				{2} { \tl_set:Nx \__balance_level {\__balance_level-1}
+					\int_compare:nNnT {\__balance_level} = {0} {
+
+						% done, call handler function and revert to normal mode.
+
+						\let \__collecting_balanced \c_false_bool
+						\tl_build_gend:N \__balanced_content
+						\tl_set:Nx \__balanced_content {\__balanced_content}
+						\__balanced_content  % ← the handler function is embedded in here
+					}
+				}
+			}
+		} {
+			\let \__processed \c_false_bool
+
+		
+			% check for \EIexecute etc. and handle accordingly.
+			\int_compare:nNnT {##2} = {-1} {
+				\letin:xNn {##1} \__cs {
+					\cs_if_exist:cT {
+						EIhandler_ \cs_to_str:N \__cs
+					} {
+						\let \__collecting_balanced \c_true_bool
+						\def \__balance_level {0}
+						\tl_build_gbegin:N \__balanced_content
+						\tl_build_gput_right:Nn \__balanced_content {\noexpand}
+						\exp_args:NNc \tl_build_gput_right:Nn \__balanced_content
+								{EIhandler_ \cs_to_str:N \__cs}
+						\let \__processed \c_true_bool
+					}
+				}
+			}
+		
+			% if not, just append to result.
+			\bool_if:NF \__processed {
+				\tl_build_gput_right:Nn \__result {##1}
+			}
+		}
+	}
+
+	\tl_build_gend:N \__result
+	\tl_set:Nx \__result {\__result}
+}
+
+\def \execinside:n #1 {
+	\execinsideprepare:n {#1}
+	\__result
+}
+
+\def \execinside_set:Nn #1 #2 {
+	\execinsideprepare:n {#2}
+	\let #1 \__result
+}
+
+\def \execinside_gset:Nn #1 #2 {
+	\execinsideprepare:n {#2}
+	\global \let #1 \__result
+}
+
+\end{module}

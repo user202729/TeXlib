@@ -1,0 +1,19 @@
+%! TEX program = lualatex
+\documentclass[12pt]{article}
+\usepackage[paper=a4paper,margin=0.6cm]{geometry}
+\usepackage{luacode}
+\usepackage{execinside}
+\usepackage{pretty}
+\usepackage{genvar}
+\AutoGenerateVariants
+
+\begin{document}
+
+\ExplSyntaxOn
+\execinside:n {
+	\pretty:n {123}
+	\EIexecute {\pretty:n {1}}
+}
+\ExplSyntaxOff
+
+\end{document}

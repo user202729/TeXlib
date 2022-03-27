@@ -1,0 +1,63 @@
+\ProvidesExplPackage{rescansync}{2022/03/27}{0.0.0}{Re-scan tokens with synctex information}
+\RequirePackage{genvar}
+\RequirePackage{module}
+
+% may interfere with https://github.com/jlaurens/synctex/issues/45 .
+
+\ExplSyntaxOff
+\def \rescansyncTMPfixsync {
+	\directlua{
+saved_synctex_tag=tex.get_synctex_tag()
+function handler()
+	if not (saved_synctex_tag==nil) and tex.get_synctex_tag()>0 then
+		tex.set_synctex_tag(saved_synctex_tag)
+		saved_synctex_tag=nil
+		luatexbase.remove_from_callback('process_input_buffer', "synctex patch callback")
+	end
+end
+luatexbase.add_to_callback('process_input_buffer', handler, "synctex patch callback")
+	}
+}
+
+\begin{module}{\ExplSyntaxOn}{rescansync}
+
+	\def \__fix_sync: {}
+	\sys_if_engine_luatex:T { \let \__fix_sync: \rescansyncTMPfixsync }
+	%\let \rescansyncTMPfixsync \undefined
+
+	\def \__count {0}
+	\edef \__tab_tl {\char_generate:nn {`\^^I} {12}}
+	\edef \__j_tl {\char_generate:nn {`\^^J} {12}}
+
+	% #1: the macro that contain the content, #2: the number (line offset), #3: the file name
+	% content is in filecontentsdef format i.e. (active ^^M, active space, tab can be either active tab or other tab)
+	\cs_set_protected:Npn \rescansync:nnn #1 #2 #3 {
+		\tl_set:Nx \__count {\int_eval:n {\__count+1}}
+		\tl_set:Nx \__filename {RS\__count-#3}
+
+		\begingroup
+			\iow_new:N \__a
+			\char_set_active_eq:NN \  \c_space_tl
+			\char_set_active_eq:NN \^^I \__tab_tl
+			\char_set_active_eq:NN \^^J \iow_newline:
+			\char_set_active_eq:NN \^^M \iow_newline:
+			\iow_open:Nn \__a {\__filename}
+			\int_step_inline:nn {#2} {
+				\iow_now:Nx \__a {\iow_char:N \%}
+			}
+			\iow_now:Nx \__a {#1}
+			\iow_close:N \__a
+		\endgroup
+
+		\__fix_sync:
+		\exp_args:No \input{\__filename}
+	}
+
+	% #1: the macro that contain the content, #2: the number (line offset)
+	\cs_set_protected:Npn \rescansync:nn #1 #2 {
+		\cs_if_free:NT \currfilename {
+			\msg_error:nn {rescansync} {currfile~ package~ not~ loaded!}
+		}
+		\rescansync:nnn {#1} {#2} {\currfilename}
+	}
+\end{module}

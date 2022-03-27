@@ -1,0 +1,20 @@
+\RequirePackage{expl3}
+\RequirePackage{filecontentsdef}
+\ProvidesExplPackage{defrac}{2022/01/27}{0.0.0}{Convert a⁄b to math fraction}
+
+\newenvironment{defrac}{
+    \filecontentsdefmacro{\XXX}
+}
+{
+    \endfilecontentsdefmacro
+    \regex_replace_all:nnN {
+        (
+            \d+ | . | \{[^\{\}]*\}
+        ) ⁄ (
+            \d+ | . | \{[^\{\}]*\}
+        )
+    } {
+        \c{frac}{\1}{\2}
+    } \XXX
+    \filecontentsexec\XXX
+}

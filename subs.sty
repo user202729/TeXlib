@@ -1,0 +1,30 @@
+\RequirePackage{expl3}
+\ProvidesExplPackage{subs}{2022/01/20}{0.0.0}{Substitute before execute}
+
+
+\cs_new_protected:Nn \my__subs_aux:n {
+	\int_compare:nNnTF {\tl_count:n {#1}} = {2} {
+		\regex_replace_all:nnN #1 \my__subs_tl
+	}
+	{
+		\msg_error:nn {subs} {Length~of~\detokenize{#1}~is~not~two}
+	}
+}
+
+\cs_new_protected:Npn \Subs #1 #2 {
+	\tl_set:Nn \my__subs_tl {#1}
+	\tl_map_function:nN {#2} \my__subs_aux:n
+	\my__subs_tl
+}
+
+% Usage:
+%
+%\Subs{
+%	... some expression with \1 and \2 etc.
+%}{
+%	{{\c{1}}{value in regex format}}
+%	{{\c{2}}{value in regex format}}
+%}
+%
+% \c{1} is a regex, matches \1.
+

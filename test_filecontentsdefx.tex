@@ -1,0 +1,38 @@
+%! TEX program = lualatex
+\documentclass[12pt]{article}
+\usepackage[paper=a4paper,margin=0.6cm]{geometry}
+\usepackage{luacode}
+\usepackage{pretty}
+\usepackage{filecontentsdefx}
+
+\begin{document}
+
+\begin{filecontentsdefxmacro}{\aa}
+12_:3
+4a5%^6
+\end{filecontentsdefxmacro}
+
+\ExplSyntaxOn
+
+\exp_args:NV \pretty:n \aa
+
+\precattl_exec:n{
+\def \FCDtabtomacro {\cO\^^I}
+}
+
+\begin{filecontentsdefxmacro}{\aa}
+	78_:a9
+78%\
+\end{filecontentsdefxmacro}
+\exp_args:NV \pretty:n \aa
+
+
+\begin{filecontentsdefxmacro}{\aa}
+ 78_:a9
+78%\
+\end{filecontentsdefxmacro}
+\exp_args:NV \pretty:n \aa
+
+
+\ExplSyntaxOff
+\end{document}

@@ -1,0 +1,79 @@
+\RequirePackage{expl3}
+\ProvidesExplPackage{pretty}{2022/01/20}{0.0.0}{Pretty-print token list}
+\RequirePackage{tlanalysispatch}
+
+% usage: \pretty:n, etc. Prints to log file.
+% need server to use.
+
+% also \prettyshow:N
+
+\cs_generate_variant:Nn \str_count:n {o}
+\cs_generate_variant:Nn \tl_if_eq:nnTF {xoTF}
+\cs_generate_variant:Nn \tl_put_right:Nn {Nx}
+\cs_generate_variant:Nn \__pretty_aux:n {x}
+
+\cs_gset_protected:Nn \__pretty_aux:n { % wlog the string in some portable way and handle all possible characters in string
+	\tl_set:Nn \__pretty_tl {}
+	\tl_map_inline:nn {#1} {
+		%\tl_show:n {\int_eval:n {`##1}}
+		\tl_put_right:Nx \__pretty_tl {\int_eval:n {`##1},}
+	}
+	\wlog {\__pretty_tl-}
+	%\wlog {\tl_map_tokens:nn {#1} {,\int_eval:w `}}
+}
+
+\cs_new_protected:Nn \pretty:n {
+	{ % need extra group to protect \escapechar value set
+		\wlog{prettymark}
+		\tl_analysis_map_inline:nn {#1} {
+			% by documentation of \tl_analysis_map_inline:nn: #1=token, #2=char code, #3=catcode
+			\wlog{##2##3}
+			\int_compare:nNnTF {##2} = {-1} {
+				% token is control sequence
+
+				\tl_if_eq:xoTF {\use:c {}} {##1} {
+					% is the null control sequence, print only one `-1'
+					\__pretty_aux:n {}
+				}
+				{ % print the control sequence name
+					\escapechar=-1 \relax
+					\__pretty_aux:x {\exp_after:wN \token_to_str:N ##1}
+				}
+
+				{ % print the control sequence (might be null) meaning
+					\escapechar=`\\ \relax
+					\__pretty_aux:x {\exp_after:wN \token_to_meaning:N ##1}
+				}
+			} {}
+		}
+		\wlog{-}
+	}
+}
+
+\cs_new_protected:Npn \pretty:w #1 \prettystop {
+	\pretty:n {#1}
+}
+
+\cs_generate_variant:Nn \pretty:n {x, o}
+
+\cs_new_protected:Nn \pretty:nn {
+	\pretty:n {#1}
+	\pretty:n {#2}
+}
+
+\cs_new_protected:Nn \pretty:nnn {
+	\pretty:n {#1}
+	\pretty:n {#2}
+	\pretty:n {#3}
+}
+
+\cs_new_protected:Nn \pretty:nnnn {
+	\pretty:n {#1}
+	\pretty:n {#2}
+	\pretty:n {#3}
+	\pretty:n {#4}
+}
+
+\cs_new_protected:Nn \prettyshow:N {
+	\exp_args:No \pretty:n {\meaning #1}
+}

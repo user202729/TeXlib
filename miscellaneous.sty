@@ -1,0 +1,143 @@
+\ProvidesExplPackage{miscellaneous}{2022/03/20}{0.0.0}{Miscellaneous definitions}
+\RequirePackage{genvar}
+\RequirePackage{pretty}
+\RequirePackage{filecontentsdef}
+\RequirePackage{tlanalysispatch}
+
+\newcommand\abs[1]{\left| #1 \right|}
+\newcommand\Abs[1]{\left\lVert #1 \right\rVert}
+
+\newcommand\floor[1]{\left\lfloor #1 \right\rfloor}
+\newcommand\ceil[1]{\left\lceil #1 \right\rceil}
+
+\errorcontextlines=999
+\errorstopmode
+
+\GenerateVariantsFile:n {miscellaneous.sty}
+
+
+% ======== step 1. Letin
+
+
+% example
+%\letin:nNn {2} \i {\pretty:n {i = \i}}
+
+
+
+% namedef may also be useful~
+
+
+
+% ======== miscellaneous
+
+\prg_new_conditional:Npnn \str_if_startswith:nn #1 #2 {T, F, TF} {
+	\str_if_eq:xnTF 
+		{\str_range:nnn {#1} {1} {\str_count:n {#2}}}
+		{#2}
+	{\prg_return_true:} {\prg_return_false:}
+}
+
+
+% ======== step 2. Precat
+
+\cs_set_protected:Npn \precat_special_handle_regex:n #1 {
+	\tl_set:Nx \l_precat_index {\int_eval:n {\l_precat_index+1}}
+	\letin:xNn {precattoken \int_to_roman:V \l_precat_index} \precattoken {   % precattoken: for example string "precattokeni"
+		\tl_put_right:Nx \l_precat_processed {\c_backslash_str \precattoken /}
+		\tl_put_right:Nn \l_precat_pending_replacements {
+			\regex_replace_all:nnN {\c{\precattoken}/} {#1} \precat_output 
+			\pretty:V \precat_output
+		}
+	}
+	\let \l_precat_special_handled \c_true_bool
+}
+
+% ** main interface, \precat_process:n {content} {setup code} → set \precat_output to the result
+% unfortunately this is unacceptably slow ><
+\cs_set_protected:Npn \precat_process:nn #1 #2 {
+	% first convert everything to other catcode
+	\str_set:Nn \precat_source {#1}
+
+	% process content one by one (very inefficient but okay...)
+
+
+	% ========
+
+	\def\l_precat_processed {}
+
+
+	\tl_set:Nn \l_precat_pending_replacements {}
+	\tl_set:Nn \l_precat_index {0}
+
+
+	%\benchmark{A}
+	\bool_until_do:nn {
+		\str_if_empty_p:N \precat_source
+	}
+	{
+		%\pretty:x {\c_backslash_str \detokenize{cO} \c_backslash_str}
+
+		\let \l_precat_special_handled \c_false_bool
+
+		\str_if_startswith:ooT {\precat_source} {\c_backslash_str c} {
+			\tl_map_inline:nn {CBEMTPUDSLOA} {
+				\letin:cNn {c ##1} \cX {
+
+					\str_if_startswith:VxT \precat_source {\c_backslash_str c##1 \c_backslash_str}
+
+					%\str_if_eq:xxT
+					%	{\str_range:Vnn \precat_source {1} {4}}
+					%	{\c_backslash_str c##1 \c_backslash_str}
+
+					{
+						\letin:xNn {\str_item:Vn \precat_source {5}} \replacedchar {
+							\precat_special_handle_regex:n {\cX \replacedchar}
+						}
+						\str_set:Nx \precat_source {\str_range:Vnn \precat_source {6} {-1}}
+						\tl_map_break:
+					}
+				}
+			}
+		}
+
+		\bool_if:NF \l_precat_special_handled {
+			\tl_put_right:Nx \l_precat_processed {\str_item:Vn \precat_source {1}}
+			\str_set:Nx \precat_source {\str_range:Vnn \precat_source {2} {-1}}
+		}
+	}
+	%\benchmark{B}
+
+	\tl_set_rescan:NnV \precat_output {\newlinechar=13\relax #2 } \l_precat_processed
+	\l_precat_pending_replacements
+}
+
+% ======== precat environment.
+
+\tl_set:Nx \precat_tab_in_other {\char_generate:nn {`\^^I} {12}}
+% argument 1: setup code, e.g. \ExplSyntaxOn.
+\newenvironment{precat}[1]{
+	\tl_gset:Nn \g_precat_tmp_catsetup {#1}
+	\let \FCDtabtomacro \precat_tab_in_other
+	\int_compare:nNnTF {\endlinechar} = {13} {} {
+		\msg_error:nn {miscellaneous} {Must~ use~ outside~ ExplSyntaxOn~ region!}
+	}
+
+	\filecontentsdefmacro{\precatinput}
+}{
+	\endfilecontentsdefmacro
+
+	\precat_process:VV \precatinput \g_precat_tmp_catsetup
+	%\pretty:V \precat_output
+	\precat_output
+}
+
+% ======== precat not very good unfortunately, maybe should use regex
+
+%\cs_new:Npn \precatTL_preprocess:Npn
+
+
+
+
+
+% ======== step 3. Execinside.
+

@@ -1,0 +1,34 @@
+\ProvidesExplPackage{module}{2022/03/27}{0.0.0}{Create module}
+\RequirePackage{filecontentsdef}
+% ======== miscellaneous~  make module. (dtx already do this actually)
+
+\cs_generate_variant:cn {tl_set:Nn}{Nx}
+\cs_generate_variant:cn {regex_replace_all:nnN}{nxN}
+\cs_generate_variant:cn {tl_gset:Nn}{NV}
+
+\def \modulework {
+	\newlinechar=13\relax
+	\g_module_tmp_catsetup
+	\filecontentsexec \moduleinput
+	%\scantokens{\moduleinput}
+	%\immediate\openout 0 = tmp.tex
+	%\immediate\write 0 {\moduleinput}
+	%\immediate\closeout 0
+	%\input {tmp.tex}
+}
+
+\newenvironment{module}[2]{
+	\tl_gset:Nn \g_module_tmp_catsetup {#1}
+	\tl_gset:Nn \g_module_tmp_modulename {#2}
+	\tl_set:Nx \FCDtabtomacro {\char_generate:nn {`\^^I} {12}}
+	\int_compare:nNnTF {\endlinechar} = {13} {} {
+		\msg_error:nn {miscellaneous} {Must~ use~ outside~ ExplSyntaxOn~ region!}
+	}
+	\filecontentsdefmacro{\moduleinput}
+}{
+	\endfilecontentsdefmacro
+	\regex_replace_all:nxN {\\ __} {\noexpand\\_ \g_module_tmp_modulename}  \moduleinput
+	\tl_gset:NV \moduleinput \moduleinput
+	\aftergroup \modulework
+}
+

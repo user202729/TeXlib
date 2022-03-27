@@ -1,0 +1,40 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{luaenvironmentcatch}[2022/01/20]
+
+\RequirePackage{luacode}
+
+\begin{luacode*}
+do 
+  local mybuf = ""
+  function readbuf( buf )
+   --print("buf=" .. buf)
+    i,j = string.find(buf,"\\end{" .. environmentname .. "}")
+    --print(i,j)
+    if i==nil then
+     mybuf = mybuf .. buf .. "\n" 
+     print("[" .. mybuf .. "]")
+     return ""
+    else 
+    return nil
+    end
+   end
+
+  function startrecording()
+    luatexbase.add_to_callback('process_input_buffer', readbuf, 'readbuf')
+  end
+
+  function stoprecording()
+    luatexbase.remove_from_callback('process_input_buffer', 'readbuf')
+    local buf_without_end = mybuf:gsub("\\end{foobar}\n","")
+    print(string.format("Lua: %s", buf_without_end))
+  end
+end
+\end{luacode*}
+
+
+\end{document}
+\ExplSyntaxOn
+\def\DefineLuaEnvironment#1{
+	\newenvironment{#1}{\directlua{startrecording()}}{\directlua{stoprecording("\luaescapestring{#1}")}}
+}
+\ExplSyntaxOff

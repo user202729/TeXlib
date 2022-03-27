@@ -1,0 +1,19 @@
+%! TEX program = lualatex
+\documentclass[12pt]{article}
+\usepackage[paper=a4paper,margin=0.6cm]{geometry}
+\errorcontextlines=999
+\usepackage{luacode}
+\usepackage{pretty}
+\usepackage{benchmark}
+\usepackage{miscellaneous}
+\begin{document}
+
+\begin{precat}{\ExplSyntaxOn}
+	\pretty:n {1\cA\23}
+	\pretty:n {1\cA\23}
+	\pretty:n {1\cA\23}
+	\pretty:n {1\cA\23}
+	\pretty:n {1\cA\23}
+\end{precat}
+
+\end{document}
