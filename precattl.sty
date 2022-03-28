@@ -4,13 +4,13 @@
 % TL variant: take a TL as input, does no rescanning.
 \begin{module}{\ExplSyntaxOn}{precattl}
 
-\cs_generate_variant:cn {EI_append:n}{o}
-\cs_generate_variant:cn {EI_append:n}{x}
-\cs_generate_variant:cn {execinside_set:Nn}{NV}
-\cs_generate_variant:cn {exp_args:NN}{Nc}
-\cs_generate_variant:cn {exp_args:Nn}{No}
-\cs_generate_variant:cn {tl_put_right:Nn}{Nx}
-\cs_generate_variant:cn {use:Nn}{cV}
+\cs_generate_variant:Nn \exp_args:NN {Nc}
+\cs_generate_variant:Nn \EI_append:n {x}
+\cs_generate_variant:Nn \exp_args:Nn {No}
+\cs_generate_variant:Nn \EI_append:n {o}
+\cs_generate_variant:Nn \tl_put_right:Nn {Nx}
+\cs_generate_variant:Nn \use:nn {nV}
+\cs_generate_variant:Nn \execinside_set:Nn {NV}
 	
 
 \def \__append_space #1 {
@@ -66,7 +66,7 @@
 			}
 
 			% then pass it to the specific handler.
-			\use:cV {_precattldo_special_\string #1} \__tmp
+			\exp_args:Nc \exp_args:NV {_precattldo_special_\string #1} \__tmp
 		}
 	}
 

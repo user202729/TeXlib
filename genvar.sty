@@ -1,45 +1,75 @@
 \RequirePackage{expl3}
 \RequirePackage[abspath]{currfile}
-\ProvidesExplPackage{genvar}{2022/03/29}{0.0.1}{Automatically generate variants for expl3 commands}
+\ProvidesExplPackage{genvar}{2022/03/29}{0.0.2}{Automatically generate variants for expl3 commands}
 
 % Use: call \AutoGenerateVariants at start
 
 \cs_generate_variant:Nn \file_get:nnNTF {xnNTF}
 \cs_generate_variant:Nn \token_if_cs:NTF {cTF}
 \cs_generate_variant:Nn \tl_put_right:Nn {Nv}
+\cs_generate_variant:Nn \tl_build_gput_right:Nn {NV}
 \cs_generate_variant:Nn \tl_to_str:n {x}
 
+\ior_new:N \_GV_file
 
-% process the contents within \_GV_tokens.
-\cs_set_protected:Npn \GenerateVariantsTL:N #1 {  % callback
-	\tl_set:Nn \_GV_tokensii {}
-	\tl_analysis_map_inline:Nn \_GV_tokens {
-		\str_if_eq:nnTF {##3} {0} {
-			\tl_put_right:No \_GV_tokensii {##1}
-		} {
+
+% :: store result of reading from file #1 into \_GV_all_data.
+\cs_set_protected:Npn \_GV_file_get:n #1 {
+	\ior_open:NnF \_GV_file {#1} {
+		\msg_error:nn {genvar} {cannot-open-file}
+	}
+	\group_begin:
+	\ExplSyntaxOn
+	\char_set_catcode_other:N \{
+	\char_set_catcode_other:N \}
+	\tl_build_gbegin:N \_GV_all_data
+
+	\cs_set_protected:Npn \_GV_get_more: {
+		\ior_get:NNT \_GV_file \_GV_line {
+			\tl_build_gput_right:NV \_GV_all_data \_GV_line
+			\_GV_get_more:
 		}
 	}
 
-	\tl_set:Nn \_GV_parentofc {N}
+	\_GV_get_more:
+	\tl_build_gend:N \_GV_all_data
+	\group_end:
+}
 
-	\tl_set:Nn \_GV_parentofo {n}
-	\tl_set:Nn \_GV_parentofV {n}
-	\tl_set:Nn \_GV_parentofv {n}
-	\tl_set:Nn \_GV_parentoff {n}
-	\tl_set:Nn \_GV_parentofe {n}
-	\tl_set:Nn \_GV_parentofx {n}
 
-	\tl_set:Nn \_GV_parentofN {N}
-	\tl_set:Nn \_GV_parentofn {n}
-	\tl_set:Nn \_GV_parentofT {T}
-	\tl_set:Nn \_GV_parentofF {F}
-	\tl_set:Nn \_GV_parentofp {p}
+\tl_set:Nn \_GV_parentofc {N}
+
+\tl_set:Nn \_GV_parentofo {n}
+\tl_set:Nn \_GV_parentofV {n}
+\tl_set:Nn \_GV_parentofv {n}
+\tl_set:Nn \_GV_parentoff {n}
+\tl_set:Nn \_GV_parentofe {n}
+\tl_set:Nn \_GV_parentofx {n}
+
+\tl_set:Nn \_GV_parentofN {N}
+\tl_set:Nn \_GV_parentofn {n}
+\tl_set:Nn \_GV_parentofT {T}
+\tl_set:Nn \_GV_parentofF {F}
+\tl_set:Nn \_GV_parentofp {p}
+
+
+% process the contents within \_GV_tokens.
+\cs_set_protected:Npn \GenerateVariantsTL:N #1 {  % callback, invoked for each token being processed...
+	\tl_set:Nn \_GV_tokensii {}
+	\tl_analysis_map_inline:Nn \_GV_all_data {
+		\str_if_eq:nnT {##3} {0} {
+			\tl_put_right:No \_GV_tokensii {##1}
+		}
+	}
+
+	\prop_clear:N \_GV_seen
 
 	%\cs_set:Nn \_GV_getparent:N {
 	%	\use:c {_GV_parentof##1}
 	%}
 
 	\cs_set_protected:Nn \_GV_process:nnn {
+		% meaning of arguments: (as with \cs_split_function return value (name, signature, has_colon)
 		\bool_if:nT {##3} {
 			%\pretty:n {\cs_generate_variant:cn {##1 : \tl_map_function:nN {##2} \_GV_getparent:N} {##2}}
 			%\cs_generate_variant:cn {##1 : \tl_map_function:nN {##2} \_GV_getparent:N} {##2}
@@ -58,8 +88,14 @@
 
 			\bool_if:NT \_GV_okay {
 				\str_if_eq:VnF {\_GV_baseform} {##2} {
-					%\pretty:x {\cs_generate_variant:cn {##1 : \_GV_baseform} {##2}}
-					\_GV_aux:ncn {#1} {##1 : \_GV_baseform} {##2}
+
+					\prop_if_in:NnF \_GV_seen {##1 : ##2} {
+						\prop_put:Nnn \_GV_seen {##1 : ##2} {1}
+
+						%\pretty:x {\cs_generate_variant:cn {##1 : \_GV_baseform} {##2}}
+						\_GV_aux:ncn {#1} {##1 : \_GV_baseform} {##2}
+					}
+
 				}
 			}
 		}
@@ -82,13 +118,13 @@
 % #1: callback function
 \cs_set_protected:Npn \GenerateVariantsFile:Nn #1 #2 {
 	\sys_if_engine_luatex:T { \directlua{tex.set_synctex_no_files(1)} }  % temporary, bug https://github.com/jlaurens/synctex/issues/45
-	\file_get:xnNTF {#2} {
-		\ExplSyntaxOn
-		\char_set_catcode_other:N \{
-		\char_set_catcode_other:N \}
-	} \_GV_tokens {} {
-		\msg_error:nn {genvar} {Error:~File~specified~by~currfileabspath~\tl_to_str:n{#2}~not~found!}
-	}
+	%\file_get:xnNTF {#2} {
+	%	\ExplSyntaxOn
+	%	\char_set_catcode_other:N \{
+	%	\char_set_catcode_other:N \}
+	%} \_GV_tokens {} {
+	%}
+	\_GV_file_get:n {#2}
 	\sys_if_engine_luatex:T { \directlua{tex.set_synctex_no_files(0)} }
 	\GenerateVariantsTL:N #1
 }

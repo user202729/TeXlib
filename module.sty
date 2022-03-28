@@ -2,9 +2,9 @@
 \RequirePackage{filecontentsdef}
 % ======== miscellaneous~  make module. (dtx already do this actually)
 
-\cs_generate_variant:cn {tl_set:Nn}{Nx}
-\cs_generate_variant:cn {regex_replace_all:nnN}{nxN}
-\cs_generate_variant:cn {tl_gset:Nn}{NV}
+\cs_generate_variant:Nn \tl_set:Nn {Nx}
+\cs_generate_variant:Nn \regex_replace_all:nnN {nxN}
+\cs_generate_variant:Nn \tl_gset:Nn {NV}
 
 \def \modulework {
 	\newlinechar=13\relax
