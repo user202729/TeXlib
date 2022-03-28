@@ -12,10 +12,10 @@ function handler()
 	if not (saved_synctex_tag==nil) and tex.get_synctex_tag()>0 then
 		tex.set_synctex_tag(saved_synctex_tag)
 		saved_synctex_tag=nil
-		luatexbase.remove_from_callback('process_input_buffer', "synctex patch callback")
+		luatexbase.remove_from_callback('process_input_buffer', "rescansync: synctex patch callback")
 	end
 end
-luatexbase.add_to_callback('process_input_buffer', handler, "synctex patch callback")
+luatexbase.add_to_callback('process_input_buffer', handler, "rescansync: synctex patch callback")
 	}
 }
 
