@@ -10,7 +10,6 @@
 \cs_generate_variant:Nn \str_count:n {o}
 \cs_generate_variant:Nn \tl_if_eq:nnTF {xoTF}
 \cs_generate_variant:Nn \tl_put_right:Nn {Nx}
-\cs_generate_variant:Nn \__pretty_aux:n {x}
 
 \cs_gset_protected:Nn \__pretty_aux:n { % wlog the string in some portable way and handle all possible characters in string
 	\tl_set:Nn \__pretty_tl {}
@@ -21,6 +20,7 @@
 	\wlog {\__pretty_tl-}
 	%\wlog {\tl_map_tokens:nn {#1} {,\int_eval:w `}}
 }
+\cs_generate_variant:Nn \__pretty_aux:n {x}
 
 \cs_new_protected:Nn \pretty:n {
 	{ % need extra group to protect \escapechar value set
@@ -54,7 +54,8 @@
 	\pretty:n {#1}
 }
 
-\cs_generate_variant:Nn \pretty:n {x, o}
+\cs_generate_variant:Nn \pretty:n {x, o, V}
+\cs_generate_variant:Nn \pretty:N {c}
 
 \cs_new_protected:Nn \pretty:nn {
 	\pretty:n {#1}
