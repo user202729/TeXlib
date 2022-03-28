@@ -40,7 +40,7 @@
 	%}
 
 	\cs_set_protected:Nn \_GV_process:nnn {
-		\bool_if:nTF {##3} {
+		\bool_if:nT {##3} {
 			%\pretty:n {\cs_generate_variant:cn {##1 : \tl_map_function:nN {##2} \_GV_getparent:N} {##2}}
 			%\cs_generate_variant:cn {##1 : \tl_map_function:nN {##2} \_GV_getparent:N} {##2}
 
@@ -56,22 +56,23 @@
 				}
 			}
 
-			\bool_if:NTF \_GV_okay {
-				\str_if_eq:VnTF {\_GV_baseform} {##2} {
-				}
-				{
+			\bool_if:NT \_GV_okay {
+				\str_if_eq:VnF {\_GV_baseform} {##2} {
 					%\pretty:x {\cs_generate_variant:cn {##1 : \_GV_baseform} {##2}}
-					#1 {\cs_generate_variant:cn {##1 : \_GV_baseform} {##2}}
+					\_GV_aux:ncn {#1} {##1 : \_GV_baseform} {##2}
 				}
-			} {
 			}
-		} {
 		}
 	}
 	\tl_map_inline:Nn \_GV_tokensii {
 		\exp_last_unbraced:Nx \_GV_process:nnn {\cs_split_function:N ##1}
 	}
 }
+
+\cs_set_protected:Npn \_GV_aux:nNn #1 #2 #3 {
+	#1 {\cs_generate_variant:Nn #2 {#3}}
+}
+\cs_generate_variant:Nn \_GV_aux:nNn {ncn}
 
 \cs_set_protected:Npn \GenerateVariantsTL: {
 	\GenerateVariantsTL:N \use:n
@@ -85,7 +86,7 @@
 		\ExplSyntaxOn
 		\char_set_catcode_other:N \{
 		\char_set_catcode_other:N \}
-		} \_GV_tokens {} {
+	} \_GV_tokens {} {
 		\msg_error:nn {genvar} {Error:~File~specified~by~currfileabspath~\tl_to_str:n{#2}~not~found!}
 	}
 	\sys_if_engine_luatex:T { \directlua{tex.set_synctex_no_files(0)} }
