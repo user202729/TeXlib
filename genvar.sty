@@ -1,6 +1,6 @@
 \RequirePackage{expl3}
 \RequirePackage[abspath]{currfile}
-\ProvidesExplPackage{genvar}{2022/01/20}{0.0.0}{Automatically generate variants for expl3 commands}
+\ProvidesExplPackage{genvar}{2022/03/29}{0.0.1}{Automatically generate variants for expl3 commands}
 
 % Use: call \AutoGenerateVariants at start
 
@@ -81,7 +81,11 @@
 % #1: callback function
 \cs_set_protected:Npn \GenerateVariantsFile:Nn #1 #2 {
 	\sys_if_engine_luatex:T { \directlua{tex.set_synctex_no_files(1)} }  % temporary, bug https://github.com/jlaurens/synctex/issues/45
-	\file_get:xnNTF {#2} {\ExplSyntaxOn} \_GV_tokens {} {
+	\file_get:xnNTF {#2} {
+		\ExplSyntaxOn
+		\char_set_catcode_other:N \{
+		\char_set_catcode_other:N \}
+		} \_GV_tokens {} {
 		\msg_error:nn {genvar} {Error:~File~specified~by~currfileabspath~\tl_to_str:n{#2}~not~found!}
 	}
 	\sys_if_engine_luatex:T { \directlua{tex.set_synctex_no_files(0)} }
