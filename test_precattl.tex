@@ -1,21 +1,29 @@
 %! TEX program = lualatex
 \documentclass[12pt]{article}
 \usepackage[paper=a4paper,margin=0.6cm]{geometry}
-\usepackage{luacode}
 
 
 \errorstopmode
 \errorcontextlines=999
 
-\usepackage{pretty}
+\usepackage{benchmark}
+\benchmark c
 \usepackage{precattl}
+\benchmark d
+\usepackage{pretty}
+\benchmark a
+\usepackage[abspath]{currfile}
+\benchmark d
 \usepackage{genvar}
+\benchmark b
 \AutoGenerateVariants
 \begin{document}
 
 
 \ExplSyntaxOn
-\precattl_set:Nn \__tmp {
+\pretty:n {123}
+\benchmark{run~start}
+\tl_set:Nn \__content {
 	\cC {abc ^ \ def}
 	\cB \a \cE \z
 	\cB \{ \cE \}
@@ -40,6 +48,13 @@
 	\cO \  %
 	%\pretty:n {content \cO{something123~?[]} \cO\\ \cO\~ \cO\  \cS\a \cS\   }
 }
+\benchmark{set~content}
+\precattl_set:NV \__tmp \__content
+\benchmark{precattl~done}
+
+\tl_analysis_map_inline:Nn \__content {}
+\benchmark{analysis_map~alone}
+
 \pretty:V \__tmp
 \ExplSyntaxOff
 

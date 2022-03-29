@@ -1,9 +1,8 @@
 \ProvidesPackage{execinside}[2022/03/27]
-\RequirePackage{module}
 \RequirePackage{filecontentsdef}
 \RequirePackage{tlanalysispatch}
 
-\begin{module}{\ExplSyntaxOn}{EI}
+\ExplSyntaxOn
 	
 \cs_generate_variant:Nn \EI_append:n {x}
 \cs_generate_variant:Nn \int_compare:nNnTF {VNnTF}
@@ -13,10 +12,10 @@
 
 % ======== define handler functions.
 % a few things it can do:
-% • \tl_build_gput_right:Nn  to \__result (content being put there must be wrapped in \unexpanded i.e. x-expand to the desired result
+% • \tl_build_gput_right:Nn  to \_EIresult (content being put there must be wrapped in \unexpanded i.e. x-expand to the desired result
 
 \cs_set_protected:Npn \EI_append_raw:n #1 {
-	\tl_build_gput_right:Nn \__result {#1}
+	\tl_build_gput_right:Nn \_EIresult {#1}
 }
 
 \cs_set_protected:Npn \EI_append:n #1 {
@@ -28,10 +27,10 @@
 % #1: the function to pass argument in.  (arguments are passed as brace-hack-included)
 % #2: number of arguments
 \cs_set_protected:Npn \EI_collect_arg:Nn #1 #2 {
-	\def \__collecting_balanced {#2}
-	\def \__balance_level {0}
-	\tl_build_gbegin:N \__balanced_content
-	\tl_build_gput_right:Nn \__balanced_content {\noexpand #1}
+	\def \_EIcollecting_balanced {#2}
+	\def \_EIbalance_level {0}
+	\tl_build_gbegin:N \_EIbalanced_content
+	\tl_build_gput_right:Nn \_EIbalanced_content {\noexpand #1}
 }
 
 \cs_set_protected:Npn \EIhandler_EIexpand {
@@ -43,34 +42,34 @@
 }
 
 \cs_set_protected:Npn \execinsideprepare:n #1 {
-	\tl_build_gbegin:N \__result
-	\def \__collecting_balanced {0}
+	\tl_build_gbegin:N \_EIresult
+	\def \_EIcollecting_balanced {0}
 	
 	\tl_analysis_map_inline:nn {#1} {
 		% reminder: ##1: token, ##2: char code (int), ##3: cat code (hex digit)
 
-		\int_compare:VNnTF \__collecting_balanced > 0 {
+		\int_compare:VNnTF \_EIcollecting_balanced > 0 {
 			% collecting content.
 
-			\tl_build_gput_right:Nn \__balanced_content {##1}
+			\tl_build_gput_right:Nn \_EIbalanced_content {##1}
 			\str_case:nn {##3} {
-				{1} { \tl_set:Nx \__balance_level {\__balance_level+1} }
-				{2} { \tl_set:Nx \__balance_level {\__balance_level-1}
-					\int_compare:nNnT {\__balance_level} = {0} {
+				{1} { \tl_set:Nx \_EIbalance_level {\_EIbalance_level+1} }
+				{2} { \tl_set:Nx \_EIbalance_level {\_EIbalance_level-1}
+					\int_compare:nNnT {\_EIbalance_level} = {0} {
 
 						% done, call handler function and revert to normal mode.
 
-						\tl_set:Nx \__collecting_balanced {\int_eval:n{\__collecting_balanced-1}}
-						\int_compare:VNnT \__collecting_balanced = 0 {
-							\tl_build_gend:N \__balanced_content
-							\tl_set:Nx \__balanced_content {\__balanced_content}
-							\__balanced_content  % ← the handler function is embedded in here
+						\tl_set:Nx \_EIcollecting_balanced {\int_eval:n{\_EIcollecting_balanced-1}}
+						\int_compare:VNnT \_EIcollecting_balanced = 0 {
+							\tl_build_gend:N \_EIbalanced_content
+							\tl_set:Nx \_EIbalanced_content {\_EIbalanced_content}
+							\_EIbalanced_content  % ← the handler function is embedded in here
 						}
 					}
 				}
 			}
 		} {
-			\let \__processed \c_false_bool
+			\let \_EIprocessed \c_false_bool
 
 		
 			% check for \EIexecute etc. and handle accordingly.
@@ -78,34 +77,33 @@
 				\cs_if_exist_use:cT {
 					EIhandler_ \expandafter \cs_to_str:N ##1
 				} {
-					\let \__processed \c_true_bool
+					\let \_EIprocessed \c_true_bool
 				}
 			}
 		
 			% if not, just append to result.
-			\bool_if:NF \__processed {
-				\tl_build_gput_right:Nn \__result {##1}
+			\bool_if:NF \_EIprocessed {
+				\tl_build_gput_right:Nn \_EIresult {##1}
 			}
 		}
 	}
 
-	\tl_build_gend:N \__result
-	\tl_set:Nx \__result {\__result}
+	\tl_build_gend:N \_EIresult
+	\tl_set:Nx \_EIresult {\_EIresult}
 }
 
 \cs_set_protected:Npn \execinside:n #1 {
 	\execinsideprepare:n {#1}
-	\__result
+	\_EIresult
 }
 
 \cs_set_protected:Npn \execinside_set:Nn #1 #2 {
 	\execinsideprepare:n {#2}
-	\let #1 \__result
+	\let #1 \_EIresult
 }
 
 \cs_set_protected:Npn \execinside_gset:Nn #1 #2 {
 	\execinsideprepare:n {#2}
-	\global \let #1 \__result
+	\global \let #1 \_EIresult
 }
 
-\end{module}

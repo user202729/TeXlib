@@ -1,8 +1,8 @@
 \ProvidesPackage{precattl}[2022/03/27]
-\RequirePackage{module}
 \RequirePackage{execinside}
 % TL variant: take a TL as input, does no rescanning.
-\begin{module}{\ExplSyntaxOn}{precattl}
+
+\ExplSyntaxOn
 
 \cs_generate_variant:Nn \exp_args:NN {Nc}
 \cs_generate_variant:Nn \EI_append:n {x}
@@ -13,88 +13,87 @@
 \cs_generate_variant:Nn \execinside_set:Nn {NV}
 	
 
-\def \__append_space #1 {
+\def \_precattlappend_space #1 {
 	\begingroup
 	\lccode `\ =#1
 	\lowercase{
-		\def\__tmp{\endgroup \EI_append:n {~}}
+		\def\_precattltmp{\endgroup \EI_append:n {~}}
 	}
-	\__tmp
+	\_precattltmp
 }
 
 \begingroup
 
 
-\global\def \__append_begin #1 {
+\global\def \_precattlappend_begin #1 {
 	\begingroup
 	\lccode `\{=#1
 	\lowercase{\endgroup \EI_append_raw:n { \iftrue { \else } \fi }}
 }
-\global\def \__append_end #1 {
+\global\def \_precattlappend_end #1 {
 	\begingroup
 	\lccode `\}=#1
 	\lowercase{\endgroup \EI_append_raw:n { \iffalse { \else } \fi }}
 }
 \endgroup
 	
-\def \__do_special_cC #1 { \exp_args:Nc \EI_append:n {#1} }
-\def \__do_special_cB #1 { \tl_analysis_map_inline:nn {#1} { \__append_begin {##2} } }
-\def \__do_special_cE #1 { \tl_analysis_map_inline:nn {#1} { \__append_end {##2} } }
-\def \__do_special_cM #1 { \tl_analysis_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {##2} {3}} } }
-\def \__do_special_cT #1 { \tl_analysis_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {##2} {4}} } }
-\def \__do_special_cP #1 { \tl_analysis_map_inline:nn {#1} { \exp_args:No \EI_append:o {\char_generate:nn {##2} {6}} } }
-\def \__do_special_cU #1 { \tl_analysis_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {##2} {7}} } }
-\def \__do_special_cD #1 { \tl_analysis_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {##2} {8}} } }
-\def \__do_special_cS #1 { \tl_analysis_map_inline:nn {#1} { \__append_space {##2} } }
-\def \__do_special_cL #1 { \tl_analysis_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {##2} {11}} } }
-\def \__do_special_cO #1 { \tl_analysis_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {##2} {12}} } }
-\def \__do_special_cA #1 { \tl_analysis_map_inline:nn {#1} {
+\def \_precattldo_special_cC #1 { \exp_args:Nc \EI_append:n {#1} }
+\def \_precattldo_special_cB #1 { \tl_analysis_map_inline:nn {#1} { \_precattlappend_begin {##2} } }
+\def \_precattldo_special_cE #1 { \tl_analysis_map_inline:nn {#1} { \_precattlappend_end {##2} } }
+\def \_precattldo_special_cM #1 { \tl_analysis_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {##2} {3}} } }
+\def \_precattldo_special_cT #1 { \tl_analysis_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {##2} {4}} } }
+\def \_precattldo_special_cP #1 { \tl_analysis_map_inline:nn {#1} { \exp_args:No \EI_append:o {\char_generate:nn {##2} {6}} } }
+\def \_precattldo_special_cU #1 { \tl_analysis_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {##2} {7}} } }
+\def \_precattldo_special_cD #1 { \tl_analysis_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {##2} {8}} } }
+\def \_precattldo_special_cS #1 { \tl_analysis_map_inline:nn {#1} { \_precattlappend_space {##2} } }
+\def \_precattldo_special_cL #1 { \tl_analysis_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {##2} {11}} } }
+\def \_precattldo_special_cO #1 { \tl_analysis_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {##2} {12}} } }
+\def \_precattldo_special_cA #1 { \tl_analysis_map_inline:nn {#1} {
 		\exp_args:No \EI_append:o {\char_generate:nn {##2} {13}}
 } }
 
 
 
-	\def \__do_special #1 #2 {
-		% given #1 e.g. \cO, #2 e.g. {abc}, append <abc> in OTHER catcode to EI.
-		{
-			\escapechar=-1
+\def \_precattldo_special #1 #2 {
+	% given #1 e.g. \cO, #2 e.g. {abc}, append <abc> in OTHER catcode to EI.
+	{
+		\escapechar=-1
 
-			% let \__tmp be the concatenation of \string of all tokens within #2.
-			\def \__tmp {}
-			\tl_analysis_map_inline:nn {#2} {
-				\tl_put_right:Nx \__tmp {\exp_after:wN \string ##1}
-			}
-
-			% then pass it to the specific handler.
-			\exp_args:Nc \exp_args:NV {_precattldo_special_\string #1} \__tmp
+		% let \_precattltmp be the concatenation of \string of all tokens within #2.
+		\def \_precattltmp {}
+		\tl_analysis_map_inline:nn {#2} {
+			\tl_put_right:Nx \_precattltmp {\exp_after:wN \string ##1}
 		}
+
+		% then pass it to the specific handler.
+		\exp_args:Nc \exp_args:NV {_precattldo_special_\string #1} \_precattltmp
 	}
+}
 
 
-	\def \precattl_prepare:n #1 {
-		\tl_set:Nn \__value {#1}
-		\regex_replace_all:nnN
-			{(\c{c[CBEMTPUDSLOA]}) \cB. (\c[CMTUDSLO].*) \cE. }  % e.g. \cO {a}
-			{
-				\c{EIexecute} \cB{ \c{\__do_special} \1 \cB{ \2 \cE} \cE}
-			}
-			\__value
-		\regex_replace_all:nnN
-			{(\c{c[CBEMTPUDSLOA]}) (\c{.*}) }  % e.g. \cO \a
-			{
-				\c{EIexecute} \cB{ \c{\__do_special} \1 \2 \cE}
-			}
-			\__value
-		\execinside_set:NV \__value \__value
-	}
+\def \precattl_prepare:n #1 {
+	\tl_set:Nn \_precattlvalue {#1}
+	\regex_replace_all:nnN
+		{(\c{c[CBEMTPUDSLOA]}) \cB. (\c[CMTUDSLO].*) \cE. }  % e.g. \cO {a}
+		{
+			\c{EIexecute} \cB{ \c{\_precattldo_special} \1 \cB{ \2 \cE} \cE}
+		}
+		\_precattlvalue
+	\regex_replace_all:nnN
+		{(\c{c[CBEMTPUDSLOA]}) (\c{.*}) }  % e.g. \cO \a
+		{
+			\c{EIexecute} \cB{ \c{\_precattldo_special} \1 \2 \cE}
+		}
+		\_precattlvalue
+	\execinside_set:NV \_precattlvalue \_precattlvalue
+}
 
-	\def \precattl_set:Nn #1 #2 {
-		\precattl_prepare:n {#2}
-		\tl_set_eq:NN #1 \__value
-	}
-	
-	\def \precattl_exec:n #1 {
-		\precattl_prepare:n {#1}
-		\__value
-	}
-\end{module}
+\def \precattl_set:Nn #1 #2 {
+	\precattl_prepare:n {#2}
+	\tl_set_eq:NN #1 \_precattlvalue
+}
+
+\def \precattl_exec:n #1 {
+	\precattl_prepare:n {#1}
+	\_precattlvalue
+}
