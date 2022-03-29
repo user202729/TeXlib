@@ -2,22 +2,25 @@
 \RequirePackage{precattl}
 \RequirePackage{filecontentsdef}
 
-\precattl_exec:n {
-	\long \def \filecontentsdefxmacro_special #1 \cS\ {
-		\filecontentsdefmacro {#1} \cA\^^M
+\group_begin:
+\catcode `\^^M \active
+\use:n {
+	\group_end:
+	\long \def \filecontentsdefxmacro_special #1 ~ {
+		\filecontentsdefmacro {#1} ^^M
 	}
+}
 
-	\newenvironment{filecontentsdefxmacro}[1]{
-		\ifnum \endlinechar = 32 \relax
-			% there's already an un-tokenized <32> at the end of this line
-		\ExplSyntaxOff
-			\expandafter \filecontentsdefxmacro_special
-		\else
-			\ifnum \endlinechar = 13 \else \msg_error:nn {filecontentsdefx} {cannot-endline-as-\endlinechar} \fi
-			\expandafter \filecontentsdefmacro
-		\fi
-		{#1}
-	} {
-		\endfilecontentsdefmacro
-	}
+\newenvironment{filecontentsdefxmacro}[1]{
+	\ifnum \endlinechar = 32 \relax
+		% there's already an un-tokenized <32> at the end of this line
+	\ExplSyntaxOff
+		\expandafter \filecontentsdefxmacro_special
+	\else
+		\ifnum \endlinechar = 13 \else \msg_error:nn {filecontentsdefx} {cannot-endline-as-\endlinechar} \fi
+		\expandafter \filecontentsdefmacro
+	\fi
+	{#1}
+} {
+	\endfilecontentsdefmacro
 }

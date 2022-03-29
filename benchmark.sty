@@ -1,7 +1,10 @@
 % NOTE there's l3benchmark package too
 \ProvidesExplPackage{benchmark}{2022/03/25}{0.0.0}{Benchmark}
 \RequirePackage{pretty}
+\RequirePackage{letin}
 \RequirePackage{pdftexcmds}
+
+\cs_generate_variant:Nn \letin:nNn {xNn}
 
 %\directlua{
 %	function benchmark_f(x){

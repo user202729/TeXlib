@@ -3,43 +3,59 @@
 \RequirePackage{filecontentsdef}
 \RequirePackage{letin}
 \RequirePackage{tlanalysispatch}
+
+\RequirePackage{genvar}
+
 \begin{module}{\ExplSyntaxOn}{EI}
+
+	\GenerateVariantsFile:n {execinside.sty}
 	
-\cs_generate_variant:cn {cs_if_exist:NT}{cT}
-\cs_generate_variant:cn {EI_append:n}{x}
-\cs_generate_variant:cn {exp_args:NNN}{NNc}
-\cs_generate_variant:cn {letin:nNn}{xNn}
-\cs_generate_variant:cn {tl_set:Nn}{Nx}
+\cs_generate_variant:Nn \EI_append:n {x}
+\cs_generate_variant:Nn \int_compare:nNnTF {VNnTF}
+\cs_generate_variant:Nn \tl_set:Nn {Nx}
+\cs_generate_variant:Nn \int_compare:nNnT {VNnT}
+\cs_generate_variant:Nn \letin:nNn {xNn}
+\cs_generate_variant:Nn \cs_if_exist_use:NT {cT}
 
 % ======== define handler functions.
 % a few things it can do:
 % • \tl_build_gput_right:Nn  to \__result (content being put there must be wrapped in \unexpanded i.e. x-expand to the desired result
 
-\def \EI_append_raw:n #1 {
+\cs_set_protected:Npn \EI_append_raw:n #1 {
 	\tl_build_gput_right:Nn \__result {#1}
 }
 
-\def \EI_append:n #1 {
+\cs_set_protected:Npn \EI_append:n #1 {
 	\EI_append_raw:n {\exp_not:n {#1}}
 }
 
 
-\def \EIhandler_EIexpand #1 {
-	\EI_append:x {#1}
+% handler can call this to collect following tokens in the input stream as argument.
+% #1: the function to pass argument in.  (arguments are passed as brace-hack-included)
+% #2: number of arguments
+\cs_set_protected:Npn \EI_collect_arg:Nn #1 #2 {
+	\def \__collecting_balanced {#2}
+	\def \__balance_level {0}
+	\tl_build_gbegin:N \__balanced_content
+	\tl_build_gput_right:Nn \__balanced_content {\noexpand #1}
 }
 
-\def \EIhandler_EIexecute #1 {
-	#1
+\def \EIhandler_EIexpand {
+	\EI_collect_arg:Nn \EI_append:x {1}
+}
+
+\def \EIhandler_EIexecute {
+	\EI_collect_arg:Nn \use:n {1}
 }
 
 \def \execinsideprepare:n #1 {
 	\tl_build_gbegin:N \__result
-	\let \__collecting_balanced \c_false_bool
+	\def \__collecting_balanced {0}
 	
 	\tl_analysis_map_inline:nn {#1} {
 		% reminder: ##1: token, ##2: char code (int), ##3: cat code (hex digit)
 
-		\bool_if:nTF \__collecting_balanced {
+		\int_compare:VNnTF \__collecting_balanced > 0 {
 			% collecting content.
 
 			\tl_build_gput_right:Nn \__balanced_content {##1}
@@ -50,10 +66,12 @@
 
 						% done, call handler function and revert to normal mode.
 
-						\let \__collecting_balanced \c_false_bool
-						\tl_build_gend:N \__balanced_content
-						\tl_set:Nx \__balanced_content {\__balanced_content}
-						\__balanced_content  % ← the handler function is embedded in here
+						\tl_set:Nx \__collecting_balanced {\int_eval:n{\__collecting_balanced-1}}
+						\int_compare:VNnT \__collecting_balanced = 0 {
+							\tl_build_gend:N \__balanced_content
+							\tl_set:Nx \__balanced_content {\__balanced_content}
+							\__balanced_content  % ← the handler function is embedded in here
+						}
 					}
 				}
 			}
@@ -64,15 +82,9 @@
 			% check for \EIexecute etc. and handle accordingly.
 			\int_compare:nNnT {##2} = {-1} {
 				\letin:xNn {##1} \__cs {
-					\cs_if_exist:cT {
+					\cs_if_exist_use:cT {
 						EIhandler_ \cs_to_str:N \__cs
 					} {
-						\let \__collecting_balanced \c_true_bool
-						\def \__balance_level {0}
-						\tl_build_gbegin:N \__balanced_content
-						\tl_build_gput_right:Nn \__balanced_content {\noexpand}
-						\exp_args:NNc \tl_build_gput_right:Nn \__balanced_content
-								{EIhandler_ \cs_to_str:N \__cs}
 						\let \__processed \c_true_bool
 					}
 				}

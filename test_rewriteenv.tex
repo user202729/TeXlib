@@ -1,0 +1,31 @@
+%! TEX program = lualatex
+\documentclass[12pt]{article}
+\usepackage[paper=a4paper,margin=0.6cm]{geometry}
+\usepackage{luacode}
+\usepackage{rewriteenv}
+\usepackage{genvar}
+\AutoGenerateVariants
+\begin{document}
+
+\ExplSyntaxOn
+\newrewriteenvironment {test} {
+	\regex_replace_all:nnN {b} {d} \RWbody
+}
+\ExplSyntaxOff
+
+abc
+
+abc
+
+\begin{test}
+	abc \par
+	abc \par
+	abc \par
+	abc \par
+\end{test}
+
+abc
+
+abc
+
+\end{document}

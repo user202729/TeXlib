@@ -1,0 +1,26 @@
+\ProvidesExplPackage{catchrest}{2022/03/29}{0.0.0}{Capture the remaining content of the current file into a macro}
+\RequirePackage{filecontentsdefx}
+\RequirePackage{precattl}
+
+\precattl_exec:n {
+	% #1: the token/function to be executed after, will be fed with the content
+	\protected \def \catchrest:N #1 {
+		\group_begin:
+		\everyeof {
+			\cO\\end\cO\{filecontentsdefxmacro\cO\} \cA\^^M
+			\exp_args:NNV
+				\group_end:  % revert \everyeof content
+				#1 \_catchrest_data
+		}
+		\begin{filecontentsdefxmacro}{\_catchrest_data}
+	}
+}
+
+% same as above but #1 is inline. e.g. {pretty:n {#1}}
+\protected \def \catchrest:n #1 {
+	\cs_gset:Npn \_catchrest_after ##1 {#1}
+	\catchrest:N \_catchrest_after
+}
+
+\let \catchrestN \catchrest:N
+\let \catchrestn \catchrest:n

@@ -1,0 +1,25 @@
+%! TEX program = lualatex
+\documentclass[12pt]{article}
+\usepackage[paper=a4paper,margin=0.6cm]{geometry}
+\usepackage{luacode}
+\usepackage{filecontentsdefx}
+\usepackage{precattl}
+\usepackage{pretty}
+\usepackage{catchrest}
+%\loggingall
+\begin{document}
+
+\begin{filecontentsdefmacro}{\aa}
+	content
+\end{filecontentsdefmacro}
+
+\makeatletter
+\ExplSyntaxOn
+%\pretty:V \FCD@E
+
+
+\catchrest:n {\pretty:n {#1} \end{document}}
+line 1
+line 2
+line 3
+

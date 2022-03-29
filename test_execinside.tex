@@ -1,6 +1,7 @@
 %! TEX program = lualatex
 \documentclass[12pt]{article}
 \usepackage[paper=a4paper,margin=0.6cm]{geometry}
+\errorcontextlines=100
 \usepackage{luacode}
 \usepackage{execinside}
 \usepackage{pretty}
@@ -10,9 +11,12 @@
 \begin{document}
 
 \ExplSyntaxOn
+\def \__a {1}
 \execinside:n {
 	\pretty:n {123}
-	\EIexecute {\pretty:n {1}}
+	stuff \EIexecute {\tl_set:Nx \__a {\int_eval:n{\__a+1}}    \pretty:V \__a}
+	stuff \EIexecute {\tl_set:Nx \__a {\int_eval:n{\__a+1}}    \pretty:V \__a}
+	stuff \EIexecute {\tl_set:Nx \__a {\int_eval:n{\__a+1}}    \pretty:V \__a}
 }
 \ExplSyntaxOff
 

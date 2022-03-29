@@ -1,0 +1,16 @@
+%! TEX program = lualatex
+\documentclass[12pt]{article}
+\usepackage{rewriterest}
+\begin{document}
+
+\ExplSyntaxOn
+\rewriterest:n {
+	\regex_replace_all:nnN {b} {d} \RWRbody
+}
+\ExplSyntaxOff
+
+b 1 \par
+b 2 \par
+b 3
+
+\end{document}

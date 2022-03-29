@@ -1,0 +1,20 @@
+%! TEX program = lualatex
+\documentclass[12pt]{article}
+\usepackage{benchmark}
+\benchmark{a}
+\usepackage{rewriterest}
+%\benchmark{b}
+\begin{document}
+
+\ExplSyntaxOn
+\rewriterest:n {
+	\regex_replace_all:nnN {b} {d} \RWRbody
+}
+\ExplSyntaxOff
+
+b 1 \par
+b 2 \par
+b 4
+
+\end{document}
+

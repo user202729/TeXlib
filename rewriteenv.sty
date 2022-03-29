@@ -1,0 +1,24 @@
+\ProvidesExplPackage{rewriteenv}{2022/03/29}{0.0.0}{Rewrite and execute environment content}
+\RequirePackage{filecontentsdefx}
+\RequirePackage{rescansync}
+
+\cs_generate_variant:Nn \rescansync:nn {VV}
+
+% #1: environment name
+% #2: code to rewrite
+
+% should change the value of \RWbody
+% input/output format: filecontentsdef verbatim format (new line as 13, etc.)
+
+%\cs_generate_variant:Nn \rescansync:nn {VV}
+
+\protected \def \newrewriteenvironment #1 #2 {
+	\newenvironment {#1} {
+		\global \edef \RW_lineno {\the\inputlineno}
+		\filecontentsdefxmacro \RWbody
+	} {
+		\endfilecontentsdefxmacro
+		#2
+		\rescansync:VV \RWbody \RW_lineno
+	}
+}

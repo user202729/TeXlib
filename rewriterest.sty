@@ -1,0 +1,15 @@
+\ProvidesExplPackage{rewriterest}{2022/03/29}{0.0.0}{Rewrite and execute the rest of the file}
+\RequirePackage{catchrest}
+\RequirePackage{rescansync}
+
+\cs_generate_variant:Nn \rescansync:nn {VV}
+
+% #1: code that when executed, rewrite the content in \RWRbody
+\def \rewriterest:n #1 {
+	\tl_set:Nx \_rewriterest_lineno {\the\inputlineno}
+	\catchrest:n {
+		\tl_set:Nn \RWRbody {##1}
+		#1
+		\rescansync:VV \RWRbody \_rewriterest_lineno
+	}
+}
