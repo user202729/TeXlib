@@ -15,7 +15,7 @@
 
 
 \ExplSyntaxOn
-\precatTL_set:Nn \__tmp {
+\precattl_set:Nn \__tmp {
 	\cC {abc ^ \ def}
 	\cB \a \cE \z
 	\cB \{ \cE \}
@@ -29,6 +29,15 @@
 	\cL \g
 	\cO \h
 	\cA \i \cA {\~\ }
+	
+	\cM \  %
+	\cT \  %
+	\cP \  %
+	\cU \  %
+	\cD \  %
+	\cS \  %
+	\cL \  %
+	\cO \  %
 	%\pretty:n {content \cO{something123~?[]} \cO\\ \cO\~ \cO\  \cS\a \cS\   }
 }
 \pretty:V \__tmp

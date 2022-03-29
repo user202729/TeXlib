@@ -1,31 +1,27 @@
 % NOTE there's l3benchmark package too
 \ProvidesExplPackage{benchmark}{2022/03/25}{0.0.0}{Benchmark}
 \RequirePackage{pretty}
-\RequirePackage{letin}
 \RequirePackage{pdftexcmds}
-
-\cs_generate_variant:Nn \letin:nNn {xNn}
-
-%\directlua{
-%	function benchmark_f(x){
-%	}
-%}
 
 \global\def \g_benchmark_lasttime {0}
 \global\def \g_benchmark_lastmessage {0}
 
+% we try to make benchmark as fast as possible
+% also get the elapse time value twice, to remove the effect of slow logging
+% now, no-op benchmark takes 0.00001s (each log takes 0.0005s)
 \def \benchmark #1 {
-	%\directlua{benchmark_f(\number\pdf@elapsedtime)}
-	\str_gset:Nn \g_benchmark_message {#1}
-	\benchmark_aux:o {\number\pdf@elapsedtime}
-	\global\let \g_benchmark_lastmessage \g_benchmark_message
+	\_benchmark_aux:on {\number\pdf@elapsedtime} {#1}
 }
 
-\cs_set_protected:Npn \benchmark_aux:n #1 {
+\cs_set_protected:Npn \_benchmark_aux:nn #1 #2 {
+	\str_gset:Nn \g_benchmark_message {#2}
 	\pretty:x {
 		(\g_benchmark_lastmessage)~ ->~ (\g_benchmark_message): ~
-		\fp_eval:n {(#1 - \g_benchmark_lasttime)/65536}s
+		\fp_eval:n {
+			round((#1 - \g_benchmark_lasttime)/65536, 6)
+		}s
 	}
-	\global\def \g_benchmark_lasttime {#1}
+	\global\let \g_benchmark_lastmessage \g_benchmark_message
+	\global\edef \g_benchmark_lasttime {\number\pdf@elapsedtime}
 }
-\cs_generate_variant:Nn \benchmark_aux:n {o}
+\cs_generate_variant:Nn \_benchmark_aux:nn {on}

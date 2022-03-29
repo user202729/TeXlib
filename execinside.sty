@@ -1,7 +1,6 @@
 \ProvidesPackage{execinside}[2022/03/27]
 \RequirePackage{module}
 \RequirePackage{filecontentsdef}
-\RequirePackage{letin}
 \RequirePackage{tlanalysispatch}
 
 \begin{module}{\ExplSyntaxOn}{EI}
@@ -10,7 +9,6 @@
 \cs_generate_variant:Nn \int_compare:nNnTF {VNnTF}
 \cs_generate_variant:Nn \tl_set:Nn {Nx}
 \cs_generate_variant:Nn \int_compare:nNnT {VNnT}
-\cs_generate_variant:Nn \letin:nNn {xNn}
 \cs_generate_variant:Nn \cs_if_exist_use:NT {cT}
 
 % ======== define handler functions.
@@ -77,12 +75,10 @@
 		
 			% check for \EIexecute etc. and handle accordingly.
 			\int_compare:nNnT {##2} = {-1} {
-				\letin:xNn {##1} \__cs {
-					\cs_if_exist_use:cT {
-						EIhandler_ \cs_to_str:N \__cs
-					} {
-						\let \__processed \c_true_bool
-					}
+				\cs_if_exist_use:cT {
+					EIhandler_ \expandafter \cs_to_str:N ##1
+				} {
+					\let \__processed \c_true_bool
 				}
 			}
 		
