@@ -4,11 +4,7 @@
 \RequirePackage{letin}
 \RequirePackage{tlanalysispatch}
 
-\RequirePackage{genvar}
-
 \begin{module}{\ExplSyntaxOn}{EI}
-
-	\GenerateVariantsFile:n {execinside.sty}
 	
 \cs_generate_variant:Nn \EI_append:n {x}
 \cs_generate_variant:Nn \int_compare:nNnTF {VNnTF}
@@ -40,15 +36,15 @@
 	\tl_build_gput_right:Nn \__balanced_content {\noexpand #1}
 }
 
-\def \EIhandler_EIexpand {
+\cs_set_protected:Npn \EIhandler_EIexpand {
 	\EI_collect_arg:Nn \EI_append:x {1}
 }
 
-\def \EIhandler_EIexecute {
+\cs_set_protected:Npn \EIhandler_EIexecute {
 	\EI_collect_arg:Nn \use:n {1}
 }
 
-\def \execinsideprepare:n #1 {
+\cs_set_protected:Npn \execinsideprepare:n #1 {
 	\tl_build_gbegin:N \__result
 	\def \__collecting_balanced {0}
 	
@@ -101,17 +97,17 @@
 	\tl_set:Nx \__result {\__result}
 }
 
-\def \execinside:n #1 {
+\cs_set_protected:Npn \execinside:n #1 {
 	\execinsideprepare:n {#1}
 	\__result
 }
 
-\def \execinside_set:Nn #1 #2 {
+\cs_set_protected:Npn \execinside_set:Nn #1 #2 {
 	\execinsideprepare:n {#2}
 	\let #1 \__result
 }
 
-\def \execinside_gset:Nn #1 #2 {
+\cs_set_protected:Npn \execinside_gset:Nn #1 #2 {
 	\execinsideprepare:n {#2}
 	\global \let #1 \__result
 }

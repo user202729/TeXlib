@@ -13,10 +13,10 @@
 \ExplSyntaxOn
 \def \__a {1}
 \execinside:n {
-	\pretty:n {123}
-	stuff \EIexecute {\tl_set:Nx \__a {\int_eval:n{\__a+1}}    \pretty:V \__a}
-	stuff \EIexecute {\tl_set:Nx \__a {\int_eval:n{\__a+1}}    \pretty:V \__a}
-	stuff \EIexecute {\tl_set:Nx \__a {\int_eval:n{\__a+1}}    \pretty:V \__a}
+	stuff ~ \EIexecute {\tl_set:Nx \__a {\int_eval:n{\__a+1}}} \EIexpand{\__a} \par
+	stuff ~ \EIexecute {\tl_set:Nx \__a {\int_eval:n{\__a+1}}} \EIexpand{\__a} \par
+	stuff ~ \EIexecute {\tl_set:Nx \__a {\int_eval:n{\__a+1}}} \EIexpand{\__a} \par
+	\EIexecute {first\par}
 }
 \ExplSyntaxOff
 
