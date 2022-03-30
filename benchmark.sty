@@ -3,6 +3,8 @@
 \RequirePackage{pretty}
 \RequirePackage{pdftexcmds}
 
+\msg_new:nnn {benchmark} {currfilename-undefined} {\string\benchmark{}~requires~currfile~package~to~be~loaded!}
+
 \global\def \g_benchmark_lasttime {0}
 \global\def \g_benchmark_lastmessage {0}
 
@@ -14,7 +16,15 @@
 }
 
 \cs_set_protected:Npn \_benchmark_aux:nn #1 #2 {
-	\str_gset:Nn \g_benchmark_message {#2}
+	\tl_if_empty:nTF {#2} {
+		\cs_if_exist:NTF \currfilename {
+			\str_gset:Nx \g_benchmark_message {\currfilename : \the\inputlineno}
+		} {
+			\msg_error:nn {benchmark} {currfilename-undefined}
+		}
+	} {
+		\str_gset:Nn \g_benchmark_message {#2}
+	}
 	\pretty:x {
 		(\g_benchmark_lastmessage)~ ->~ (\g_benchmark_message): ~
 		\fp_eval:n {
