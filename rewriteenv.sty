@@ -16,6 +16,7 @@
 \protected \def \newrewriteenvironment #1 #2 {
 	\newenvironment {#1} {
 		\global \edef \RW_lineno {\the\inputlineno}
+		\exp_last_unbraced:NNf \let \FCDtabtomacro {\cs_to_str:N \^^I}
 		\filecontentsdefxmacro \RWbody
 	} {
 		\endfilecontentsdefxmacro

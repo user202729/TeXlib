@@ -8,6 +8,7 @@
 % #1: code that when executed, rewrite the content in \RWRbody
 \def \rewriterest:n #1 {
 	\tl_set:Nx \_rewriterest_lineno {\the\inputlineno}
+	\exp_last_unbraced:NNf \let \FCDtabtomacro {\cs_to_str:N \^^I}
 	\catchrest:n {
 		\tl_set:Nn \RWRbody {##1}
 		#1
