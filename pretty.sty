@@ -11,9 +11,12 @@
 \cs_generate_variant:Nn \tl_if_eq:nnTF {xoTF}
 \cs_generate_variant:Nn \tl_put_right:Nn {Nx}
 
-\cs_gset_protected:Nn \__pretty_aux:n { % wlog the string in some portable way and handle all possible characters in string
+% This function is given a string.
+%   It should \wlog (write to log) the string in some portable way and
+%   handle all possible characters in string
+\cs_gset_protected:Nn \__pretty_aux:n {
 	\tl_set:Nn \__pretty_tl {}
-	\tl_map_inline:nn {#1} {
+	\str_map_inline:nn {#1} {  % side note, must use str here to preserve spaces
 		%\tl_show:n {\int_eval:n {`##1}}
 		\tl_put_right:Nx \__pretty_tl {\int_eval:n {`##1},}
 	}
@@ -22,12 +25,20 @@
 }
 \cs_generate_variant:Nn \__pretty_aux:n {x}
 
+\let \_pretty_stored_tl_analysis \__tl_analysis:n  % this is cumbersome, but allows debugging \tl_analysis itself.
+
 \cs_new_protected:Nn \pretty:n {
 	{ % need extra group to protect \escapechar value set
+		\let \__tl_analysis:n \_pretty_stored_tl_analysis  % will be undone after group.
 		\wlog{prettymark}
 		\tl_analysis_map_inline:nn {#1} {
 			% by documentation of \tl_analysis_map_inline:nn: #1=token, #2=char code, #3=catcode
+
+			% logged format:
+			% ** case 1: is not control sequence, then just print "##2 ##3" = "<char code> <catcode>" e.g. "B123"
 			\wlog{##2##3}
+
+			% ** case 2: for control sequence, also print the csname
 			\int_compare:nNnTF {##2} = {-1} {
 				% token is control sequence
 
@@ -55,6 +66,7 @@
 }
 
 \cs_generate_variant:Nn \pretty:n {x, o, V}
+\let \pretty:N \pretty:n
 \cs_generate_variant:Nn \pretty:N {c}
 
 \cs_new_protected:Nn \pretty:nn {
