@@ -1,0 +1,326 @@
+\ProvidesExplPackage{tlrepr}{2022/04/16}{0.0.0}{Get reversible string representation of a token list}
+\RequirePackage{precattl}
+
+
+
+\precattl_exec:n {
+
+% ** main function:
+% set #1 to something that when scantokens then x-expanded, would be identical to #2.
+% e.g. if #2 is \relax, set #1 to string representation of "\noexpand\relax"
+% it's guaranteed that #1 will contain only "normal" characters
+% the result works in both \ExplSyntaxOn and normal region
+\cs_set_protected:Npn \tlrepr_set:Nn #1 #2 {
+	\def #1 {}
+	\tl_analysis_map_inline:nn {#2} {
+		% ##1: token, ##2: char, ##3: cat
+		\str_if_eq:nnTF {##3} {0} { % is control sequence.
+			% store the control sequence name here
+			\tl_if_eq:onTF {##1} {\cC {}} {
+				\tl_set:Nn \_tlrepr_tmp_csname {}
+			}
+			{
+				\tl_set:Nx \_tlrepr_tmp_csname {\expandafter \cs_to_str:N ##1}
+			}
+
+			% check if it's "normal" csname.
+			\str_if_empty:NTF \_tlrepr_tmp_csname {
+				\let \_tlrepr_normal_csname \c_false_bool
+			}
+			{
+				\let \_tlrepr_normal_csname \c_true_bool
+				\str_map_inline:Nn \_tlrepr_tmp_csname {
+					% ####1: the character
+					\bool_if:nF {
+						\int_compare_p:n { `a <= `####1 <= `z } ||
+						\int_compare_p:n { `A <= `####1 <= `Z }
+					}
+					{
+						\let \_tlrepr_normal_csname \c_false_bool
+						\str_map_break:
+					}
+				}
+			}
+
+			\bool_if:NTF \_tlrepr_normal_csname {
+				\tl_put_right:Nn #1 {\cO{\\noexpand\\}}
+				\tl_put_right:NV #1 \_tlrepr_tmp_csname
+				\tl_put_right:Nn #1 {~}
+			}
+			{
+				% use \tlreprCS to generate the csname
+				\tl_put_right:Nn #1 {\cO{\\tlreprCS}~}
+				\_tlrepr_set_simple:NV \_tlrepr_tmp \_tlrepr_tmp_csname
+				\tl_put_right:NV #1 \_tlrepr_tmp
+				\tl_put_right:Nn #1 {\cO{\\endcsname}~}
+			}
+		}
+		{
+			% is not control sequence
+			\str_if_eq:nnTF {##3} {A} {
+				% space. old version of char_generate does not support generating funny space
+				\int_compare:nNnTF {##2} = {`\ } {
+					\tl_put_right:Nn #1 {\cO{\\tlreprSP}~}
+				}
+				{
+					\msg_error:nn {tlrepr} {funny-space}
+				}
+			}
+			{
+				% is not space
+				\int_compare:nNnTF {\cs_if_exist_use:cF {_tlrepr_nc_ ##2} {0}} = {"##3} {
+					% good, natural catcode
+					%\pretty:n {##2}
+					\tl_put_right:Nx #1 { \char_generate:nn {##2} {12} }  % 12: other
+				}
+				{
+					\tl_put_right:Nn #1 { \cO{\\tlreprCG} {##2} {"##3} }
+				}
+			}
+		}
+	}
+}
+
+% similar to above, but instead of identical they only need to behave the same under \write etc. (catcode can be different)
+\cs_set_protected:Npn \_tlrepr_set_simple:Nn #1 #2 {
+	%\tlrepr_set:Nn #1 {#2}  % (will optimize later...)
+	\def #1 {}
+	\str_map_inline:nn {#2} {
+		% ##1: the character
+		\cs_if_exist:cTF {_tlrepr_cs_ ##1} {
+			\tl_put_right:Nn #1 {##1}
+		}
+		{
+			\tl_put_right:Nx #1 { \cO{\\tlreprCG} {\number`##1} {12} }  % 12: other
+		}
+	}
+}
+
+}
+
+
+\cs_generate_variant:Nn \tl_set:Nn {cn}
+\cs_generate_variant:Nn \cs_set_eq:NN {cN}
+\cs_generate_variant:Nn \tl_if_eq:nnTF {onTF}
+\cs_generate_variant:Nn \tl_set:Nn {Nx}
+\cs_generate_variant:Nn \tl_put_right:Nn {NV}
+\cs_generate_variant:Nn \_tlrepr_set_simple:Nn {NV}
+\cs_generate_variant:Nn \cs_if_exist_use:NF {cF}
+\cs_generate_variant:Nn \tl_put_right:Nn {Nx}
+\cs_generate_variant:Nn \cs_if_exist:NTF {cTF}
+
+% x-expand to (noexpand <result>) or equivalent.
+% #1: char code, #2: catcode
+\def\tlreprCG #1 #2 {
+	\expandafter \expandafter \expandafter \noexpand \char_generate:nn {#1} {#2}
+}
+\let\tlreprSP\c_space_tl
+\def\tlreprCS{ \expandafter \noexpand \csname }
+
+
+% check if something can safely appear verbatim.
+% #1: number of that character, #2: its natural catcode.
+\def\_tlrepr_natural_catcode:nn #1 #2 {
+	\tl_set:cn {_tlrepr_nc_ \number #1 } {#2}
+}
+\_tlrepr_natural_catcode:nn { `\! } { 12 }
+\_tlrepr_natural_catcode:nn { `\" } { 12 }
+\_tlrepr_natural_catcode:nn { `\# } { 6  }
+\_tlrepr_natural_catcode:nn { `\$ } { 3  }
+\_tlrepr_natural_catcode:nn { `\& } { 4  }
+\_tlrepr_natural_catcode:nn { `\' } { 12 }
+\_tlrepr_natural_catcode:nn { `\( } { 12 }
+\_tlrepr_natural_catcode:nn { `\) } { 12 }
+\_tlrepr_natural_catcode:nn { `\* } { 12 }
+\_tlrepr_natural_catcode:nn { `\+ } { 12 }
+\_tlrepr_natural_catcode:nn { `\, } { 12 }
+\_tlrepr_natural_catcode:nn { `\- } { 12 }
+\_tlrepr_natural_catcode:nn { `\. } { 12 }
+\_tlrepr_natural_catcode:nn { `\/ } { 12 }
+\_tlrepr_natural_catcode:nn { `\0 } { 12 }
+\_tlrepr_natural_catcode:nn { `\1 } { 12 }
+\_tlrepr_natural_catcode:nn { `\2 } { 12 }
+\_tlrepr_natural_catcode:nn { `\3 } { 12 }
+\_tlrepr_natural_catcode:nn { `\4 } { 12 }
+\_tlrepr_natural_catcode:nn { `\5 } { 12 }
+\_tlrepr_natural_catcode:nn { `\6 } { 12 }
+\_tlrepr_natural_catcode:nn { `\7 } { 12 }
+\_tlrepr_natural_catcode:nn { `\8 } { 12 }
+\_tlrepr_natural_catcode:nn { `\9 } { 12 }
+\_tlrepr_natural_catcode:nn { `\; } { 12 }
+\_tlrepr_natural_catcode:nn { `\< } { 12 }
+\_tlrepr_natural_catcode:nn { `\= } { 12 }
+\_tlrepr_natural_catcode:nn { `\> } { 12 }
+\_tlrepr_natural_catcode:nn { `\? } { 12 }
+\_tlrepr_natural_catcode:nn { `\@ } { 12 }
+\_tlrepr_natural_catcode:nn { `\A } { 11 }
+\_tlrepr_natural_catcode:nn { `\B } { 11 }
+\_tlrepr_natural_catcode:nn { `\C } { 11 }
+\_tlrepr_natural_catcode:nn { `\D } { 11 }
+\_tlrepr_natural_catcode:nn { `\E } { 11 }
+\_tlrepr_natural_catcode:nn { `\F } { 11 }
+\_tlrepr_natural_catcode:nn { `\G } { 11 }
+\_tlrepr_natural_catcode:nn { `\H } { 11 }
+\_tlrepr_natural_catcode:nn { `\I } { 11 }
+\_tlrepr_natural_catcode:nn { `\J } { 11 }
+\_tlrepr_natural_catcode:nn { `\K } { 11 }
+\_tlrepr_natural_catcode:nn { `\L } { 11 }
+\_tlrepr_natural_catcode:nn { `\M } { 11 }
+\_tlrepr_natural_catcode:nn { `\N } { 11 }
+\_tlrepr_natural_catcode:nn { `\O } { 11 }
+\_tlrepr_natural_catcode:nn { `\P } { 11 }
+\_tlrepr_natural_catcode:nn { `\Q } { 11 }
+\_tlrepr_natural_catcode:nn { `\R } { 11 }
+\_tlrepr_natural_catcode:nn { `\S } { 11 }
+\_tlrepr_natural_catcode:nn { `\T } { 11 }
+\_tlrepr_natural_catcode:nn { `\U } { 11 }
+\_tlrepr_natural_catcode:nn { `\V } { 11 }
+\_tlrepr_natural_catcode:nn { `\W } { 11 }
+\_tlrepr_natural_catcode:nn { `\X } { 11 }
+\_tlrepr_natural_catcode:nn { `\Y } { 11 }
+\_tlrepr_natural_catcode:nn { `\Z } { 11 }
+\_tlrepr_natural_catcode:nn { `\[ } { 12 }
+\_tlrepr_natural_catcode:nn { `\] } { 12 }
+\_tlrepr_natural_catcode:nn { `\` } { 12 }
+\_tlrepr_natural_catcode:nn { `\a } { 11 }
+\_tlrepr_natural_catcode:nn { `\b } { 11 }
+\_tlrepr_natural_catcode:nn { `\c } { 11 }
+\_tlrepr_natural_catcode:nn { `\d } { 11 }
+\_tlrepr_natural_catcode:nn { `\e } { 11 }
+\_tlrepr_natural_catcode:nn { `\f } { 11 }
+\_tlrepr_natural_catcode:nn { `\g } { 11 }
+\_tlrepr_natural_catcode:nn { `\h } { 11 }
+\_tlrepr_natural_catcode:nn { `\i } { 11 }
+\_tlrepr_natural_catcode:nn { `\j } { 11 }
+\_tlrepr_natural_catcode:nn { `\k } { 11 }
+\_tlrepr_natural_catcode:nn { `\l } { 11 }
+\_tlrepr_natural_catcode:nn { `\m } { 11 }
+\_tlrepr_natural_catcode:nn { `\n } { 11 }
+\_tlrepr_natural_catcode:nn { `\o } { 11 }
+\_tlrepr_natural_catcode:nn { `\p } { 11 }
+\_tlrepr_natural_catcode:nn { `\q } { 11 }
+\_tlrepr_natural_catcode:nn { `\r } { 11 }
+\_tlrepr_natural_catcode:nn { `\s } { 11 }
+\_tlrepr_natural_catcode:nn { `\t } { 11 }
+\_tlrepr_natural_catcode:nn { `\u } { 11 }
+\_tlrepr_natural_catcode:nn { `\v } { 11 }
+\_tlrepr_natural_catcode:nn { `\w } { 11 }
+\_tlrepr_natural_catcode:nn { `\x } { 11 }
+\_tlrepr_natural_catcode:nn { `\y } { 11 }
+\_tlrepr_natural_catcode:nn { `\z } { 11 }
+\_tlrepr_natural_catcode:nn { `\{ } { 1  }
+\_tlrepr_natural_catcode:nn { `\| } { 12 }
+\_tlrepr_natural_catcode:nn { `\} } { 2  }
+
+
+%\_tlrepr_natural_catcode:nn { `\% } { 14 }  % cannot appear in tl anyway
+%\_tlrepr_natural_catcode:nn { `\\ } { 0  }
+
+%\tlrepr_natural_catcode:nn { `\: } { -1 }  % different in expl3
+%\tlrepr_natural_catcode:nn { `\^ } { 7  }  % avoid ^^X being specially interpreted
+%\tlrepr_natural_catcode:nn { `\_ } { -1 }  % different in expl3
+
+
+
+
+% check if something can safely appear within \csname ... \endcsname.
+% #1: \<that character>
+% internally e.g. if \_tlrepr_cs_A is defined then A can appear
+\def\_tlrepr_can_csname:N #1 {
+	\cs_set_eq:cN {_tlrepr_cs_ \cs_to_str:N #1 } \c_empty_tl
+}
+\_tlrepr_can_csname:N \!
+\_tlrepr_can_csname:N \"
+\_tlrepr_can_csname:N \#
+\_tlrepr_can_csname:N \$
+\_tlrepr_can_csname:N \&
+\_tlrepr_can_csname:N \'
+\_tlrepr_can_csname:N \(
+\_tlrepr_can_csname:N \)
+\_tlrepr_can_csname:N \*
+\_tlrepr_can_csname:N \+
+\_tlrepr_can_csname:N \,
+\_tlrepr_can_csname:N \-
+\_tlrepr_can_csname:N \.
+\_tlrepr_can_csname:N \/
+\_tlrepr_can_csname:N \0
+\_tlrepr_can_csname:N \1
+\_tlrepr_can_csname:N \2
+\_tlrepr_can_csname:N \3
+\_tlrepr_can_csname:N \4
+\_tlrepr_can_csname:N \5
+\_tlrepr_can_csname:N \6
+\_tlrepr_can_csname:N \7
+\_tlrepr_can_csname:N \8
+\_tlrepr_can_csname:N \9
+\_tlrepr_can_csname:N \:
+\_tlrepr_can_csname:N \;
+\_tlrepr_can_csname:N \<
+\_tlrepr_can_csname:N \=
+\_tlrepr_can_csname:N \>
+\_tlrepr_can_csname:N \?
+\_tlrepr_can_csname:N \@
+\_tlrepr_can_csname:N \A
+\_tlrepr_can_csname:N \B
+\_tlrepr_can_csname:N \C
+\_tlrepr_can_csname:N \D
+\_tlrepr_can_csname:N \E
+\_tlrepr_can_csname:N \F
+\_tlrepr_can_csname:N \G
+\_tlrepr_can_csname:N \H
+\_tlrepr_can_csname:N \I
+\_tlrepr_can_csname:N \J
+\_tlrepr_can_csname:N \K
+\_tlrepr_can_csname:N \L
+\_tlrepr_can_csname:N \M
+\_tlrepr_can_csname:N \N
+\_tlrepr_can_csname:N \O
+\_tlrepr_can_csname:N \P
+\_tlrepr_can_csname:N \Q
+\_tlrepr_can_csname:N \R
+\_tlrepr_can_csname:N \S
+\_tlrepr_can_csname:N \T
+\_tlrepr_can_csname:N \U
+\_tlrepr_can_csname:N \V
+\_tlrepr_can_csname:N \W
+\_tlrepr_can_csname:N \X
+\_tlrepr_can_csname:N \Y
+\_tlrepr_can_csname:N \Z
+\_tlrepr_can_csname:N \[
+\_tlrepr_can_csname:N \_
+\_tlrepr_can_csname:N \]
+\_tlrepr_can_csname:N \`
+\_tlrepr_can_csname:N \a
+\_tlrepr_can_csname:N \b
+\_tlrepr_can_csname:N \c
+\_tlrepr_can_csname:N \d
+\_tlrepr_can_csname:N \e
+\_tlrepr_can_csname:N \f
+\_tlrepr_can_csname:N \g
+\_tlrepr_can_csname:N \h
+\_tlrepr_can_csname:N \i
+\_tlrepr_can_csname:N \j
+\_tlrepr_can_csname:N \k
+\_tlrepr_can_csname:N \l
+\_tlrepr_can_csname:N \m
+\_tlrepr_can_csname:N \n
+\_tlrepr_can_csname:N \o
+\_tlrepr_can_csname:N \p
+\_tlrepr_can_csname:N \q
+\_tlrepr_can_csname:N \r
+\_tlrepr_can_csname:N \s
+\_tlrepr_can_csname:N \t
+\_tlrepr_can_csname:N \u
+\_tlrepr_can_csname:N \v
+\_tlrepr_can_csname:N \w
+\_tlrepr_can_csname:N \x
+\_tlrepr_can_csname:N \y
+\_tlrepr_can_csname:N \z
+%\_tlrepr_can_csname:N \{  % if unbalanced is a problem
+\_tlrepr_can_csname:N \|
+%\_tlrepr_can_csname:N \}
+
+
+
+
+

@@ -1,0 +1,39 @@
+%! TEX program = lualatex
+\documentclass[12pt]{article}
+\usepackage[paper=a4paper,margin=0.6cm]{geometry}
+\usepackage{miscellaneous}
+\usepackage{luacode}
+\usepackage{genvar}
+\AutoGenerateVariants
+\usepackage{tlrepr}
+\usepackage{pretty}
+\begin{document}
+
+\ExplSyntaxOn
+\def \__check #1 {
+	\pretty:n {checking~:~#1}
+	\tlrepr_set:Nn \__a {#1}
+	\pretty:nV {debug: a=} \__a
+
+	\tl_set_rescan:NnV \__b {} \__a
+	\tl_set:Nx \__b {\__b}
+
+	\tl_if_eq:NnTF \__b {#1} {
+		\pretty:n {OKAY}
+	}
+	{
+		\pretty:nV {FAILED! __b=} \__b
+	}
+
+}
+
+\precattl_exec:n {
+	\pretty:n {\cC {}}
+	\__check {1}
+	\__check {\def\a{\b+\c*\d}\noexpand\expandafter\csname 123\endcsname}
+	\__check {\relax A123456 \cA\1 A \cO\\ \relax \cC{ab^234} \cC {}}
+}
+
+\ExplSyntaxOff
+
+\end{document}
