@@ -1,0 +1,29 @@
+%! TEX program = lualatex
+\documentclass[12pt]{article}
+\usepackage[paper=a4paper,margin=0.6cm]{geometry}
+\usepackage{luacode}
+\usepackage{luacr}
+\usepackage{miscellaneous}
+\begin{document}
+
+\ExplSyntaxOn
+\use_none:n {\the\catcode `a}
+\ExplSyntaxOff
+
+\begin{luacode*}
+luacr.exec(function()
+	--luacr.safe_create("blobblob")
+	print("========")
+	inspect(luacr.exp_x([[\the\catcode`a]]))
+	print("========")
+	--tex.sprint({
+	--	token.create("string"),
+	--	luacr.safe_create("blobblob"),
+	--})
+end)
+\end{luacode*}
+
+
+123
+
+\end{document}

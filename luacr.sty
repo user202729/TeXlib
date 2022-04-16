@@ -1,0 +1,14 @@
+\ProvidesExplPackage{luacr}{2022/04/15}{0.0.0}{Coroutine and convenience functions for Lua programming}
+
+% locally used. Do not use.
+
+% resume the execution.
+\def\_luacr_continue{\directlua{coroutine.resume(luacr.coroutine)}}
+
+% store the following (must be braced) token list.
+\def\_luacr_storetl{\directlua{luacr._stored_tl=token.scan_toks()}}
+
+%% store the following 1 token. [not used]
+%\def\_luacr_storetoken{\directlua{luacr._stored_token=token.get_next()}}
+
+\directlua{require "luacr"}  % this must be executed after, so luacrContinue is seen
