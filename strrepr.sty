@@ -1,0 +1,67 @@
+\ProvidesExplPackage{strrepr}{2022/04/10}{0.0.0}{Obtain a token list representation of a string}
+\RequirePackage{precattl}
+
+% ======== define the helper function \_strrepr_do.
+
+\begingroup
+\catcode `\* \active     % so that the stars in the definitions below are active.
+\use:n {
+	\endgroup
+
+	% \_strrepr_do :: a helper function. Given a char code #1 (e.g. 127)...
+	\def\_strrepr_do #1 {
+		\catcode #1 \active
+
+		\begingroup     % (the old lowercase trick.)
+		\lccode `\* = #1 \relax
+		\lccode `\? = #1 \relax
+		\lowercase {
+			\endgroup
+			\edef * {  % this star will be replaced with active char #1
+				\c_backslash_str ?
+			}
+		}
+		% ... it basically does \def <active #1> { <other \> <other #1> }.
+	}
+}
+% (what a mess.)
+
+% ======== the main function.
+% \strrepr_prepare:n :: given a string #1, store the result into \strrepr_result.
+% where if the result is rescan-ed, then detokenized under escapechar=-1, will be identical to the original.
+% i.e., if the input is the string "\%#{" (without quotes), the result might be \\\%\#\{.
+
+\precattl_exec:n {
+
+\cs_set_protected:Npn \strrepr_prepare:n #1 {
+	\begingroup
+		% using \tl_gset_rescan,  define \strrepr_result similar to #1 but with normal (other/space) character replaced with active character:
+		\int_step_function:nnN {0}{31} \_strrepr_do
+		\_strrepr_do{`\  }
+		\_strrepr_do{`\\ }
+		\_strrepr_do{`\{ }
+		\_strrepr_do{`\} }
+		\_strrepr_do{`\# }
+		\_strrepr_do{`\~ }
+		\_strrepr_do{`\% }
+		\_strrepr_do{127 }
+		\_strrepr_do{173 }  % SOFT HYPHEN is active in LaTeX, expands to a discretionary hyphen
+
+		\tl_gset_rescan:Nnn \strrepr_result {} {#1}
+
+		% now replace active character with escape sequence e.g. <active #> to \#
+		\def \cA\^^I {\cO\\^ ^I}
+		\def \cA\^^J {\cO\\^ ^J}
+		\def \cA\^^M {\cO\\^ ^M}
+
+		\global \edef \strrepr_result {\strrepr_result}
+		%now the active characters are replaced with string representation of control sequence
+	\endgroup
+}
+
+}
+
+\cs_set_protected:Npn \strrepr_set:Nn #1 #2 {
+	\strrepr_prepare:n {#2}
+	\let #1 \strrepr_result
+}

@@ -1,0 +1,59 @@
+%! TEX program = lualatex
+\documentclass{article}
+\errorcontextlines=100
+\usepackage{strrepr}
+\usepackage{pretty}
+\usepackage{genvar}
+\AutoGenerateVariants
+%\tracingmacros=1
+\begin{document}
+
+
+{
+	\ExplSyntaxOn
+
+	% ======== create a complex **string**.
+	\def\__a {}
+	\int_step_inline:nnn {1}{255}
+%\int_step_inline:nnn {173}{173}
+	{
+		\tl_put_right:Nx \__a {\char_generate:nn {#1} {12  }} %12: other
+	}
+	\tl_put_right:Nx \__a {\char_generate:nn { `\} } {12  }}
+	\tl_put_right:Nx \__a {\char_generate:nn { `\} } {12  }}
+	\tl_put_right:Nx \__a {\char_generate:nn { `\} } {12  }}
+	\tl_set:Nx \__a {\exp_args:NV \detokenize \__a}  % make space has space catcode instead
+
+
+	% ======== try using it
+
+	\strrepr_prepare:V \__a
+
+	\pretty:n{DONE!}
+
+	\pretty:V \__a
+	\pretty:V \strrepr_result
+	\tl_set_rescan:NnV \__d {\ExplSyntaxOff} \strrepr_result
+	\tl_set_rescan:NnV \__e {\ExplSyntaxOn} \strrepr_result
+	\pretty:V \__d
+	\pretty:V \__e
+
+	{
+		\escapechar=-1
+		\tl_set:Nx \__dd {\tl_to_str:V \__d}
+		\tl_set:Nx \__ee {\tl_to_str:V \__e}
+		\pretty:VV \__dd \__ee
+
+		\tl_if_eq:NNTF \__a \__dd {\pretty:n{true}} {\pretty:n{false}}
+		\tl_if_eq:NNTF \__a \__ee {\pretty:n{true}} {\pretty:n{false}}
+
+		\pretty:n{(these~should~print~true)}
+	}
+	
+
+	
+
+	\ExplSyntaxOff
+}
+
+\end{document}
