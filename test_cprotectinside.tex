@@ -1,0 +1,61 @@
+%! TEX program = lualatex
+\documentclass[12pt]{article}
+\usepackage{cprotectinside}
+\usepackage{cprotect}
+\begin{document}
+
+\begin{filecontents*}[overwrite]{tmp.tex}
+\verb|-i|\relax
+\end{filecontents*}
+
+\begin{filecontents*}[overwrite]{tmpz.tex}
+using \verb|-i| as\relax
+\end{filecontents*}
+
+%{
+%	\def\RESETE{\endlinechar=13\relax}
+%	\def\SETE{\endlinechar=-1\relax}
+%	
+%	\textbf{using \SETE\input{tmp.tex}\RESETE{}as}  % good, no new line, but code inside see endlinechar value
+%
+%	\textbf{using \SETE\input{tmp.tex}as} %same as above
+%
+%	\textbf{using \SETE\expandafter\expandafter\expandafter\RESETE\input{tmp.tex}as}  % this one has newline, bad
+%}
+
+
+\begin{tabular}{cc}
+raw TeX command: & {\bf using \verb|-i| as} ... \\
+
+%{
+%	\cprotect\textbf{using \verb|-i| as}
+%}
+
+input: & \textbf{\input{tmpz.tex}} ... \\
+scantokens: & \textbf{\scantokens{using \verb|-i| as\relax}} ... \\
+cprotectinside: &
+{
+\cprotectinside{*}{
+	\textbf{*using \verb|-i| as\relax*} ...}} \\
+
+input (small): & \textbf{using \input{tmp.tex} as} ... \\
+scantokens (small): & \textbf{using \scantokens{\verb|-i|\relax} as} ... \\
+cprotectinside (small): &
+{
+\cprotectinside{!}{
+	\textbf{using !\verb|-i|\relax! as} ...}} \\
+
+\end{tabular}
+
+Include multiline verbatim environment (not that it useful in this particular case):
+
+\cprotectinside{*}{
+	\textbf{text text *
+\begin{verbatim}
+line 1
+line 2
+\end{verbatim}
+* text text}
+}
+
+\end{document}
