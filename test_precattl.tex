@@ -49,13 +49,21 @@
 	%\pretty:n {content \cO{something123~?[]} \cO\\ \cO\~ \cO\  \cS\a \cS\   }
 }
 \benchmark{set~content}
+
+\benchmark{--}
 \precattl_set:NV \__tmp \__content
 \benchmark{precattl~done}
+\pretty:V \__tmp
 
+%\benchmark{--}
+%\precattl_setx:NV \__tmp \__content
+%\benchmark{precattl~done}
+%\pretty:V \__tmp
+
+\benchmark{--}
 \tl_analysis_map_inline:Nn \__content {}
 \benchmark{analysis_map~alone}
 
-\pretty:V \__tmp
 \ExplSyntaxOff
 
 \end{document}

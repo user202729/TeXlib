@@ -38,18 +38,18 @@
 \endgroup
 	
 \def \_precattldo_special_cC #1 { \exp_args:Nc \EI_append:n {#1} }
-\def \_precattldo_special_cB #1 { \tl_analysis_map_inline:nn {#1} { \_precattlappend_begin {##2} } }
-\def \_precattldo_special_cE #1 { \tl_analysis_map_inline:nn {#1} { \_precattlappend_end {##2} } }
-\def \_precattldo_special_cM #1 { \tl_analysis_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {##2} {3}} } }
-\def \_precattldo_special_cT #1 { \tl_analysis_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {##2} {4}} } }
-\def \_precattldo_special_cP #1 { \tl_analysis_map_inline:nn {#1} { \exp_args:No \EI_append:o {\char_generate:nn {##2} {6}} } }
-\def \_precattldo_special_cU #1 { \tl_analysis_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {##2} {7}} } }
-\def \_precattldo_special_cD #1 { \tl_analysis_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {##2} {8}} } }
-\def \_precattldo_special_cS #1 { \tl_analysis_map_inline:nn {#1} { \_precattlappend_space {##2} } }
-\def \_precattldo_special_cL #1 { \tl_analysis_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {##2} {11}} } }
-\def \_precattldo_special_cO #1 { \tl_analysis_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {##2} {12}} } }
-\def \_precattldo_special_cA #1 { \tl_analysis_map_inline:nn {#1} {
-		\exp_args:No \EI_append:o {\char_generate:nn {##2} {13}}
+\def \_precattldo_special_cB #1 { \str_map_inline:nn {#1} { \_precattlappend_begin {`##1} } }
+\def \_precattldo_special_cE #1 { \str_map_inline:nn {#1} { \_precattlappend_end {`##1} } }
+\def \_precattldo_special_cM #1 { \str_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {`##1} {3}} } }
+\def \_precattldo_special_cT #1 { \str_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {`##1} {4}} } }
+\def \_precattldo_special_cP #1 { \str_map_inline:nn {#1} { \exp_args:No \EI_append:o {\char_generate:nn {`##1} {6}} } }
+\def \_precattldo_special_cU #1 { \str_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {`##1} {7}} } }
+\def \_precattldo_special_cD #1 { \str_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {`##1} {8}} } }
+\def \_precattldo_special_cS #1 { \str_map_inline:nn {#1} { \_precattlappend_space {`##1} } }
+\def \_precattldo_special_cL #1 { \str_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {`##1} {11}} } }
+\def \_precattldo_special_cO #1 { \str_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {`##1} {12}} } }
+\def \_precattldo_special_cA #1 { \str_map_inline:nn {#1} {
+		\exp_args:No \EI_append:o {\char_generate:nn {`##1} {13}}
 } }
 
 
@@ -70,22 +70,40 @@
 	}
 }
 
+\def \_precattldo_special_cC_outer { \_precattldo_special\cC }
+\def \_precattldo_special_cB_outer { \_precattldo_special\cB }
+\def \_precattldo_special_cE_outer { \_precattldo_special\cE }
+\def \_precattldo_special_cM_outer { \_precattldo_special\cM }
+\def \_precattldo_special_cT_outer { \_precattldo_special\cT }
+\def \_precattldo_special_cP_outer { \_precattldo_special\cP }
+\def \_precattldo_special_cU_outer { \_precattldo_special\cU }
+\def \_precattldo_special_cD_outer { \_precattldo_special\cD }
+\def \_precattldo_special_cS_outer { \_precattldo_special\cS }
+\def \_precattldo_special_cL_outer { \_precattldo_special\cL }
+\def \_precattldo_special_cO_outer { \_precattldo_special\cO }
+\def \_precattldo_special_cA_outer { \_precattldo_special\cA }
+
+
 
 \def \precattl_prepare:n #1 {
-	\tl_set:Nn \_precattlvalue {#1}
-	\regex_replace_all:nnN
-		{(\c{c[CBEMTPUDSLOA]}) \cB. (\c[CMTUDSLO].*) \cE. }  % e.g. \cO {a}
-		{
-			\c{EIexecute} \cB{ \c{\_precattldo_special} \1 \cB{ \2 \cE} \cE}
-		}
-		\_precattlvalue
-	\regex_replace_all:nnN
-		{(\c{c[CBEMTPUDSLOA]}) (\c{.*}) }  % e.g. \cO \a
-		{
-			\c{EIexecute} \cB{ \c{\_precattldo_special} \1 \2 \cE}
-		}
-		\_precattlvalue
-	\execinside_set:NV \_precattlvalue \_precattlvalue
+	\begingroup
+		\let \EIhandler_EIexpand \undefined
+		\let \EIhandler_EIexecute \undefined
+		\def \EIhandler_cC { \EI_collect_arg:Nn \_precattldo_special_cC_outer 1 }
+		\def \EIhandler_cB { \EI_collect_arg:Nn \_precattldo_special_cB_outer 1 }
+		\def \EIhandler_cE { \EI_collect_arg:Nn \_precattldo_special_cE_outer 1 }
+		\def \EIhandler_cM { \EI_collect_arg:Nn \_precattldo_special_cM_outer 1 }
+		\def \EIhandler_cT { \EI_collect_arg:Nn \_precattldo_special_cT_outer 1 }
+		\def \EIhandler_cP { \EI_collect_arg:Nn \_precattldo_special_cP_outer 1 }
+		\def \EIhandler_cU { \EI_collect_arg:Nn \_precattldo_special_cU_outer 1 }
+		\def \EIhandler_cD { \EI_collect_arg:Nn \_precattldo_special_cD_outer 1 }
+		\def \EIhandler_cS { \EI_collect_arg:Nn \_precattldo_special_cS_outer 1 }
+		\def \EIhandler_cL { \EI_collect_arg:Nn \_precattldo_special_cL_outer 1 }
+		\def \EIhandler_cO { \EI_collect_arg:Nn \_precattldo_special_cO_outer 1 }
+		\def \EIhandler_cA { \EI_collect_arg:Nn \_precattldo_special_cA_outer 1 }
+		\execinside_gset:Nn \_precattlvalueg {#1}
+	\endgroup
+	\let \_precattlvalue \_precattlvalueg
 }
 
 \def \precattl_set:Nn #1 #2 {
