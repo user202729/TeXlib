@@ -1,9 +1,9 @@
-\ProvidesPackage{execinside}[2022/03/27]
+\ProvidesPackage{execinside}[2022/04/18]
 \RequirePackage{filecontentsdef}
 \RequirePackage{tlanalysispatch}
 
 \ExplSyntaxOn
-	
+
 \cs_generate_variant:Nn \EI_append:n {x}
 \cs_generate_variant:Nn \int_compare:nNnTF {VNnTF}
 \cs_generate_variant:Nn \tl_set:Nn {Nx}
@@ -44,7 +44,7 @@
 \cs_set_protected:Npn \execinsideprepare:n #1 {
 	\tl_build_gbegin:N \_EIresult
 	\def \_EIcollecting_balanced {0}
-	
+
 	\tl_analysis_map_inline:nn {#1} {
 		% reminder: ##1: token, ##2: char code (int), ##3: cat code (hex digit)
 
@@ -54,24 +54,27 @@
 			\tl_build_gput_right:Nn \_EIbalanced_content {##1}
 			\str_case:nn {##3} {
 				{1} { \tl_set:Nx \_EIbalance_level {\_EIbalance_level+1} }
-				{2} { \tl_set:Nx \_EIbalance_level {\_EIbalance_level-1}
-					\int_compare:nNnT {\_EIbalance_level} = {0} {
+				{2} { \tl_set:Nx \_EIbalance_level {\_EIbalance_level-1} }
+			}
 
-						% done, call handler function and revert to normal mode.
+			% we check this every time instead of only after egroup tokens...
+			% so that if there's exactly one token to be collected it's still correctly passed through
+			\int_compare:nNnT {\_EIbalance_level} = {0} {
 
-						\tl_set:Nx \_EIcollecting_balanced {\int_eval:n{\_EIcollecting_balanced-1}}
-						\int_compare:VNnT \_EIcollecting_balanced = 0 {
-							\tl_build_gend:N \_EIbalanced_content
-							\tl_set:Nx \_EIbalanced_content {\_EIbalanced_content}
-							\_EIbalanced_content  % ← the handler function is embedded in here
-						}
-					}
+				% done, call handler function and revert to normal mode.
+
+				\tl_set:Nx \_EIcollecting_balanced {\int_eval:n{\_EIcollecting_balanced-1}}
+				\int_compare:VNnT \_EIcollecting_balanced = 0 {
+					\tl_build_gend:N \_EIbalanced_content
+					\tl_set:Nx \_EIbalanced_content {\_EIbalanced_content}
+					%\pretty:V \_EIbalanced_content
+					\_EIbalanced_content  % ← the handler function is embedded in here
+					%\pretty:n {done}
 				}
 			}
 		} {
 			\let \_EIprocessed \c_false_bool
 
-		
 			% check for \EIexecute etc. and handle accordingly.
 			\int_compare:nNnT {##2} = {-1} {
 				\cs_if_exist_use:cT {
@@ -80,7 +83,7 @@
 					\let \_EIprocessed \c_true_bool
 				}
 			}
-		
+
 			% if not, just append to result.
 			\bool_if:NF \_EIprocessed {
 				\tl_build_gput_right:Nn \_EIresult {##1}
