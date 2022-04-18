@@ -83,6 +83,14 @@
 \def \_precattldo_special_cO_outer { \_precattldo_special\cO }
 \def \_precattldo_special_cA_outer { \_precattldo_special\cA }
 
+\def \_precattl_tmp_help #1 #2 {
+	\def \_precattl_do_frozen_relax { \EI_append:n {#1} }
+	% #1 here will be substituted by the frozen relax
+	% #2 is \fi
+}
+\expandafter \_precattl_tmp_help \ifnum0=0\fi
+\let \_precattl_tmp_help \undefined
+
 
 
 \def \precattl_prepare:n #1 {
@@ -101,6 +109,7 @@
 		\def \EIhandler_cL { \EI_collect_arg:Nn \_precattldo_special_cL_outer 1 }
 		\def \EIhandler_cO { \EI_collect_arg:Nn \_precattldo_special_cO_outer 1 }
 		\def \EIhandler_cA { \EI_collect_arg:Nn \_precattldo_special_cA_outer 1 }
+		\let \EIhandler_cFrozenRelax \_precattl_do_frozen_relax
 		\execinside_gset:Nn \_precattlvalueg {#1}
 	\endgroup
 	\let \_precattlvalue \_precattlvalueg

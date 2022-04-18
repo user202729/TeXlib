@@ -28,7 +28,8 @@ end
 -- same way how coroutine.* functions can only be used within coroutine.start()
 function luacr.exec(f)
 	if luacr.coroutine~=nil then
-		error("cannot nest luacr.exec")
+		check_within_luacr_coroutine()
+		return f()
 	end
 
 	luacr.coroutine=coroutine.create(function()

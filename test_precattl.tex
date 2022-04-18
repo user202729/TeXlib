@@ -24,6 +24,9 @@
 \pretty:n {123}
 \benchmark{run~start}
 \tl_set:Nn \__content {
+	\cFrozenRelax
+	\relax
+
 	\cC {abc ^ \ def}
 	\cB \a \cE \z
 	\cB \{ \cE \}
@@ -63,6 +66,25 @@
 \benchmark{--}
 \tl_analysis_map_inline:Nn \__content {}
 \benchmark{analysis_map~alone}
+
+\precattl_exec:n {
+	\begingroup
+	\let\relax\undefined
+
+	\ifx \relax \undefined
+		\pretty:n{normal~relax~become~undefined}
+	\fi
+
+	\ifx \cFrozenRelax \undefined
+		\pretty:n{NOOOOO}
+	\else
+		\pretty:n{frozen~relax~remains~relax}
+	\fi
+	\endgroup
+
+	\pretty:no {string~representation~of~\cFrozenRelax~is~}
+		{\string\cFrozenRelax}
+}
 
 \ExplSyntaxOff
 
