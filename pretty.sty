@@ -66,6 +66,12 @@
 
 \cs_generate_variant:Nn \pretty:n {x, o, V}
 \let \pretty:N \pretty:n
+
+% normal-catcode alias
+\let\prettyN\pretty:n
+\let\prettyO\pretty:o
+\let\prettyV\pretty:V
+
 \cs_generate_variant:Nn \pretty:N {c}
 
 \cs_new_protected:Nn \pretty:nn {

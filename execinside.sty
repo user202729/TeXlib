@@ -99,14 +99,16 @@
 	\execinsideprepare:n {#1}
 	\_EIresult
 }
+\let\execinside\execinside:n  % normal-catcode alias
 
 \cs_set_protected:Npn \execinside_set:Nn #1 #2 {
 	\execinsideprepare:n {#2}
 	\let #1 \_EIresult
 }
+\let\execinsideSet\execinside_set:Nn
 
 \cs_set_protected:Npn \execinside_gset:Nn #1 #2 {
 	\execinsideprepare:n {#2}
 	\global \let #1 \_EIresult
 }
-
+\let\execinsideGset\execinside_gset:Nn

@@ -119,8 +119,10 @@
 	\precattl_prepare:n {#2}
 	\tl_set_eq:NN #1 \_precattlvalue
 }
+\let\precattlSet\precattl_set:Nn
 
 \def \precattl_exec:n #1 {
 	\precattl_prepare:n {#1}
 	\_precattlvalue
 }
+\let\precattlExec\precattl_exec:n
