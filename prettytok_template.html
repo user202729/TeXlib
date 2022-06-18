@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<style>
+body{
+	background-color: black;
+	color: white;
+}
+
+/* https://stackoverflow.com/questions/7011602/stretching-iframe-in-html5 */
+#wrap_all { display: none; position:fixed; width:100%; height:100%; top: 0px; left: 0px; }
+
+
+iframe{
+	position: absolute;
+	width: 100%;
+	height: 100%;
+	display: none;
+}
+#status{
+	flex: 0 0 1.3em;
+}
+
+#display_wrap{
+	flex: 1 0 auto;
+}
+#controller{
+	flex: 0 0 50px;
+}
+
+.control-button{
+}
+
+
+
+.tokenlist, .fileline{
+	border: 1px solid gray;
+	overflow: scroll;
+	white-space: nowrap;
+}
+.tokenlist::-webkit-scrollbar, .fileline::-webkit-scrollbar { width: 0 !important }
+
+.fileline{
+	background-color: #404040;
+}
+
+.explicit_char_target{
+	background-color: #FF8080;
+}
+.explicit_char{
+	background-color: #606060;
+}
+
+
+.cs, .active_char{
+	color: #FFFF00;
+}
+.cs::before{
+	content: "\\";
+}
+.cs::after{
+	content: " ";
+}
+
+#popup{
+	display: none;
+	position: absolute;
+	border: 1px solid gray;
+	background-color: #000080ff;
+}
+
+.cmd__left_brace_cmd, .cmd__right_brace_cmd, .cmd__mac_param_cmd, .frozenrelax{
+	color: #FFAAAA;
+}
+.cmd__out_param_cmd{
+	border: 1px solid #FFAAAA;
+}
+.out_param_expansion{
+	border: 1px solid #FFAAAA;
+	background-color: #000080;
+}
+.cmd__out_param_cmd::before{
+	content: "#";
+}
+
+.cmd__letter_cmd{
+	color: #AAFFAA;
+}
+
+.cmd__spacer_cmd{
+	color: #606060;
+}
+
+
+input[type=button]{
+	color: white;
+	background-color: #0000ff;
+	border: 0;
+}
+
+#log{
+	display: flex;
+	flex-direction: column-reverse;
+	flex: 0 0 30%;
+	overflow: scroll;
+}
+</style>
+</head>
+<body>
+
+	<div id=output></div>
+	<div id=wrap_all>
+		<iframe id=iframe src="about:blank" frameborder=0></iframe>
+		<iframe id=iframe2 src="about:blank" frameborder=0></iframe>
+	</div>
+	<script>
+"use strict"
+function show_html(s){
+	return s.replace(/ /g, "␣")
+		.replace(/\r|\n/g, "↵")
+		.replace(/\t/g, "⇥")
+}
+
+output.innerHTML=""
+
+function print_tl(...tokens){
+	const tl_div=document.createElement("div")
+	tl_div.className="tokenlist"
+	for(let token of tokens){
+		tl_div.appendChild(token)
+		if({13: true, 10: true}[token.data_charcode]){
+			tl_div.appendChild(document.createElement("br"))
+		}
+	}
+	output.appendChild(tl_div)
+}
+
+function token(charcode /* int */, catcode /* single character string in hex */){
+	const token_span=document.createElement("span")
+	const ch=String.fromCodePoint(charcode)
+	token_span.innerText=show_html(ch)
+	token_span.data_charcode=charcode
+	if(catcode==='D'){
+		token_span.className="active_char"
+		token_span.title=`active ${ch} # ${charcode}`
+	}else{
+		const cls={
+			1: 'cmd__left_brace_cmd',
+			2: 'cmd__right_brace_cmd',
+			3: 'cmd__math_shift_cmd',
+			4: 'cmd__tab_mark_cmd',
+			6: 'cmd__mac_param_cmd',
+			7: 'cmd__sup_mark_cmd',
+			8: 'cmd__sub_mark_cmd',
+			A: 'cmd__spacer_cmd',
+			B: 'cmd__letter_cmd',
+			C: 'cmd__other_char_cmd',
+		}[catcode]
+		token_span.className="token "+cls
+		token_span.title=`${cls} ${ch} # ${charcode}`
+	}
+	return token_span
+}
+
+function cs(...codepoints){
+	const token_span=document.createElement("span")
+
+	const control_sequence_name=String.fromCodePoint(...codepoints)
+	//const meaning_str=readstr()
+
+	token_span.innerText=show_html(control_sequence_name)
+	//token_span.title=`cs '${control_sequence_name}' → ${meaning_str}`
+	token_span.className="cs"
+
+	return token_span
+}
+
+function csfrozenrelax(){
+	const token_span=document.createElement("span")
+	token_span.innerText="relax"
+	token_span.title="frozen relax"
+	token_span.className="cs frozenrelax"
+	return token_span
+}
+
+var refresh_strategy_already_set=false
+function set_refresh_strategy(strategy, duration){
+	if(refresh_strategy_already_set) return
+	refresh_strategy_already_set=true
+
+	switch(strategy){
+		case 0: // do nothing
+			return
+
+		case 1: // refresh the sub-iframe
+			if(window.parent===window){
+				print_tl=function(...x) {}
+				//output.style.display="none"
+				iframe.src=location.href
+				iframe.style.display="block"
+				wrap_all.style.display="block"
+				setInterval(function(){
+					iframe.src=iframe.src
+				}, duration)
+			}
+			return
+
+		case 2: // refresh two sub-iframes
+			if(window.parent===window){
+				print_tl=function(...x) {}
+				//output.style.display="none"
+				iframe.src=iframe2.src=location.href
+				iframe.style.display="block"
+				iframe2.style.display="block"
+				wrap_all.style.display="block"
+				async function sleep(ms){
+					await new Promise(resolve=>setTimeout(resolve, ms))
+				}
+				(async function(){
+					while(true){
+						await sleep(duration/2)
+						iframe.src=iframe.src
+
+						await sleep(duration/2)
+						iframe2.style.zIndex=1
+						iframe.style.zIndex=2
+
+						await sleep(duration/2)
+						iframe2.src=iframe2.src
+
+						await sleep(duration/2)
+						iframe.style.zIndex=1
+						iframe2.style.zIndex=2
+					}
+				})()
+			}
+			return
+
+		case 3: // refresh whole page
+			setTimeout(function(){
+				location.reload()
+			}, duration)
+			return
+
+		case 4: // request own file
+			window.addEventListener("load", async function(){
+				async function get_code(){
+					//let text=await (await fetch(location.href)).text()
+					let text=await new Promise(function(resolve){
+						let request = new XMLHttpRequest();
+						request.responseType = "text"
+						request.onload = function() {
+							resolve(request.responseText) 
+						}
+						request.onerror = function() {
+							console.log("Error happened. Read documentation for more details.")
+						}
+						request.open("GET", location.href, true)
+						request.send()
+					})
+					return text.replace(/.*?-end-template()-/s, "")
+				}
+				let text=await get_code()
+				output.innerHTML=""
+				try{ eval(text) }catch(e) {}
+				setInterval(async function(){
+					let text2=await get_code()
+					if(text2!==text){
+						output.innerHTML=""
+						try{ eval(text2) }catch(e) {}
+						text=text2
+					}
+				}, duration)
+			})
+			return
+	}
+}
+	</script>
+
+<script>
+// -end-template-

@@ -7,10 +7,15 @@
 \errorcontextlines=999
 
 \usepackage{benchmark}
-\benchmark c
+%\benchmark c
 \usepackage{precattl}
-\benchmark d
-\usepackage{pretty}
+%\benchmark d
+\ExplSyntaxOn
+%\def\benchmark #1 {}
+\cs_undefine:N \pretty:n
+\ExplSyntaxOff
+
+\usepackage{prettytok}
 \benchmark a
 \usepackage[abspath]{currfile}
 \benchmark d
@@ -21,7 +26,7 @@
 
 
 \ExplSyntaxOn
-\pretty:n {123}
+\pretty:n {1234}
 \benchmark{run~start}
 \tl_set:Nn \__content {
 	\cFrozenRelax
@@ -54,6 +59,10 @@
 \benchmark{set~content}
 
 \benchmark{--}
+\precattl_set:NV \__tmp \__content
+\benchmark{precattl~done}
+\precattl_set:NV \__tmp \__content
+\benchmark{precattl~done}
 \precattl_set:NV \__tmp \__content
 \benchmark{precattl~done}
 \pretty:V \__tmp
