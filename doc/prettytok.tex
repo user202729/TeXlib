@@ -1,0 +1,139 @@
+%! TEX program = lualatex
+\ProvidesFile{prettytok.tex} [2022/05/28 v0.0.0 Pretty-print token lists]
+% yes, this is not dtx
+\documentclass{l3doc}
+%\usepackage[a4paper,margin=25mm,left=50mm,nohead]{geometry}
+%\usepackage[numbered]{hypdoc}
+%\usepackage{\jobname}
+\EnableCrossrefs
+\CodelineIndex
+\RecordChanges
+\begin{document}
+\GetFileInfo{\jobname.tex}
+\DoNotIndex{\newcommand,\newenvironment}
+
+\title{\textsf{prettytok} --- Pretty-print token lists\thanks{This file
+   describes version \fileversion, last revised \filedate.}
+}
+\author{user202729%
+%\thanks{E-mail: (not set)}
+}
+\date{Released \filedate}
+
+\maketitle
+
+\changes{v0.0.0}{2022/05/18}{First public release}
+
+\begin{abstract}
+	Pretty-print token lists.
+\end{abstract}
+
+\section{Usage}
+
+\subsection{Main function}
+\begin{function}{\pretty:n,\pretty:x,\pretty:o,\pretty:V}
+  \begin{syntax}
+	  \cs{pretty:n} \Arg{token list} \\
+  \end{syntax}
+  Print the content of \meta{token list}.
+\end{function}
+
+\begin{function}{\pretty:N,\pretty:c}
+  \begin{syntax}
+	  \cs{pretty:N} \meta{token} \\
+	  \cs{pretty:c} \Arg{control sequence name} \\
+  \end{syntax}
+  Print \meta{token}. \\
+  This function is not very useful. Usually it's preferable to use |\pretty:V| to print a token list variable's value,
+  or |\prettyshow:N| to print a control sequence's meaning.
+\end{function}
+
+\subsection{View result}
+
+The result is printed to a HTML file named |pretty-|\meta{jobname}|.html| by default.
+Open the file in any browser to view the result.
+
+Note that the HTML file will not be touched if nothing is printed, as such it's encouraged to add a line such as |\pretty:n {start}| right after loading the file.
+
+Why HTML file?
+
+\begin{itemize}
+	\item Because if the TeX program stops with error / has some error that corrupts the PDF output, the output will even with corrupted more by the debug print.
+	\item Printing to the console is extremely limited (difficult syntax highlighting/scrolling/line wrapping), and most likely cluttered with the traceback/other TeX default output.
+	\item Output to another \TeX\ file to be compiled is a bit absurd, and compiling \TeX\ file takes longer than loading a HTML file.
+\end{itemize}
+
+By default, the output refreshes whenever the TeX file is recompiled. The behavior
+can be customized with \cs{prettyrefreshstrategy} and \cs{prettyrefreshduration}.
+
+\subsection{\LaTeX2 interface}
+
+
+\begin{function}{\prettyN,\prettyX,\prettyO,\prettyV}
+  \begin{syntax}
+	  \cs{prettyN} \Arg{token list} \\
+  \end{syntax}
+  Alias of the correspondingly-named commands.
+\end{function}
+
+\subsection{Additional functions}
+
+There are also these functions, for convenience.
+
+\begin{function}{\pretty:nn, \pretty:nnn}
+	\begin{syntax}
+		\cs{pretty:nn} \Arg{token list} \Arg{token list}
+		\cs{pretty:nnn} \Arg{token list} \Arg{token list} \Arg{token list}
+	\end{syntax}
+	Print multiple token lists.
+\end{function}
+
+\begin{function}{\pretty:w}
+	\begin{syntax}
+		\cs{pretty:w} \meta{token list} \cs{prettystop}
+	\end{syntax}
+	Print the content of \meta{token list}. For now, it must be brace-balanced.
+\end{function}
+
+\begin{function}{\prettyshow:N}
+	\begin{syntax}
+		\cs{prettyshow:N} \meta{token}
+	\end{syntax}
+	Show the meaning of a |N|-type argument.
+\end{function}
+
+\subsection{Customization}
+
+These variables can be redefined before the
+first call to |\pretty:n| to customize the behavior.
+
+\begin{variable}{\prettyfilename}
+	The output file name.  Defaults to |pretty-|\meta{jobname}|.html|, as mentioned above.
+\end{variable}
+
+\begin{variable}{\prettyrefreshstrategy}
+	The auto-refresh strategy. Allowed values are 0-4. 0 is no refresh. \\
+	Which value works best depends on the particular browser. \\
+	On Google Chrome, passing |--allow-file-access-from-files| may be useful.
+\end{variable}
+
+\begin{variable}{\prettyrefreshduration}
+	The duration between two consecutive refresh check, in milliseconds. Defaults to 1000.
+\end{variable}
+
+\begin{variable}{\prettypreamble}
+	The HTML source code preamble. This can be redefined to change styles, but the
+	behavior is not guaranteed.
+\end{variable}
+
+\section{Implementation}
+
+Unfortunately, the implementation is not typesetted in \TeX. Read the |.sty| file.
+
+\StopEventually{^^A
+  \PrintChanges
+  \PrintIndex
+}
+
+\Finale
+\end{document}
