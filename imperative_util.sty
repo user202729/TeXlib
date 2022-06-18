@@ -1,0 +1,177 @@
+\ProvidesExplPackage{imperative_util}{2022-06-17}{0.0.0}{Utilities for imperative package}
+
+\protected\def \__locallyset@@_aux:N #1 {  % #1: the modified token
+	\tl_build_put_right:Nn \__result {\noexpand#1}
+}
+
+\protected\def\locallyset@@to #1 #2 {
+	\tl_build_begin:N \__result
+	\tl_analysis_map_inline:nn {#2} {
+		\int_compare:nNnTF {"##3} = {0} {
+			\str_set:Nx \__name {\exp_last_unbraced:No \cs_to_str:N {##1}}
+			\str_replace_all:Nnn \__name {@@} {#1}  % now \__name holds the name of the new token
+			\begingroup \exp_args:NNc \endgroup \__locallyset@@_aux:N {\__name}  % the token itself is passed to \__aux:N without possibly defining it as \relax
+		} {
+			\tl_build_put_right:Nn \__result {##1}
+		}
+	}
+	\tl_build_end:N \__result
+	\tl_set:Nx \__result {\__result}
+	\__result
+}
+
+
+% #1: \__t_command, auxiliary macro used.
+% #2, #3, #4: command, arg specifier, body
+\protected\def\__tabsafe_new_document_command_aux:nNnn #1 #2 #3 #4{
+	\protected\def #2 {
+		\begingroup
+			\tl_put_right:Nn \dospecials {\do\^^I}
+			#1
+	}
+	\NewDocumentCommand #1 {#3} {
+		\endgroup
+		#4
+	}
+}
+
+% ======== syntax: \TabsafeNewDocumentCommand \command {arg specifier} {body}, identical to \NewDocumentCommand.
+\protected\def\TabsafeNewDocumentCommand #1 #2 #3{
+	\exp_args:Nc\__tabsafe_new_document_command_aux:nNnn {__t_\cs_to_str:N #1} #1 {#2} {#3} 
+}
+
+
+\seq_new:N \__lines
+\int_new:N \__baselinenumber
+
+
+\precattl_exec:n {
+
+	% #1: the index, #2: the line itself
+	% x-expand to the result (some string that will be rescanned)
+	\def\__addlinemarker_line_handler #1 #2{
+		\noexpand\zzlinemark { \int_eval:n{\__baselinenumber+#1} } \tl_tail:n {#2}
+		\cO\^^M
+	}
+
+
+	% use this version if you already have verbatim data.
+	\protected\def\addlinemarker:nn #1 #2 {
+		\tl_set:Nn \__body {#2}
+		\tl_replace_all:Nnn \__body {~} {\cO\ }
+		\seq_set_split:NnV \__lines  {\cO\^^M} \__body
+		\int_set:Nn \__baselinenumber {\inputlineno-\seq_count:N \__lines}
+		\begingroup
+		\chardef\__old_endlinechar\endlinechar
+		\endlinechar=13\relax
+		\tl_gset_rescan:Nnx \__result {\endlinechar=\__old_endlinechar\relax} {
+			\seq_map_indexed_function:NN \__lines \__addlinemarker_line_handler
+		}
+		\endgroup
+		\exp_args:NnV \use:n {#1} \__result
+	}
+
+	% usage: \addlinemarker { <some tokens> } +abc+
+	% eventually executes   <some tokens> {\zzlinemark{123} abc}
+	\TabsafeNewDocumentCommand\addlinemarker{m +v}{
+		\addlinemarker:nn {#1} {#2}
+	}
+
+	% #1: the index, #2: the line itself
+	% x-expand to the result (some string that will be rescanned)
+	\def\__addlinemarker_conditional_line_handler #1 #2{
+		\str_if_eq:fnTF {\tl_head:n {#2}} {.} {  % any space is replaced by \cO\  so :f is safe
+			\noexpand\zzlinemark { \int_eval:n{\__baselinenumber+#1} } \tl_tail:n {#2}
+		} {
+			#2
+		}
+		\cO\^^M
+	}
+
+	% usage: \addlinemarkerconditional { <some tokens> } +abc+
+	% lines starting with `.` are marked, otherwise doesn't
+	% eventually executes   <some tokens> {\zzlinemark{123} abc}
+	\TabsafeNewDocumentCommand\addlinemarkerconditional{m +v}{
+		\tl_set:Nn \__body {#2}
+		\tl_replace_all:Nnn \__body {~} {\cO\ }
+		\seq_set_split:NnV \__lines  {\cO\^^M} \__body
+		\int_set:Nn \__baselinenumber {\inputlineno-\seq_count:N \__lines}
+		\begingroup
+		\chardef\__old_endlinechar\endlinechar
+		\endlinechar=13\relax
+		\tl_gset_rescan:Nnx \__result {\endlinechar=\__old_endlinechar\relax} {
+			\seq_map_indexed_function:NN \__lines \__addlinemarker_conditional_line_handler
+		}
+		\endgroup
+		\exp_args:NnV \use:n {#1} \__result
+	}
+
+	\def\__addlinemarker_wrap_in_group #1 {{#1}}
+
+	\def
+			\__addlinemarker_change_use_none_to_use_i:w
+		\fi
+		\use_none:n #1
+	{
+		\fi
+		#1
+	}
+
+	\def \__addlinemarker_process:Nnn #1 #2 #3 {
+		% #1: \c_true_bool or \c_false_bool,
+		% #2: the line number
+		% #3: either \relax or a token list contain all other catcode
+		\ifx \relax #3 \empty
+			% if true, do nothing. Stop
+		\else
+			% if false, the trailing tokens of #1 are skipped anyway
+			\__addlinemarker_change_use_none_to_use_i:w
+		\fi
+		\use_none:n {  % execute this if false
+			%\prettye:nn {processing}{#1, #2, #3}
+			\str_if_eq:nnTF {#3} {\cO\\linemarkeron} {
+				\__addlinemarker_process:Non \c_true_bool
+			} {
+				\str_if_eq:nnTF {#3} {\cO\\linemarkeroff} {
+					\__addlinemarker_process:Non \c_false_bool
+				} {
+					% otherwise, expand to #3 with or without line marker
+					\bool_if:nT #1 {\noexpand\zzlinemark { #2 }}
+					#3
+					\cO\^^M
+
+					% continue the loop.
+					\__addlinemarker_process:Non #1
+				}
+			}
+			{\the\numexpr #2+1 \relax}  % as #2 to the command
+		}
+	}
+	\cs_generate_variant:Nn \__addlinemarker_process:Nnn {No}
+	\cs_generate_variant:Nn \tl_set_rescan:Nnn {NnV}
+
+	% usage: \addlinemarkerconditionalb { <some tokens> } +abc+
+	% use \linemarkeron and \linemarkeroff to set. The default is off
+	% eventually executes   <some tokens> {\zzlinemark{123} abc}
+	\TabsafeNewDocumentCommand\addlinemarkerconditionalb{m +v}{
+		\begingroup
+		\tl_set:Nn \__body {#2}
+		\tl_replace_all:Nnn \__body {~} {\cO\ }
+		\seq_set_split:NnV \__lines  {\cO\^^M} \__body
+		\int_set:Nn \__baselinenumber {\inputlineno-\seq_count:N \__lines+1}
+		\chardef\__old_endlinechar\endlinechar
+		\tl_set:Nx \__lines { \seq_map_function:NN \__lines \__addlinemarker_wrap_in_group }
+		\tl_set:Nx \__lines {
+			\exp_last_unbraced:Nno \use:n {\__addlinemarker_process:Non \c_false_bool \__baselinenumber} \__lines \relax
+			% → \use:n {\__addlinemarker_process:Non \c_false_bool {\the\__baselinenumber}} <lines> \relax
+			% → \__addlinemarker_process:Non \c_false_bool {\the\__baselinenumber} <lines> \relax
+			% → \__addlinemarker_process:Nnn \c_false_bool {<number>} <lines> \relax
+		}
+		%\pretty:V \__lines
+		\endlinechar=13\relax
+		\tl_set_rescan:NnV \__result {\endlinechar=\__old_endlinechar\relax} \__lines
+		\exp_args:NNnV 
+		\endgroup
+		\use:n {#1} \__result
+	}
+}

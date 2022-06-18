@@ -1,0 +1,58 @@
+\ProvidesExplPackage{imperative}{2022-06-17}{0.0.0}{Imperative-style programming for LaTeX}
+\RequirePackage{imperative_util}
+
+\tl_set:Nn\withexpandinit {
+	\def\assertissingletoken #1{\directlua{withexpand_cmds.assertissingletoken()}{#1}}
+	\def\expandat     #1{\directlua{withexpand_cmds.expandat()}{#1}}
+	\def\expandatlabel#1{\directlua{withexpand_cmds.expandatlabel()}{#1}}
+	\def\onlabel      #1 #2 #3{\directlua{withexpand_cmds.onlabel()}{#1}{#2}{#3}}
+	\def\after        #1 #2 #3{\directlua{withexpand_cmds.after()}  {#1}{#2}{#3}}
+	\def\before       #1 #2 #3{\directlua{withexpand_cmds.before()} {#1}{#2}{#3}}
+}
+
+\def\putnextwithexpand #1 #2 {
+	\directlua{withexpand_compile(token.scan_toks(), token.scan_toks())} {#1} {#2}
+}
+
+\protected\def\rdef#1 #{
+	\directlua{rdef_call()}{#1}
+}
+\TabsafeNewDocumentCommand \__rdeflinenumbered_help {m +v} {
+	\tl_if_empty:nTF {#2} {
+		\addlinemarker {\rdef #1}
+	} {
+		\addlinemarker:nn {\rdef #1} {#2}
+	}
+}
+\protected\def\rdeflinenumbered#1 #{
+	\__rdeflinenumbered_help {#1}
+}
+
+\protected\def\zdef#1 #{
+	\directlua{zdef_call()}{#1}
+}
+\TabsafeNewDocumentCommand \__zdeflinenumbered_help {m +v} {
+	\tl_if_empty:nTF {#2} {
+		\addlinemarker {\zdef #1}
+	} {
+		\addlinemarker:nn {\zdef #1} {#2}
+	}
+}
+\protected\def\zdeflinenumbered#1 #{
+	\__zdeflinenumbered_help {#1}
+}
+
+\protected\def\odefmark:N #1 {}
+\protected\def\rdefmark:N #1 {}
+\protected\def\zdefmark:N #1 {}
+
+\def\__odef_helper:Nnn #1 #2 #3 {
+	\def #1 #2 {#3}
+	\odefmark:N #1
+}
+\protected\def\odef #1 #2 #{
+	\__odef_helper:Nnn #1 {#2}
+}
+
+\directlua{ require "imperative"}
+

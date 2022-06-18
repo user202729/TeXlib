@@ -1,0 +1,527 @@
+%! TEX program = lualatex
+\documentclass[12pt]{article}
+\usepackage[paper=a4paper,margin=0.6cm]{geometry}
+\usepackage{luacode}
+\usepackage{prettytok}
+\ExplSyntaxOn \prettyinit: \ExplSyntaxOff
+\usepackage{precattl}
+\usepackage{genvar}
+\usepackage{imperative}
+\AutoGenerateVariants
+\errorcontextlines=100
+\begin{document}
+
+
+\iffalse
+\ExplSyntaxOn
+\makeatletter
+
+\addlinemarkerconditionalb{\pretty:n} !
+123
+123%
+\linemarkeron
+123%
+456%
+\linemarkeroff
+789
+
+!
+
+\makeatother
+\ExplSyntaxOff
+
+\end{document}
+\fi
+
+\iffalse
+\ExplSyntaxOn
+\makeatletter
+
+
+\putnextwithexpand{
+	\a \b
+}{
+	\expandat \b
+	\expandat \b
+	\expandat \b
+}
+
+\putnextwithexpand{
+	* \a ! \b
+}{
+	\onlabel * \expandatlabel !
+	\onlabel * \expandatlabel !
+}
+
+\putnextwithexpand{
+	\f { \argi } { \argii }
+}{
+	\expandat \argii
+	\expandat \argi
+}
+
+\putnextwithexpand{
+	\f { \x } \g { \y }
+}{
+	\expandat \x
+	\before \g \expandat \y
+}
+
+\putnextwithexpand{
+	\f #1 {\x}
+}{
+	\assertissingletoken {#1}
+	\expandat \x
+}
+
+\putnextwithexpand{
+	\f #1 {\x}
+}{
+	\assertissingletoken {#1}
+	\expandat \x
+}
+
+\putnextwithexpand{
+	\f \csname #1 \endcsname {\x}
+}{
+	\expandat \csname
+	\before \endcsname \expandat \x
+}
+
+\putnextwithexpand{
+	\a \b \c \d \e
+}{
+	\expandat \d
+	\expandat \c
+	\expandat \b
+}
+
+
+\putnextwithexpand {
+	%% '\Iremovebgroup{' expands to nothing in one step, but "balance" as one '{'.
+	% internally \iffalse { \fi
+	\Iremovebgroup{
+	* \use_none:n {{ \string #1 } \@@casei } \@@caseii } \use_i:nn
+}
+{
+	%% \putnextwithexpand second argument syntax:
+
+	% \expandat ...
+	% \expandatlabel ...
+
+	% \onlabel ... \expandat ...
+	% \after ... \expandat[label] ...
+	% \before ... \expandat[label] ...
+
+	% the token/token sequence must appear exactly once.
+	% Optional braces in "..." are stripped. "..." can be sequence of tokens.
+	\onlabel * \expandat \string
+	%\expandat \string
+}
+
+
+\end{document}
+\fi
+
+\iffalse
+
+\precattl_exec:n{
+\def\testtest{
+	\pretty:n{========}
+	\endlinechar=13\relax
+	\newlinechar=13\relax
+	\tl_set_rescan:Nnn \__result { \endlinechar=32\relax } { a \cO\% b \cO\^^M c \cO\^^M d }   \pretty:V \__result
+	\tl_set_rescan:Nnn \__result { \endlinechar=32\relax } { a \cO\% b \cO\^^J c \cO\^^J d }   \pretty:V \__result
+	\tl_set_rescan:Nnn \__result { \endlinechar=32\relax } { a \cO\% b \cO\    c \cO\    d }   \pretty:V \__result
+	\pretty:n{========}
+}
+}
+
+\testtest
+
+
+\ExplSyntaxOff
+\testtest
+\ExplSyntaxOn
+
+\fi
+
+\ExplSyntaxOn
+\makeatletter
+
+\precattl_exec:n{
+\pretty:o{\exp:w \exp_end_continue_f:w \empty \cS\  \cS\  \empty \empty 12  }
+}
+
+\pretty:n{start}
+
+
+
+% 0 <char code> . <catcode>  → the token (if catcode = 6 and in x-expansion, then should double it)
+% 0a.B  → letter a
+% 0{.1  → begin-group {
+% 0 .A  → space ' ' (newer versions only)
+% 1     → also space ' '
+% 2xxx^^A → \xxx
+% 3     → end
+
+\def\__process_char #1 . #2 {
+	\expandafter \expandafter \expandafter \noexpand \char_generate:nn {`#1} {"#2}
+	\__process_s
+}
+
+%\def\__process_param #1 . {
+%	\prettye:n{#1, #2}
+%	# \expandafter \expandafter \expandafter \noexpand \char_generate:nn {`#1} {6}
+%	\__process_s
+%}
+
+\precattl_exec:n{
+
+\def\__process_cs #1 \cO\^^A {
+	\expandafter \noexpand \csname #1 \endcsname
+	\__process_s
+}
+
+\def\__process_s#1{
+	\ifcase #1~
+		\expandafter\__process_char
+	\or
+		\cS\  \expandafter\__process_s
+	\or
+		\expandafter\__process_cs
+	\fi
+}
+
+\pretty:x {
+\__process_s \cO{ 0a.B 0b.B 0c.1 0d.2 0e.3 0f.4 0#.6 0g.6 0h.7 0i.8 0j.B 0k.C 0l.D 1 2abc\^^A  2}\cS\ \cO{\^^A 2j\^^A 3 }
+}
+
+}
+
+
+\rdeflinenumbered \exchange {}!
+%\rdef \exchange {
+	\matchrm{#x}
+	\matchrm{#y}
+	\return{{#y}{#x}}
+
+	% test something
+
+	\assignoperate #x{123}{
+		\matchrm{#y}
+	}
+
+	\conditional{\ifblank{#x}}{
+		\assign #x{true}
+	}{
+		\assign #x{false}
+	}
+
+	\matchrm{#y#}
+
+	\while{\ifblank{#x}}{\assigno #x{\tail{#x}}}
+
+	\assertisNtype #x
+	\expandonce
+	\putnext{#x abc}
+
+	\assign #x{12}
+	\putnext{#x abc}
+
+	\assertisNtype #x
+	\putnext{#x abc}
+!
+
+
+
+%\odef \removespace \cS\ {}  % (low-level) def that expands to result in single step. Identical to \def in TeX.
+\rdeflinenumbered \removespace #x {}!
+	\assignoperate #\result {#x} {\matchrm { ~ }}
+	\return{#\result}
+!
+
+\addlinemarkerconditionalb {} !
+\locallyset@@to{@ifempty@}{  % in control sequence names only. Argument must be list of "normal" character tokens.
+	\zdef \ifempty #1 {
+
+\linemarkeron
+
+		\putnextwithexpand {
+			%% '\Iremovebgroup{' expands to nothing in one step, but "balance" as one '{'.
+			% internally \iffalse { \fi
+			\Iremovebgroup{
+			* \use_none:n {{ \string #1 } \@@casei } \@@caseii } \use_i:nn
+		}
+		{
+			%% \putnextwithexpand second argument syntax:
+
+			% \expandat ...
+			% \expandatlabel ...
+
+			% \onlabel ... \expandat ...
+			% \after ... \expandat[label] ...
+			% \before ... \expandat[label] ...
+
+			% the token/token sequence must appear exactly once.
+			% Optional braces in "..." are stripped. "..." can be sequence of tokens.
+			\onlabel * \expandat \string
+			%\expandat \string
+		}
+
+\linemarkeroff
+
+	}
+
+	% case 0: #1 is none. Then
+	%     \use_none:n {{ \string #1 }  \@@casei } \@@caseii } \use_i:nn
+	% expands to
+	%     \use_none:n {{           '}' \@@casei } \@@caseii } \use_i:nn
+	% and subsequently
+	%                                                         \use_i:nn
+
+	% case 1: #1 starts with a single brace. Then
+	%     \use_none:n {{ \string #1 }  \@@casei } \@@caseii } \use_i:nn
+	% expands to
+	%     \use_none:n {{ ... } ...  }  \@@casei } \@@caseii } \use_i:nn
+	% and subsequently
+	%                                  \@@casei } \@@caseii } \use_i:nn
+
+	% case 2: #1 starts with some other token. Then
+	%     \use_none:n {{ \string #1 }  \@@casei } \@@caseii } \use_i:nn
+	% expands to
+	%     \use_none:n {{ ...        }  \@@casei } \@@caseii } \use_i:nn
+	% and subsequently
+	%                                             \@@caseii } \use_i:nn
+
+	\zdef \@@casei {  % such that '\@@casei } \@@caseii } \use_i:nn' expands to \use_ii:nn
+\linemarkeron
+		\rcall{\removenextegroup}
+		% pass control to \@@caseii
+\linemarkeroff
+	}
+
+	\zdef \@@caseii {
+\linemarkeron
+		\rcall{\removenextegroup}
+		\matchrm{#1}  % the \use_i:nn token
+		\putnext {\use_ii:nn}
+\linemarkeroff
+	}
+}
+
+
+\locallyset@@to{@ifbrace@}{
+	\zdef \ifbrace #1 {
+\linemarkeron
+		\putnextwithexpand {
+			\Iremovebgroup{
+			* \use_none:n {{ \string #1 } \@@casei } \@@caseii } \use_ii:nn
+		}
+		{
+			\onlabel * \expandat \string
+		}
+\linemarkeroff
+	}
+
+	% case 0: #1 is none. Then
+	%     \use_none:n {{ \string #1 }  \@@casei } \@@caseii } \use_ii:nn
+	% expands to
+	%     \use_none:n {{           '}' \@@casei } \@@caseii } \use_ii:nn
+	% and subsequently
+	%                                                         \use_ii:nn
+
+	% case 1: #1 starts with a single brace. Then
+	%     \use_none:n {{ \string #1 }  \@@casei } \@@caseii } \use_ii:nn
+	% expands to
+	%     \use_none:n {{ ... } ...  }  \@@casei } \@@caseii } \use_ii:nn
+	% and subsequently
+	%                                  \@@casei } \@@caseii } \use_ii:nn
+
+	% case 2: #1 starts with some other token. Then
+	%     \use_none:n {{ \string #1 }  \@@casei } \@@caseii } \use_ii:nn
+	% expands to
+	%     \use_none:n {{ ...        }  \@@casei } \@@caseii } \use_ii:nn
+	% and subsequently
+	%                                             \@@caseii } \use_ii:nn
+
+	\zdef \@@casei {  % such that '\@@casei } \@@caseii } \use_ii:nn' expands to \use_i:nn
+\linemarkeron
+		\rcall{\removenextegroup}  %        }
+		\rcall{\removeuntilegroup}  %         \@@caseii }
+		\matchrm{#1}
+		\return {\use_i:nn}
+\linemarkeroff
+	}
+
+	\zdef \@@caseii {
+\linemarkeron
+		\rcall{\removenextegroup}
+\linemarkeroff
+	}
+}
+!
+
+% remove following '...}' in the input stream (including the '}' itself).
+\rdeflinenumbered\removeuntilegroup {
+	\putnext{\Iexpandtobgroup}
+	\expandonce
+	\matchrm{#1}
+}
+\let\removenextegroup\removeuntilegroup  % no error checking.
+
+
+
+\zdef \putnextbgroup {
+	\putnext {\Iexpandtobgroup}
+	\expandonce
+}
+
+\zdef \putnextegroup {
+	\putnext {\Iexpandtoegroup}
+	\expandonce
+}
+
+
+% mark function as "can be used in a single expansion step"
+\odefmark:N \use_i:n
+\odefmark:N \use_i:nn
+\odefmark:N \use_ii:nn
+\odefmark:N \use_none:n
+\odefmark:N \use_none:nn
+\odefmark:N \use_none:nnn
+
+% TODO optimize this somehow
+\rdeflinenumbered \dropfirst #1 {
+	\return {
+		\resultof \operateon {#1} {
+			\matchrm{#a}
+		}
+	}
+}
+
+% check if #1 starts with an explicit space character. (as usual, return \use_i:nn or \use_ii:nn)
+\zdeflinenumbered \ifspace #1 {
+	\assignoperate #1 { . #1 ~ } {
+
+
+		\matchrm {#a ~}
+		% now #a is a single dot if and only if #1 starts with space. 
+		% current state:    \use_i:n { |    ...  }  where | is the current "location"
+		% need to expand to \use_i:n { \use_i:nn }  -- if #a is a single dot
+		%   or              \use_i:n { \use_ii:nn}  -- otherwise
+
+		% the explicit dot is added because without it,
+		% if #1 is '{} <explicit space>', then \matchrm {#a ~} is executed against '{} <explicit space> ~'
+		% so #a gets matched to nothing.
+
+		\backquote{
+			\conditional {\ifempty {,r{\dropfirst {#a}}}} {
+				\assign #b{\use_i:nn}
+			}
+			{
+				\assign #b{\use_ii:nn}
+			}
+		}
+		\assertisNtype #b
+		\rcall{\removeuntilegroup}
+		\rcall{\putnextegroup}
+		\putnext {#b}
+
+
+	}
+	\return {#1}
+}
+
+% rdef: romannumeral-based def. \exp:w \macro {arguments...} expands to the result in 1 step.
+% internally it's generated using \exp_end:
+
+
+% read the implementation below (very short) to understand what it does.
+\odef \removetillfrozenrelax #1 #2 \cFrozenrelax {{#1}}
+
+\zdeflinenumbered \ifnotempty #1 {
+	\conditional {\ifempty #1} {
+		\return {\use_ii:nn}
+	} {
+		\return {\use_i:nn}
+	}
+}
+
+
+% same as UD@ExtractFirstArg
+\rdeflinenumbered \firstarg #x {
+	% example: #x = {abc \relax de}
+	\assign #x{#x \cFrozenrelax}
+	% example: #x becomes {abc \relax de \relax}
+	\while { \resultof \ifnotempty { \resultof \dropfirst {#x} } } {
+		\assign #x{\removetillfrozenrelax { #x }}
+	}
+	% in the example above #x becomes {{a} de \relax}, then finally {{a}}.
+	\return {\resultof \use_i:n #x}
+}
+
+% same as above but the first argument is a single token.
+% might be slightly faster, benchmark to be sure.
+\rdeflinenumbered \firstargsingletoken #x {
+	\putnext {\removebgroup{#x}}
+	\expandonce  % remove the bgroup of course.
+	\matchrm {#y}  % now #y is the first argument
+	\assertisNtype #y
+	\rcall{\putnextbgroup}  % input stream: {[newly put]  ... content of remaining of #x ... } with #y "stored"
+	\matchrm {#z}
+	\return {#y}
+}
+
+% same as UD@ExtractFirstComponent
+\rdeflinenumbered \firstcomponent #x {
+	\conditional{\ifspace {#x}} {
+		\return {~}
+	} {
+		\return {\resultof \firstarg {#x}}
+	}
+}
+
+% return the string representation of the first bgroup character.
+\rdeflinenumbered \firstbgroup #x {}!
+	\while { \resultof \ifnotempty {#x} } {
+		\conditional {\ifbrace {#x}} {
+			% found the first group. Just
+			\assignoperate #y {\string #x} {
+				\expandonce
+				\rcall{\putnextbgroup}
+			}
+			% now if #x = {{ab}cd}, then #y = {{'{'ab}cd}
+			\return {\resultof \firstcomponent {\resultof \firstarg {#y}}}
+		} {
+			\conditional {\ifspace {#x}} {
+				\assign #x{\resultof \removespace {#x}}
+			} {
+				\assign #x{\resultof \dropfirst {#x}}
+			}
+		}
+	}
+	\return {}
+!
+% it will take forever to implement the compiler...
+
+%\cdef  % callback-based def.
+
+
+\rdeflinenumbered \f {
+	\assign #x{1}
+	\assign #y{2}
+	\conditional{\use_i:nn} {
+		\assigno #x{\the\numexpr #x+1\relax}
+	} {
+		\assigno #y{\the\numexpr #y+1\relax}
+	}
+	\return {{#x}{#y}}
+}
+
+% ========
+
+\directlua{debug_rdef()}
+\makeatother
+\ExplSyntaxOff
+\end{document}
