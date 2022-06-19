@@ -146,58 +146,36 @@
 
 \fi
 
+\iffalse
 \ExplSyntaxOn
 \makeatletter
 
-\precattl_exec:n{
-\pretty:o{\exp:w \exp_end_continue_f:w \empty \cS\  \cS\  \empty \empty 12  }
-}
-
-\pretty:n{start}
-
-
-
-% 0 <char code> . <catcode>  → the token (if catcode = 6 and in x-expansion, then should double it)
-% 0a.B  → letter a
-% 0{.1  → begin-group {
-% 0 .A  → space ' ' (newer versions only)
-% 1     → also space ' '
-% 2xxx^^A → \xxx
-% 3     → end
-
-\def\__process_char #1 . #2 {
-	\expandafter \expandafter \expandafter \noexpand \char_generate:nn {`#1} {"#2}
-	\__process_s
-}
-
-%\def\__process_param #1 . {
-%	\prettye:n{#1, #2}
-%	# \expandafter \expandafter \expandafter \noexpand \char_generate:nn {`#1} {6}
-%	\__process_s
-%}
 
 \precattl_exec:n{
-
-\def\__process_cs #1 \cO\^^A {
-	\expandafter \noexpand \csname #1 \endcsname
-	\__process_s
-}
-
-\def\__process_s#1{
-	\ifcase #1~
-		\expandafter\__process_char
-	\or
-		\cS\  \expandafter\__process_s
-	\or
-		\expandafter\__process_cs
-	\fi
-}
-
 \pretty:x {
 \__process_s \cO{ 0a.B 0b.B 0c.1 0d.2 0e.3 0f.4 0#.6 0g.6 0h.7 0i.8 0j.B 0k.C 0l.D 1 2abc\^^A  2}\cS\ \cO{\^^A 2j\^^A 3 }
 }
-
 }
+
+\rdeflinenumbered \a #1 {} !
+	\return {#1 #1}
+!
+
+\rdeflinenumbered \b #1 {} !
+	\backquote{
+		\return {,r{\a { ,r{\a} }}}
+	}
+!
+
+
+
+
+\end{document}
+\fi
+
+\ExplSyntaxOn
+\makeatletter
+
 
 
 \rdeflinenumbered \exchange {}!
@@ -220,7 +198,7 @@
 
 	\matchrm{#y#}
 
-	\while{\ifblank{#x}}{\assigno #x{\tail{#x}}}
+	\while{}{\ifblank{#x}}{\assigno #x{\tail{#x}}}
 
 	\assertisNtype #x
 	\expandonce
@@ -268,6 +246,7 @@
 			\onlabel * \expandat \string
 			%\expandat \string
 		}
+
 
 \linemarkeroff
 
@@ -364,20 +343,22 @@
 
 % remove following '...}' in the input stream (including the '}' itself).
 \rdeflinenumbered\removeuntilegroup {
+	
 	\putnext{\Iexpandtobgroup}
 	\expandonce
 	\matchrm{#1}
 }
-\let\removenextegroup\removeuntilegroup  % no error checking.
+%\let\removenextegroup\removeuntilegroup  % no error checking.
+% TODO it doesn't work
 
 
 
-\zdef \putnextbgroup {
+\rdef \putnextbgroup {
 	\putnext {\Iexpandtobgroup}
 	\expandonce
 }
 
-\zdef \putnextegroup {
+\rdef \putnextegroup {
 	\putnext {\Iexpandtoegroup}
 	\expandonce
 }
@@ -393,9 +374,11 @@
 
 % TODO optimize this somehow
 \rdeflinenumbered \dropfirst #1 {
-	\return {
-		\resultof \operateon {#1} {
-			\matchrm{#a}
+	\backquote{
+		\return {
+			,O {#1} {
+				\matchrm{#a}
+			}
 		}
 	}
 }
@@ -437,11 +420,13 @@
 % internally it's generated using \exp_end:
 
 
-% read the implementation below (very short) to understand what it does.
-\odef \removetillfrozenrelax #1 #2 \cFrozenrelax {{#1}}
+%% read the implementation below (very short) to understand what it does.
+%\precattl_exec:n {
+%	\odef \removetillfrozenrelax #1 #2 \cFrozenRelax {{#1}}
+%}
 
 \zdeflinenumbered \ifnotempty #1 {
-	\conditional {\ifempty #1} {
+	\conditional {\ifempty {#1}} {
 		\return {\use_ii:nn}
 	} {
 		\return {\use_i:nn}
@@ -450,16 +435,29 @@
 
 
 % same as UD@ExtractFirstArg
-\rdeflinenumbered \firstarg #x {
+% ignore initial spaces, faster
+\addlinemarkerconditionalb {} !\precattl_exec:n {
+\rdef \firstarg #x {
+\linemarkeron
 	% example: #x = {abc \relax de}
-	\assign #x{#x \cFrozenrelax}
+	\assign #x{#x \cFrozenRelax}
 	% example: #x becomes {abc \relax de \relax}
-	\while { \resultof \ifnotempty { \resultof \dropfirst {#x} } } {
-		\assign #x{\removetillfrozenrelax { #x }}
+	\while {\assignr #y {\dropfirst {#x}}}{ \ifnotempty {#y} } {
+		%\assign #x{\removetillfrozenrelax { #x }}
+		\assignoperate #x {#x} {
+			% following in the input stream:   #x  =  <first> <something else> \cFrozenRelax
+			\matchrm {#\first #\rest \cFrozenRelax}
+			\putnext {{#\first}}  % remember to brace it
+		}
 	}
 	% in the example above #x becomes {{a} de \relax}, then finally {{a}}.
-	\return {\resultof \use_i:n #x}
+
+	\backquote{
+		\return {,o{\use:n #x}}  % remove the outer most brace group.
+	}
+\linemarkeroff
 }
+}!
 
 % same as above but the first argument is a single token.
 % might be slightly faster, benchmark to be sure.
@@ -474,30 +472,37 @@
 }
 
 % same as UD@ExtractFirstComponent
+% keep initial spaces, slower
 \rdeflinenumbered \firstcomponent #x {
 	\conditional{\ifspace {#x}} {
 		\return {~}
 	} {
-		\return {\resultof \firstarg {#x}}
+		\backquote{
+			\return {,r{\firstarg {#x}}}
+		}
 	}
 }
 
 % return the string representation of the first bgroup character.
 \rdeflinenumbered \firstbgroup #x {}!
-	\while { \resultof \ifnotempty {#x} } {
+	\while {}{ \ifnotempty {#x} } {
 		\conditional {\ifbrace {#x}} {
-			% found the first group. Just
+			% found the first group.
+
 			\assignoperate #y {\string #x} {
 				\expandonce
 				\rcall{\putnextbgroup}
 			}
+
 			% now if #x = {{ab}cd}, then #y = {{'{'ab}cd}
-			\return {\resultof \firstcomponent {\resultof \firstarg {#y}}}
+			\backquote{
+				\return {,r{\firstcomponent {,r{\firstarg {#y}}}}}
+			}
 		} {
 			\conditional {\ifspace {#x}} {
-				\assign #x{\resultof \removespace {#x}}
+				\assignr #x{\removespace {#x}}
 			} {
-				\assign #x{\resultof \dropfirst {#x}}
+				\assignr #x{\dropfirst {#x}}
 			}
 		}
 	}
@@ -507,6 +512,71 @@
 
 %\cdef  % callback-based def.
 
+\rdeflinenumbered \firstegroup #x {}!
+	\while {}{ \ifnotempty {#x} } {
+		\conditional {\ifbrace {#x}} {
+			% found the first group.
+
+			% first make sure the open brace has charcode `{` (anything not a space will do.).
+			\assignoperate #x {\string #x} {
+				\expandonce
+				\rcall{\putnextbgroup}
+			}
+
+			% then empty out that group.
+			\while {
+				\assignr #\firstcomponent {\firstarg{#x}}
+			} {
+				\ifnotempty {#\firstcomponent}
+			}{
+				% firstcomponent is still nonempty. Pick one item
+				\conditional{\ifspace {#\firstcomponent}} {
+					\assignoperate #x {#x} {
+						% following in the input stream:  { <space> ... }  ...
+						\putnext{\string} \expandonce
+						% following in the input stream:  '{' <space> ... }  ...  where the initial { is stringified and is definitely not a space
+						\matchrm{#1 ~}
+						% following in the input stream:    ... }  ...
+						\rcall{\putnextbgroup}
+					}
+				} {
+					\assignoperate #x {#x} {
+						% following in the input stream:  { <item> ... }  ...
+						\putnext{\string} \expandonce
+						% following in the input stream:  '{' <item> ... }  ...  where the initial { is stringified and is definitely not a space
+						\matchrm{#1 #2}
+						% following in the input stream:    ... }  ...
+						\rcall{\putnextbgroup}
+					}
+				}
+				% now firstcomponent is shorter.
+			}
+
+			% finally firstcomponent is empty now. (and the opening brace is guaranteed to be non-space)
+			\assignoperate #x {#x} {
+				% following in the input stream: { } ...
+				\putnext{\string} \expandonce
+				% following in the input stream: '{' } ...
+				\matchrm{#1}
+				% following in the input stream:     } ...
+				\putnext{\string} \expandonce
+				% following in the input stream:     '}' ...
+			}
+
+			% finally done
+			\assignr #x{\firstcomponent{#x}}
+			\return{#x}
+
+		} {
+			\conditional {\ifspace {#x}} {
+				\assignr #x{\removespace {#x}}
+			} {
+				\assignr #x{\dropfirst {#x}}
+			}
+		}
+	}
+	\return {}
+!
 
 \rdeflinenumbered \f {
 	\assign #x{1}
@@ -519,9 +589,43 @@
 	\return {{#x}{#y}}
 }
 
+\rdeflinenumbered \g {
+	\putnext{\string} \expandonce
+	\matchrm{#1}
+	\rcall{\removeuntilegroup}
+}
+
 % ========
 
-\directlua{debug_rdef()}
+%\directlua{debug_rdef()}
+%\directlua{debug_rdef2()}
+\directlua{execute_pending_definitions()}
+
+\let\removenextegroup\removeuntilegroup  % no error checking.
+
+
+
+\precattl_exec:n {
+	\pretty:o { \romannumeral \firstbgroup {{1}2} }
+	\pretty:o { \romannumeral \firstegroup {{1}2} }
+
+	\pretty:o { \romannumeral \firstbgroup { \cB\A 1 \cE\} 2} }
+	\pretty:o { \romannumeral \firstbgroup { \cB\\ 1 \cE\} 2} }
+	\pretty:o { \romannumeral \firstbgroup { \cB\  1 \cE\} 2} }
+
+	\pretty:o { \romannumeral \firstegroup { \cB\A 1 \cE\A 2} }
+	\pretty:o { \romannumeral \firstegroup { \cB\\ 1 \cE\\ 2} }
+	\pretty:o { \romannumeral \firstegroup { \cB\  1 \cE\  2} }
+
+	\pretty:o { \romannumeral \firstegroup { \cB\{  \cE\A 2} }
+	\pretty:o { \romannumeral \firstegroup { \cB\{  \cE\\ 2} }
+	\pretty:o { \romannumeral \firstegroup { \cB\{  \cE\  2} }
+	\pretty:o { \romannumeral \firstegroup { \cB\   \cE\  2} }
+}
+
+\prettystop
+
+
 \makeatother
 \ExplSyntaxOff
 \end{document}

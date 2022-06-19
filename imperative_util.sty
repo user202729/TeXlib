@@ -175,3 +175,97 @@
 		\use:n {#1} \__result
 	}
 }
+
+
+
+
+% 0 <char code> . <catcode>  → the token (if catcode = 6 and in x-expansion, then should double it)
+% 0aB  → letter a
+% 0{1  → begin-group {
+% 1     → also space ' '
+% 2xxx^^A → \xxx
+% 3A    → space with cat A (if cat spacer, newer versions only)
+% 4     → end
+
+\use_none:n {
+
+\def\__process_char #1 #2 {
+	\expandafter \expandafter \expandafter \noexpand \char_generate:nn {`#1} {"#2}
+	\__process_s
+}
+
+\def\__process_space_other_cat #1 {
+	\expandafter \expandafter \expandafter \noexpand \char_generate:nn {32} {"#1}
+	\__process_s
+}
+
+%\def\__process_param #1 . {
+%	\prettye:n{#1, #2}
+%	# \expandafter \expandafter \expandafter \noexpand \char_generate:nn {`#1} {6}
+%	\__process_s
+%}
+
+
+\def\__process_cs #1 / {
+	\expandafter \noexpand \csname #1 \endcsname
+	\__process_s
+}
+
+\precattl_exec:n{
+\def\__process_s#1{
+	\ifcase #1~
+		\expandafter\__process_char
+	\or
+		\cS\  \expandafter\__process_s
+	\or
+		\expandafter\__process_cs
+	\or
+		\expandafter\__process_space_other_cat
+	\fi
+}
+}
+
+}
+
+
+
+\def\__process_char #1 #2 {
+	%\prettye:n{\expandafter \expandafter \expandafter \noexpand \char_generate:nn {`#2} {"#1}}
+	\expandafter \expandafter \expandafter \noexpand \char_generate:nn {`#2} {"#1}
+	\__process_s
+}
+
+\def\__process_space_other_cat #1 {
+	\expandafter \expandafter \expandafter \noexpand \char_generate:nn {32} {"#1}
+	\__process_s
+}
+
+\def\__process_cs #1 / {
+	\expandafter \noexpand \csname #1 \endcsname
+	\__process_s
+}
+
+\precattl_exec:n {
+\def\__process_s#1{
+	\token_if_eq_charcode:NNTF #1 0 { % 0 <name> / → the control sequence
+		\__process_cs
+	} {
+		\token_if_eq_charcode:NNTF #1 s { % s → a space
+			\cS\   \__process_s
+		} {
+			\token_if_eq_charcode:NNTF #1 S { % S <cat> → a space
+				\__process_space_other_cat
+			} {
+				\token_if_eq_charcode:NNF #1 . { % . → end
+					\__process_char #1
+				}
+			}
+		}
+	}
+}
+}
+
+% main handler function, will exec the resulting token list.
+\def\__process_all#1{
+	\begingroup \exp_last_unbraced:Nx \endgroup {\__process_s #1}
+}

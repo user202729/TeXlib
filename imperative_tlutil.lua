@@ -111,41 +111,55 @@ function F.makerealtoken(t)
 	return t._originaltoken
 end
 
+local cmdname_to_catcode={
+	left_brace="1",
+	right_brace="2",
+	math_shift="3",
+	tab_mark="4",
+	mac_param="6",
+	sup_mark="7",
+	sub_mark="8",
+	spacer="A",
+	letter="B",
+	other_char="C",
+}
+
 function F.get_tlreprx(tokens)
 	local s={}
 	for _, t in ipairs(tokens) do
 		if t.csname==nil then
-			if t.cmdname=="spacer" and t.mode==32 then
-				s[#s+1]="1"
-			elseif t.cmdname=="mac_param" then
-				s[#s+1]="0#.60"..string.char(t.mode)..".6"
+			local ch=string.char(t.mode)
+			local cat=cmdname_to_catcode[t.cmdname]
+
+			if t.cmdname=="mac_param" then s[#s+1]="6#" end  -- not necessary for e-expansion, only for x-expansion
+
+			if ch==' ' then
+				if t.cmdname=="spacer" then
+					s[#s+1]="s"
+				else
+					s[#s+1]="S"..cat
+				end
 			else
-				s[#s+1]="0"..string.char(t.mode).."."..({
-					left_brace="1",
-					right_brace="2",
-					math_shift="3",
-					tab_mark="4",
-					mac_param="6",
-					sup_mark="7",
-					sub_mark="8",
-					spacer="A",
-					letter="B",
-					other_char="C",
-				})[t.cmdname]
+				s[#s+1]=cat..ch
 			end
 		elseif t.active then
-			s[#s+1]="0"..t.csname..".D"
+			if t.csname==" " then
+				s[#s+1]="SD"
+			else
+				s[#s+1]="D"..t.csname
+			end
 		else
-			s[#s+1]="2"..t.csname..string.char(1)
+			assert(not t.csname:find("/", 1, true))
+			s[#s+1]="0"..t.csname.."/"
 		end
 	end
-	s[#s+1]="3"
+	s[#s+1]="."
 	return table.concat(s)
 end
 
 function F.print_fake_tokenlist(t)
 	tex.tprint(
-		{-1, [[\csname use:x\endcsname{]]},  -- assume this is safe in current catcode regime (which it most usually is...)
+		{-1, [[\csname __process_all\endcsname{]]},  -- assume this is safe in current catcode regime (which it most usually is...)
 		{-2, get_tlreprx(t)},
 		{-1, [[}]]}
 	)
@@ -155,7 +169,9 @@ F.bgroup=token.create(string.byte "{", 1)
 F.egroup=token.create(string.byte "}", 2)
 F.paramsign=token.create(string.byte "#", 6)
 F.expandafter=token.create "expandafter"
-assert(expandafter.csname=="expandafter")
+F.iffalseT=token.create "iffalse"
+F.fiT=token.create "fi"
+assert(expandafter.csname=="expandafter")  -- TODO
 
 function F.wrapinbracegroup(t)
 	return cat({bgroup}, t, {egroup})

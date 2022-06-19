@@ -53,18 +53,40 @@ local function prettyprint_one_arg(tokenlist)
 	return s
 end
 
-function prettyprint(...)
+local function check_file_opened()
 	if token.get_macro("prettypreamble") ~= nil then
 		error("pretty file not initialized!")
 	end
-	local prettyfilenumber=token.get_mode(token.create("__prettyh_file"))
-	local s="print_tl("
+end
 
+local function get_file_number()
+	check_file_opened()
+	return token.get_mode(token.create("__prettyh_file"))
+end
+
+function prettyprint(...)
+	local prettyfilenumber=get_file_number()
+
+	local s="print_tl("
 	local args={...}
 	for i=1, select("#", ...) do
 		s=s..prettyprint_one_arg(args[i])
 	end
 
 	texio.write(prettyfilenumber, s..")//</script><script>\n")
+end
+
+function prettyprintw()
+	check_file_opened()
+	local extra=token.scan_toks()
+	local s={}
+	while true do
+		local n=token.get_next()
+		s[#s+1]=n
+		if n.csname=="prettystop" then break end
+	end
+
+	prettyprint(extra, s)
+	token.put_next(s)
 end
 end
