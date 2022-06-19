@@ -33,7 +33,7 @@ function F.commontokenlistbalancedsuffixlen(a, b)
 end
 
 function F.getbalanced(stack)  -- get the smallest nonzero part that is balanced (might be an explicit space)
-	curDegree=0
+	local curDegree=0
 	local result={}
 	while true do
 		local t=popstack(stack)
@@ -56,7 +56,7 @@ function F.getbracegroupinside(stack)  -- same as above, but only return the con
 end
 
 function F.is_space(token)
-	return token.csname==nil and token.cmdname=="spacer"
+	return token.csname==nil and token.cmdname=="spacer" and token.mode==0x20
 end
 
 assert(string.byte "*"==42)
@@ -199,6 +199,13 @@ function F.is_paramsign(token)
 	return token.csname==nil and token.cmdname=="mac_param"
 end
 
+function F.get_paramnumber(token)  -- return 1-9 if it's a param token, else return nil
+	if token.csname==nil and 0x31<=token.mode and token.mode<=0x39 then
+		return token.mode-0x30
+	end
+	return nil
+end
+
 -- absorb something like '#x' from the top of the stack and return x as a token.
 function F.getvarname(stack)
 	local paramsign=popstack(stack)   -- the '#' token
@@ -224,6 +231,65 @@ function F.find_subsequence(sub, s)  -- return the only offset (0-indexed even t
 	end
 	--prettyprint( "sub=", sub, "s=", s, "result=", result)
 	return result  -- might be 0
+end
+
+function F.simple_args(paramtext)  -- return whether paramtext has the form \f #1 #2 ...
+	assert(paramtext[1].csname)
+	if #paramtext%2==0 then return false end
+	for i=2, #paramtext, 2 do if not is_paramsign(paramtext[i]) then return false end end
+	for i=3, #paramtext, 2 do
+		if is_paramsign(paramtext[i]) then return false end  -- cannot be ##
+		assert(paramtext[i].mode-0x30==i//2)  -- that they're in the correct order
+	end
+	return true
+end
+
+function F.have_double_arg_use(replacementtext)  -- return whether some arg is used more than once in replacementtext
+	local i, n=1, #replacementtext
+	local seen={}
+	while i<=n do
+		if is_paramsign(replacementtext[i]) then
+			assert(i+1<=n)
+			if not is_paramsign(replacementtext[i+1]) then
+				local paramnumber=get_paramnumber(replacementtext[i+1])
+				assert(paramnumber)
+				if seen[paramnumber] then return true end
+				seen[paramnumber]=true
+			end
+			i=i+2
+		else
+			i=i+1
+		end
+	end
+	return false
+end
+
+function F.substitute_replacementtext(replacementtext, args)
+	local i, n=1, #replacementtext
+	local result={}
+	while i<=n do
+		if is_paramsign(replacementtext[i]) then
+			assert(i+1<=n)
+			if is_paramsign(replacementtext[i+1]) then
+				result[#result+1]=replacementtext[i]
+				result[#result+1]=replacementtext[i+1]
+			else
+				local paramnumber=get_paramnumber(replacementtext[i+1])
+				appendto(result, args[paramnumber])
+			end
+			i=i+2
+		else
+			result[#result+1]=replacementtext[i]
+			i=i+1
+		end
+	end
+	return result
+end
+
+function F.tl_equal(a, b)
+	if #a~=#b then return false end
+	for i=1, #a do if a[i].tok~=b[i].tok then return false end end
+	return true
 end
 
 return F

@@ -64,7 +64,6 @@ end
 
 function F.errorx(...)
 	prettyprint(...)
-	s=""
 	local args={...}
 	for i=1, select("#", ...) do
 		args[i]=tostring(args[i])

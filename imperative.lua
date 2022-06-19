@@ -2,6 +2,10 @@ for k, v in pairs(require "imperative_tlutil") do
 	_ENV[k]=v
 end
 
+setmetatable(_ENV, {__index=function(self, field)
+	errorx("attempt to access undefined global variable "..tostring(field).."\n\n"..debug.traceback())
+end})
+
 local function getvarsraw(tokenlist)  -- for example if tokenlist='#x 123 #y' return '{[x.tok]=true, [y.tok]=true}'
 	-- where x.tok is the .tok value of the token x
 	local result={}
@@ -22,10 +26,16 @@ local Ntypemark={}  -- this is used as a mark in `need` and `produce` table
 -- e.g. `need={[a.tok]=true, [b.tok]=Ntypemark}` means the statement
 -- needs a and b, and b is guaranteed to be a single token
 
-local function namedef_to_macrodef(paramtext, replacementtext)  -- paramtext&replacementtext are tokenlists
+local function namedef_to_macrodef(paramtext, replacementtext, statement)
+	-- paramtext&replacementtext are tokenlists
 	-- operate in-place.
+	-- return a "param_tag" table which is ([1] → true|Ntypemark, [2] → true|Ntypemark, etc.)
+	--
+	-- note that it's copied from statement.need, so some fields might be nil
+	-- (e.g. new vars created by matchrm)
 	local used=0
 	local tok_to_number_token={}  -- e.g. a.tok → 1, b.tok → 2, etc.
+	local param_tag={}
 	for i=1, #paramtext-1 do
 		local v=paramtext[i]
 		if is_paramsign(v) then
@@ -36,6 +46,7 @@ local function namedef_to_macrodef(paramtext, replacementtext)  -- paramtext&rep
 			local t=token.create(48+used, 12)
 			assert(not is_paramsign(paramtext[i+1]))
 			tok_to_number_token[paramtext[i+1].tok]=t
+			param_tag[used]=statement.need[paramtext[i+1].tok]  -- might be nil
 			paramtext[i+1]=t
 		end
 	end
@@ -64,6 +75,7 @@ local function namedef_to_macrodef(paramtext, replacementtext)  -- paramtext&rep
 			i=i+1
 		end
 	end
+	return param_tag
 end
 
 local used_st={}  -- _linenumber → last used
@@ -117,32 +129,443 @@ local function populatelinenumber(body) -- return new table with _linenumber pro
 	return result
 end
 
-local pending_definitions={}  -- list of {paramtext, replacementtext}
+local pending_definitions={}  -- list of {paramtext, replacementtext, (something else)}
+-- possible keys: see function finalize_generate_code() below
 
-local function finalize_generate_code(paramtext, replacementtext)  -- the macro itself is included in paramtext
+local function finalize_generate_code(statement, paramtext, replacementtext)  -- the macro itself is included in paramtext
 	paramtext=slice(paramtext, 1)
 	replacementtext=slice(replacementtext, 1)
 	--prettyprint("finalize:", paramtext, "→", replacementtext)
-	namedef_to_macrodef(paramtext, replacementtext)
+	local param_tag=namedef_to_macrodef(paramtext, replacementtext, statement)
 	for _, kv in pairs(pending_definitions) do
 		if kv[1][1].csname==paramtext[1].csname and kv[1][1].active==paramtext[1].active then
 			errorx("duplicate definition of ", paramtext[1])  -- not very efficient but okay
 		end
 	end
-	table.insert(pending_definitions, {paramtext, replacementtext})
+	table.insert(pending_definitions, {
+		paramtext, replacementtext,
+		z_optimizable=true,  -- that is, the number of expansion steps for this is not important
+		r_optimizable=statement.r_optimizable,  -- that is, this statement will always be called in r-expansion mode
+		param_tag=param_tag,
+		is_internal=statement.is_internal,
+	})
 end
 
-local function generic_compile_code(functionname, body, passcontrol)  -- functionname: single token, body: tokenlist (possibly with _linenumber info added)
-	-- passcontrol: tokenlist consist of tokens that will be prepended when this function returns
+local tokenfromtok_t={} -- actually this could be eliminated, but it's convenient
+-- (also make it global. No harm?)
 
-	local tokenfromtok_t={} -- actually this could be eliminated, but it's convenient
+local function tokenfromtok(tok)
+	local t=tokenfromtok_t[tok]
+	assert(t~=nil)
+	return t
+end
+
+-- tokens: list of tokens, is_mark: function takes a token and return bool
+local function compile_backquote(tokens, is_mark)
+	local tokenstack=reverse(tokens)
+
+	local prepare={}
+	local processed={}
+	while #tokenstack>0 do
+		local t=popstack(tokenstack)
+		if is_mark(t) then
+			local kind=popstack(tokenstack)
+			if kind.csname~=nil or (
+				kind.mode~=string.byte "o" and
+				kind.mode~=string.byte "O" and
+				kind.mode~=string.byte "r"
+			) then
+				errorx("backquote: unknown token (", kind, ") follows mark!")
+			end
+			local tmpvar=randomvar()
+			tokenfromtok_t[tmpvar.tok]=tmpvar
+
+			if kind.mode==string.byte "O" then
+				local innertokens=getbracegroup(tokenstack)
+				local innerprepare, innerprocessed=compile_backquote(innertokens, is_mark)
+				appendto(prepare, innerprepare)
+				appendto(prepare, {faketoken "assignoperate", paramsign, tmpvar})
+					appendto(prepare, innerprocessed)
+					appendto(prepare, getbracegroup(tokenstack))
+			else
+				local innertokens=getbracegroup(tokenstack)
+				local innerprepare, innerprocessed=compile_backquote(innertokens, is_mark)
+				appendto(prepare, innerprepare)
+				appendto(prepare, {faketoken("assign" .. string.char(kind.mode)), paramsign, tmpvar})
+				appendto(prepare,    innerprocessed)
+			end
+
+			appendto(processed, {paramsign, tmpvar})
+
+		else
+			processed[#processed+1]=t
+		end
+	end
+	return prepare, processed
+end
+
+
+local preprocessor_functions={
+	Iexpandtobgroup=function(selftoken, output, inputstack)
+		appendto(output, {expandafter, bgroup, iffalseT, egroup, fiT})
+	end,
+	Iexpandtoegroup=function(selftoken, output, inputstack)
+		appendto(output, {iffalseT, bgroup, fiT, egroup})
+	end,
+	Iremovebgroup=function(selftoken, output, inputstack)
+		local bgroup_=popstack(inputstack)
+		if bgroup.tok~=bgroup_.tok then
+			errorx("Iremovebgroup followed by ", bgroup_)
+		end
+		appendto(output, {iffalseT, bgroup_, fiT})
+	end,
+	Iremoveegroup=function(selftoken, output, inputstack)
+		local egroup_=popstack(inputstack)
+		if egroup.tok~=egroup_.tok then
+			errorx("Iremoveegroup followed by ", egroup_)
+		end
+		appendto(output, {iffalseT, egroup_, fiT})
+	end,
+}
+
+local generic_compile_code  -- function, will define later
+
+local function param_from_need(needsequence)  -- takes tokenfromtok implicitly
+	local t={}
+	for _, kv in ipairs(needsequence) do
+		t[#t+1]=paramsign
+		t[#t+1]=tokenfromtok(kv[1])
+	end
+	return t
+end
+
+local function standard_paramtext(statement)
+	local t={statement.caller}
+	appendto(t, param_from_need(statement.needsequence))
+	return t
+end
+
+local function standard_nextvalue(next_statement)
+	local nextvalue={}
+	for k, v in pairs(next_statement.need) do
+		if v==Ntypemark then
+			nextvalue[k]={paramsign, tokenfromtok(k)}
+		else
+			nextvalue[k]={bgroup, paramsign, tokenfromtok(k), egroup}
+		end
+	end
+	return nextvalue
+end
+
+local function standard_replacementtext(next_statement, nextvalue)
+	local replacementtext={next_statement.caller}
+	for _, kv in ipairs(next_statement.needsequence) do
+		if next_statement.need[kv[1]]==nil then
+			errorx("internal error: variable ", tokenfromtok(kv[1]), " not found in .need!")
+		end
+		if nextvalue[kv[1]]==nil then
+			errorx("internal error: variable ", tokenfromtok(kv[1]), " not found in nextvalue!")
+		end
+		appendto(replacementtext, nextvalue[kv[1]])
+	end
+	return replacementtext
+end
+
+local function generate_code_prepare(statement, statements)  -- return paramtext, replacementtext assume the operation is no-op
+	local paramtext=standard_paramtext(statement)
+	local replacementtext=standard_replacementtext(statements[statement.nextindex], standard_nextvalue(statements[statement.nextindex]))
+	return paramtext, replacementtext
+end
+
+local function generate_code_noop(statement, statements)  -- well...
+	finalize_generate_code(statement, generate_code_prepare(statement, statements))
+end
+
+local command_handler={
+	----------------------------------------------------------------------------
+	-- the "primitives"
+
+	matchrm=function(selftoken, lastlinenumber, stack, add_statement, context)
+		local group=getbracegroupinside(stack)
+		for _, v in ipairs(group) do assert(degree(v)==0) end
+		add_statement {
+			debug=cati({faketoken "matchrm"}, wrapinbracegroup(group)),
+			produce=getvarsraw(group),
+			generate_code=function(statement, statements)
+				local paramtext, replacementtext=generate_code_prepare(statement, statements)
+				paramtext=cat(paramtext, group)
+				finalize_generate_code(statement, paramtext, replacementtext)
+			end,
+		}
+	end,
+
+	putnext=function(selftoken, lastlinenumber, stack, add_statement, context)
+		local group=getbracegroupinside(stack)
+		add_statement {
+			debug=cati({faketoken "putnext"}, wrapinbracegroup(group)),
+			need=getvarsexpr(group),
+			generate_code=function(statement, statements)
+				local paramtext, replacementtext=generate_code_prepare(statement, statements)
+				replacementtext=cat(replacementtext, group)
+				finalize_generate_code(statement, paramtext, replacementtext)
+			end,
+		}
+	end,
+
+	expandonce=function(selftoken, lastlinenumber, stack, add_statement, context)
+		add_statement {
+			debug={faketoken "expandonce"},
+			generate_code=function(statement, statements)
+				local paramtext, replacementtext=generate_code_prepare(statement, statements)
+
+				local n=statement.nextindex
+				replacementtext={expandafter, statements[n].caller}
+
+				for _, kv in ipairs(statements[n].needsequence) do
+					if kv[2]~=Ntypemark then
+						error("expandonce but some parameters are not single token")
+					end
+					appendto(replacementtext, {expandafter, paramsign, tokenfromtok(kv[1])})
+				end
+				finalize_generate_code(statement, paramtext, replacementtext)
+			end,
+		}
+	end,
+
+	assertisNtype=function(selftoken, lastlinenumber, stack, add_statement, context)
+		local varname=getvarname(stack)
+		add_statement {
+			debug={faketoken "assertisNtype", varname},
+			need={[varname.tok]=true},
+			produce={[varname.tok]=Ntypemark},
+			generate_code=context.generate_code_noop,
+		}
+	end,
+
+	conditionalgoto=function(selftoken, lastlinenumber, stack, add_statement, context)
+		local star=get_optional_star(stack)
+		local conditional=getbracegroupinside(stack)
+		local targetiftrue=popstack(stack)
+		add_statement {
+			debug=cati({faketoken "conditionalgoto"}, wrapinbracegroup(conditional), {targetiftrue}),
+			conditionalgoto=targetiftrue,
+			need=getvarsexpr(conditional),
+			generate_code=function(statement, statements)
+				local paramtext=standard_paramtext(statement)
+				local replacementtext=standard_replacementtext(statements[statement.nextindex], standard_nextvalue(statements[statement.nextindex]))
+				local replacementtext2=standard_replacementtext(statements[statement.conditionalgoto], standard_nextvalue(statements[statement.conditionalgoto]))
+				if star then  -- conditional might peek, don't eliminate common suffix
+					finalize_generate_code(statement, paramtext, cat(
+						conditional,
+						optionalwrapinbracegroup(replacementtext2),
+						optionalwrapinbracegroup(replacementtext)
+					))
+				else
+					local l=commontokenlistbalancedsuffixlen(replacementtext, replacementtext2)
+					finalize_generate_code(statement, paramtext, cat(
+						conditional,
+						optionalwrapinbracegroup(slice(replacementtext2, 1, #replacementtext2-l)),
+						optionalwrapinbracegroup(slice(replacementtext, 1, #replacementtext-l)),
+						slice(replacementtext, #replacementtext-l+1, #replacementtext)
+					))
+				end
+			end,
+		}
+	end,
+
+	label=function(selftoken, lastlinenumber, stack, add_statement, context)
+		local labelname=popstack(stack)
+		add_statement {
+			debug={faketoken "label", labelname},
+			label=labelname,
+			generate_code=context.generate_code_noop,
+		}
+	end,
+
+	["goto"]=function(selftoken, lastlinenumber, stack, add_statement, context)
+		local labelname=popstack(stack)
+		add_statement {
+			debug={faketoken "goto", labelname},
+			goto_=labelname,
+			generate_code=context.generate_code_noop,
+		}
+	end,
+
+	assign=function(selftoken, lastlinenumber, stack, add_statement, context)
+		local varname=getvarname(stack)
+		local content=getbracegroup(stack)
+		add_statement {
+			debug=cati({faketoken "assign", varname}, content),
+			need=getvarsexpr(content),
+			produce={[varname.tok]=true},
+			generate_code=function(statement, statements)
+				local paramtext=standard_paramtext(statement)
+				local nextvalue=standard_nextvalue(statement)
+				nextvalue[varname.tok]=content
+				local replacementtext=standard_replacementtext(statements[statement.nextindex], nextvalue)
+				finalize_generate_code(statement, paramtext, replacementtext)
+			end,
+		}
+	end,
+
+	assigno=function(selftoken, lastlinenumber, stack, add_statement)  -- assigno #x {123}
+		local varname=getvarname(stack)
+		local content=getbracegroup(stack)
+		add_statement {
+			debug=cati({faketoken "assigno", varname}, content),
+			need=getvarsexpr(content),
+			assigno_tok=varname.tok,
+			produce={[varname.tok]=true},
+			generate_code=function(statement, statements)
+				local paramtext=standard_paramtext(statement)
+				local nextvalue=standard_nextvalue(statement)
+				local next_statement=statements[statement.nextindex]
+				assert(next_statement.needsequence[1][1]==varname.tok)
+				nextvalue[varname.tok]=content
+				local replacementtext=standard_replacementtext(next_statement, nextvalue)
+				finalize_generate_code(statement, paramtext, cati(
+					{expandafter, replacementtext[1], expandafter},
+					slice(replacementtext, 2)
+					))
+			end,
+		}
+	end,
+
+	expcall=function(selftoken, lastlinenumber, stack, add_statement, context)
+		local content=getbracegroupinside(stack)
+		add_statement {
+			debug=cati({faketoken "expcall"}, content),
+			need=getvarsexpr(content),
+			generate_code=function(statement, statements)
+				local paramtext=standard_paramtext(statement)
+				local replacementtext=standard_replacementtext(statements[statement.nextindex], standard_nextvalue(statements[statement.nextindex]))
+				finalize_generate_code(statement, paramtext, cat(content, replacementtext))
+			end,
+		}
+	end,
+
+	----------------------------------------------------------------------------
+	-- macro-like (transform the code itself)
+
+	["return"]=function(selftoken, lastlinenumber, stack, add_statement, context)
+		local group=getbracegroup(stack)
+		pushtostackfront(stack, 
+			{faketoken "putnext"}, group,
+			{faketoken "goto", context.labelfunctionend}
+		)
+	end,
+	
+	assignr=function(selftoken, lastlinenumber, stack, add_statement)  -- \assignr #x {\some function that is rdef-ed}
+		local varname=getvarname(stack)
+		local content=getbracegroupinside(stack)
+		pushtostackfront(stack, 
+			{faketoken "assigno", paramsign, varname, bgroup, faketoken "exp:w"}, content, {egroup}
+		)
+	end,
+
+	backquote=function(selftoken, lastlinenumber, stack, add_statement)  -- lisp backquote-like
+		-- syntax: \backquote {...}
+		-- OR:     \backquote * {...}  (use * as the mark token instead of the default ,)
+		local function is_mark(t)
+			return t.csname==nil and t.mode==string.byte ","
+		end
+
+		if degree(stack[#stack])==0 then
+			local mark_tok=popstack(stack).tok
+			is_mark=function(t) return t.tok==mark_tok end
+		end
+
+		local tokens=getbracegroupinside(stack)
+		local prepare, processed=compile_backquote(tokens, is_mark)
+		pushtostackfront(stack, prepare, processed)
+	end,
+
+	assignoperate=function(selftoken, lastlinenumber, stack, add_statement)  -- \assignoperate #x {#x #y} {\matchrm...}
+		local varname=getvarname(stack)
+		local content=getbracegroupinside(stack)
+		local operations=getbracegroupinside(stack)
+
+		local localfn=next_st(lastlinenumber)
+		localfn._internal_function=true
+		generic_compile_code(localfn, operations, {faketoken "exp_end:"}, {r_optimizable=true})
+
+		pushtostackfront(stack, 
+			{faketoken "assigno", paramsign, varname, bgroup, faketoken "exp:w", localfn}, 
+			content,
+			{egroup}
+		)
+	end,
+
+	conditional=function(selftoken, lastlinenumber, stack, add_statement, context)
+		local star=get_optional_star(stack)
+		local condition=getbracegroup(stack)
+		local codeiftrue=getbracegroupinside(stack)
+		local codeiffalse=getbracegroupinside(stack)
+
+		local labeltrue=randomlabel()
+		local labelend=randomlabel()
+
+		pushtostackfront(stack,   -- propagate the star. If star is nil it will be eliminated automatically
+			{faketoken "conditionalgoto", star}, condition, {labeltrue},
+			codeiffalse,
+			{faketoken "goto", labelend,
+			faketoken "label", labeltrue},
+			codeiftrue,
+			{faketoken "label", labelend}
+		)
+	end,
+
+	["while"]=function(selftoken, lastlinenumber, stack, add_statement, context)
+		local codebefore=getbracegroupinside(stack)
+		local condition=getbracegroup(stack)
+		local code=getbracegroupinside(stack)
+
+		local labelcheck=randomlabel()
+		local labelcontinue=randomlabel()
+		pushtostackfront(stack, 
+			{faketoken "goto", labelcheck,
+			faketoken "label", labelcontinue},
+			code,
+			{faketoken "label", labelcheck},
+			codebefore,
+			{faketoken "conditionalgoto"}, condition, {labelcontinue}
+		)
+	end,
+
+	putnextwithexpand=function(selftoken, lastlinenumber, stack, add_statement, context)
+		local tokens=getbracegroupinside(stack)
+		local commands=getbracegroupinside(stack)
+		for i, v in pairs(tokens) do tokens[i]=makerealtoken(v) end
+		for i, v in pairs(commands) do commands[i]=makerealtoken(v) end
+		pushtostackfront(stack, {faketoken "putnext"}, wrapinbracegroup(withexpand_compile(tokens, commands)))
+	end,
+
+	rcall=function(selftoken, lastlinenumber, stack, add_statement, context)
+		local tokens=getbracegroupinside(stack)
+		pushtostackfront(stack, {faketoken "putnext",
+			bgroup, faketoken "exp:w"}, tokens, {egroup,
+			faketoken "expandonce"})
+	end,
+
+	pretty=function(selftoken, lastlinenumber, stack, add_statement, context)
+		local content=getbracegroupinside(stack)
+		pushtostackfront(stack, {faketoken "expcall",
+			bgroup, faketoken "prettye:n", bgroup, faketoken("[L"..lastlinenumber.."]:")}, content, {egroup, egroup})
+	end,
+
+	prettyw=function(selftoken, lastlinenumber, stack, add_statement, context)
+		pushtostackfront(stack, {faketoken "expcall", bgroup,
+			faketoken "prettye:nw", faketoken("[L"..lastlinenumber.."]:"),
+		egroup})
+	end,
+}
+
+-- functionname: single token, body: tokenlist (possibly with _linenumber info added)
+-- passcontrol: tokenlist consist of tokens that will be prepended when this function returns
+generic_compile_code=function(functionname, body, passcontrol, statement_extra)
+
 	for _, t in ipairs(body) do tokenfromtok_t[t.tok]=t end
 
-	local function tokenfromtok(tok)
-		local t=tokenfromtok_t[tok]
-		assert(t~=nil)
-		return t
-	end
 
 	local labelfunctionend=randomlabel()
 	body=cati(body, {faketoken "label", labelfunctionend})
@@ -151,33 +574,11 @@ local function generic_compile_code(functionname, body, passcontrol)  -- functio
 
 	local stack=reverse(body)
 	body={}
-	local translator={
-		Iexpandtobgroup=function()
-			appendto(body, {expandafter, bgroup, iffalseT, egroup, fiT})
-		end,
-		Iexpandtoegroup=function()
-			appendto(body, {iffalseT, bgroup, fiT, egroup})
-		end,
-		Iremovebgroup=function()
-			local bgroup_=popstack(stack)
-			if bgroup.tok~=bgroup_.tok then
-				errorx("Iremovebgroup followed by ", bgroup_)
-			end
-			appendto(body, {iffalseT, bgroup_, fiT})
-		end,
-		Iremoveegroup=function()
-			local egroup_=popstack(stack)
-			if egroup.tok~=egroup_.tok then
-				errorx("Iremoveegroup followed by ", egroup_)
-			end
-			appendto(body, {iffalseT, egroup_, fiT})
-		end,
-	}
 	while #stack>0 do
 		local t=popstack(stack)
-		local handler=translator[t.csname]
+		local handler=preprocessor_functions[t.csname]
 		if handler then
-			handler()
+			handler(t, body, stack)
 		else
 			body[#body+1]=t
 		end
@@ -188,57 +589,6 @@ local function generic_compile_code(functionname, body, passcontrol)  -- functio
 
 	local statements={}
 
-	local function param_from_need(needsequence)  -- takes tokenfromtok implicitly
-		local t={}
-		for _, kv in ipairs(needsequence) do
-			t[#t+1]=paramsign
-			t[#t+1]=tokenfromtok(kv[1])
-		end
-		return t
-	end
-
-	local function standard_paramtext(statement)
-		local t={statement.caller}
-		appendto(t, param_from_need(statement.needsequence))
-		return t
-	end
-
-	local function standard_nextvalue(next_statement)
-		local nextvalue={}
-		for k, v in pairs(next_statement.need) do
-			if v==Ntypemark then
-				nextvalue[k]={paramsign, tokenfromtok(k)}
-			else
-				nextvalue[k]={bgroup, paramsign, tokenfromtok(k), egroup}
-			end
-		end
-		return nextvalue
-	end
-
-	local function standard_replacementtext(next_statement, nextvalue)
-		local replacementtext={next_statement.caller}
-		for _, kv in ipairs(next_statement.needsequence) do
-			if next_statement.need[kv[1]]==nil then
-				errorx("internal error: variable ", tokenfromtok(kv[1]), " not found in .need!")
-			end
-			if nextvalue[kv[1]]==nil then
-				errorx("internal error: variable ", tokenfromtok(kv[1]), " not found in nextvalue!")
-			end
-			appendto(replacementtext, nextvalue[kv[1]])
-		end
-		return replacementtext
-	end
-	
-	local function generate_code_prepare(statement)  -- return paramtext, replacementtext assume the operation is no-op
-		local paramtext=standard_paramtext(statement)
-		local replacementtext=standard_replacementtext(statements[statement.nextindex], standard_nextvalue(statements[statement.nextindex]))
-		return paramtext, replacementtext
-	end
-
-
-	local function generate_code_noop(statement)  -- well...
-		finalize_generate_code(generate_code_prepare(statement))
-	end
 
 	local lastlinenumber=0
 
@@ -247,331 +597,19 @@ local function generic_compile_code(functionname, body, passcontrol)  -- functio
 			statement.caller=functionname
 		else
 			statement.caller=next_st(lastlinenumber)
+			statement.is_internal=true
 			statement.caller._internal_function=true  -- i.e. it's possible to eliminate this function, "not public API"
+		end
+		for k, v in pairs(statement_extra) do
+			statement[k]=v
 		end
 		statements[#statements+1]=statement
 	end
 
-	local function compile_backquote(tokens, is_mark)  -- tokens: list of tokens, is_mark: function takes a token and return bool
-		local tokenstack=reverse(tokens)
 
-		local prepare={}
-		local processed={}
-		while #tokenstack>0 do
-			local t=popstack(tokenstack)
-			if is_mark(t) then
-				local kind=popstack(tokenstack)
-				if kind.csname~=nil or (
-					kind.mode~=string.byte "o" and
-					kind.mode~=string.byte "O" and
-					kind.mode~=string.byte "r"
-				) then
-					errorx("backquote: unknown token (", kind, ") follows mark!")
-				end
-				local tmpvar=randomvar()
-				tokenfromtok_t[tmpvar.tok]=tmpvar
-
-				if kind.mode==string.byte "O" then
-					local innertokens=getbracegroup(tokenstack)
-					local innerprepare, innerprocessed=compile_backquote(innertokens, is_mark)
-					appendto(prepare, innerprepare)
-					appendto(prepare, {faketoken "assignoperate", paramsign, tmpvar})
-						appendto(prepare, innerprocessed)
-						appendto(prepare, getbracegroup(tokenstack))
-				else
-					local innertokens=getbracegroup(tokenstack)
-					local innerprepare, innerprocessed=compile_backquote(innertokens, is_mark)
-					appendto(prepare, innerprepare)
-					appendto(prepare, {faketoken("assign" .. string.char(kind.mode)), paramsign, tmpvar})
-					appendto(prepare,    innerprocessed)
-				end
-
-				appendto(processed, {paramsign, tmpvar})
-
-			else
-				processed[#processed+1]=t
-			end
-		end
-		return prepare, processed
-	end
-
-	local handlers={
-		----------------------------------------------------------------------------
-		-- the "primitives"
-
-		matchrm=function()
-			local group=getbracegroupinside(stack)
-			for _, v in ipairs(group) do assert(degree(v)==0) end
-			add_statement {
-				debug=cati({faketoken "matchrm"}, wrapinbracegroup(group)),
-				produce=getvarsraw(group),
-				generate_code=function(statement)
-					local paramtext, replacementtext=generate_code_prepare(statement)
-					paramtext=cat(paramtext, group)
-					finalize_generate_code(paramtext, replacementtext)
-				end,
-			}
-		end,
-
-		putnext=function()
-			local group=getbracegroupinside(stack)
-			add_statement {
-				debug=cati({faketoken "putnext"}, wrapinbracegroup(group)),
-				need=getvarsexpr(group),
-				generate_code=function(statement)
-					local paramtext, replacementtext=generate_code_prepare(statement)
-					replacementtext=cat(replacementtext, group)
-					finalize_generate_code(paramtext, replacementtext)
-				end,
-			}
-		end,
-
-		expandonce=function()
-			add_statement {
-				debug={faketoken "expandonce"},
-				generate_code=function(statement)
-					local paramtext, replacementtext=generate_code_prepare(statement)
-
-					local n=statement.nextindex
-					replacementtext={expandafter, statements[n].caller}
-
-					for _, kv in ipairs(statements[n].needsequence) do
-						if kv[2]~=Ntypemark then
-							error("expandonce but some parameters are not single token")
-						end
-						appendto(replacementtext, {expandafter, paramsign, tokenfromtok(kv[1])})
-					end
-					finalize_generate_code(paramtext, replacementtext)
-				end,
-			}
-		end,
-
-		assertisNtype=function()
-			local varname=getvarname(stack)
-			add_statement {
-				debug={faketoken "assertisNtype", varname},
-				need={[varname.tok]=true},
-				produce={[varname.tok]=Ntypemark},
-				generate_code=generate_code_noop,
-			}
-		end,
-
-		conditionalgoto=function()
-			local star=get_optional_star(stack)
-			local conditional=getbracegroupinside(stack)
-			local targetiftrue=popstack(stack)
-			add_statement {
-				debug=cati({faketoken "conditionalgoto"}, wrapinbracegroup(conditional), {targetiftrue}),
-				conditionalgoto=targetiftrue,
-				need=getvarsexpr(conditional),
-				generate_code=function(statement)
-					local paramtext=standard_paramtext(statement)
-					local replacementtext=standard_replacementtext(statements[statement.nextindex], standard_nextvalue(statements[statement.nextindex]))
-					local replacementtext2=standard_replacementtext(statements[statement.conditionalgoto], standard_nextvalue(statements[statement.conditionalgoto]))
-					if star then  -- conditional might peek, don't eliminate common suffix
-						finalize_generate_code(paramtext, cat(
-							conditional,
-							optionalwrapinbracegroup(replacementtext2),
-							optionalwrapinbracegroup(replacementtext)
-						))
-					else
-						local l=commontokenlistbalancedsuffixlen(replacementtext, replacementtext2)
-						finalize_generate_code(paramtext, cat(
-							conditional,
-							optionalwrapinbracegroup(slice(replacementtext2, 1, #replacementtext2-l)),
-							optionalwrapinbracegroup(slice(replacementtext, 1, #replacementtext-l)),
-							slice(replacementtext, #replacementtext-l+1, #replacementtext)
-						))
-					end
-				end,
-			}
-		end,
-
-		label=function()
-			local labelname=popstack(stack)
-			add_statement {
-				debug={faketoken "label", labelname},
-				label=labelname,
-				generate_code=generate_code_noop,
-			}
-		end,
-
-		["goto"]=function()
-			local labelname=popstack(stack)
-			add_statement {
-				debug={faketoken "goto", labelname},
-				goto_=labelname,
-				generate_code=generate_code_noop,
-			}
-		end,
-
-		assign=function()
-			local varname=getvarname(stack)
-			local content=getbracegroup(stack)
-			add_statement {
-				debug=cati({faketoken "assign", varname}, content),
-				need=getvarsexpr(content),
-				produce={[varname.tok]=true},
-				generate_code=function(statement)
-					local paramtext=standard_paramtext(statement)
-					local nextvalue=standard_nextvalue(statement)
-					nextvalue[varname.tok]=content
-					local replacementtext=standard_replacementtext(statements[statement.nextindex], nextvalue)
-					finalize_generate_code(paramtext, replacementtext)
-				end,
-			}
-		end,
-
-		assigno=function()  -- assigno #x {123}
-			local varname=getvarname(stack)
-			local content=getbracegroup(stack)
-			add_statement {
-				debug=cati({faketoken "assigno", varname}, content),
-				need=getvarsexpr(content),
-				assigno_tok=varname.tok,
-				produce={[varname.tok]=true},
-				generate_code=function(statement)
-					local paramtext=standard_paramtext(statement)
-					local nextvalue=standard_nextvalue(statement)
-					local next_statement=statements[statement.nextindex]
-					assert(next_statement.needsequence[1][1]==varname.tok)
-					nextvalue[varname.tok]=content
-					local replacementtext=standard_replacementtext(next_statement, nextvalue)
-					finalize_generate_code(paramtext, cati(
-						{expandafter, replacementtext[1], expandafter},
-						slice(replacementtext, 2)
-						))
-				end,
-			}
-		end,
-
-		expcall=function()
-			local content=getbracegroupinside(stack)
-			add_statement {
-				debug=cati({faketoken "expcall"}, content),
-				need=getvarsexpr(content),
-				generate_code=function(statement)
-					local paramtext=standard_paramtext(statement)
-					local replacementtext=standard_replacementtext(statements[statement.nextindex], standard_nextvalue(statements[statement.nextindex]))
-					finalize_generate_code(paramtext, cat(content, replacementtext))
-				end,
-			}
-		end,
-
-		----------------------------------------------------------------------------
-		-- macro-like (transform the code itself)
-
-		["return"]=function()
-			local group=getbracegroup(stack)
-			pushtostackfront(stack, 
-				{faketoken "putnext"}, group,
-				{faketoken "goto", labelfunctionend}
-			)
-		end,
-		
-		assignr=function()  -- \assignr #x {\some function that is rdef-ed}
-			local varname=getvarname(stack)
-			local content=getbracegroupinside(stack)
-			pushtostackfront(stack, 
-				{faketoken "assigno", paramsign, varname, bgroup, faketoken "exp:w"}, content, {egroup}
-			)
-		end,
-
-		backquote=function()  -- lisp backquote-like
-			-- syntax: \backquote {...}
-			-- OR:     \backquote * {...}  (use * as the mark token instead of the default ,)
-			local function is_mark(t)
-				return t.csname==nil and t.mode==string.byte ","
-			end
-
-			if degree(stack[#stack])==0 then
-				local mark_tok=popstack(stack).tok
-				is_mark=function(t) return t.tok==mark_tok end
-			end
-
-			local tokens=getbracegroupinside(stack)
-			local prepare, processed=compile_backquote(tokens, is_mark)
-			pushtostackfront(stack, prepare, processed)
-		end,
-
-		assignoperate=function()  -- \assignoperate #x {#x #y} {\matchrm...}
-			local varname=getvarname(stack)
-			local content=getbracegroupinside(stack)
-			local operations=getbracegroupinside(stack)
-
-			local localfn=next_st(lastlinenumber)
-			localfn._internal_function=true
-			generic_compile_code(localfn, operations, {faketoken "exp_end:"})
-
-			pushtostackfront(stack, 
-				{faketoken "assigno", paramsign, varname, bgroup, faketoken "exp:w", localfn}, 
-				content,
-				{egroup}
-			)
-		end,
-
-		conditional=function()
-			local star=get_optional_star(stack)
-			local condition=getbracegroup(stack)
-			local codeiftrue=getbracegroupinside(stack)
-			local codeiffalse=getbracegroupinside(stack)
-
-			local labeltrue=randomlabel()
-			local labelend=randomlabel()
-
-			pushtostackfront(stack,   -- propagate the star. If star is nil it will be eliminated automatically
-				{faketoken "conditionalgoto", star}, condition, {labeltrue},
-				codeiffalse,
-				{faketoken "goto", labelend,
-				faketoken "label", labeltrue},
-				codeiftrue,
-				{faketoken "label", labelend}
-			)
-		end,
-
-		["while"]=function()
-			local codebefore=getbracegroupinside(stack)
-			local condition=getbracegroup(stack)
-			local code=getbracegroupinside(stack)
-
-			local labelcheck=randomlabel()
-			local labelcontinue=randomlabel()
-			pushtostackfront(stack, 
-				{faketoken "goto", labelcheck,
-				faketoken "label", labelcontinue},
-				code,
-				{faketoken "label", labelcheck},
-				codebefore,
-				{faketoken "conditionalgoto"}, condition, {labelcontinue}
-			)
-		end,
-
-		putnextwithexpand=function()
-			local tokens=getbracegroupinside(stack)
-			local commands=getbracegroupinside(stack)
-			for i, v in pairs(tokens) do tokens[i]=makerealtoken(v) end
-			for i, v in pairs(commands) do commands[i]=makerealtoken(v) end
-			pushtostackfront(stack, {faketoken "putnext"}, wrapinbracegroup(withexpand_compile(tokens, commands)))
-		end,
-
-		rcall=function()
-			local tokens=getbracegroupinside(stack)
-			pushtostackfront(stack, {faketoken "putnext",
-				bgroup, faketoken "romannumeral"}, tokens, {egroup,
-				faketoken "expandonce"})
-		end,
-
-		pretty=function()
-			local content=getbracegroupinside(stack)
-			pushtostackfront(stack, {faketoken "expcall",
-				bgroup, faketoken "prettye:n", bgroup, faketoken("[L"..lastlinenumber.."]:")}, content, {egroup, egroup})
-		end,
-
-		prettyw=function()
-			pushtostackfront(stack, {faketoken "expcall", bgroup,
-				faketoken "prettye:nw", faketoken("[L"..lastlinenumber.."]:"),
-			egroup})
-		end,
+	local context={
+		labelfunctionend=labelfunctionend,
+		generate_code_noop=generate_code_noop,
 	}
 
 	while #stack>0 do
@@ -579,10 +617,10 @@ local function generic_compile_code(functionname, body, passcontrol)  -- functio
 		if t._linenumber~=nil then
 			lastlinenumber=t._linenumber
 		end
-		if t.csname==nil or handlers[t.csname]==nil then
+		if t.csname==nil or command_handler[t.csname]==nil then
 			errorx("invalid token seen: (", t, ") on line ", lastlinenumber)
 		end
-		handlers[t.csname]()
+		command_handler[t.csname](t, lastlinenumber, stack, add_statement, context)
 	end
 
 
@@ -600,7 +638,7 @@ local function generic_compile_code(functionname, body, passcontrol)  -- functio
 	end
 
 	for i=1, #statements-1 do
-		v=statements[i]
+		local v=statements[i]
 
 		if v.goto_ then
 			v.nextindex=labelpos[v.goto_.tok]
@@ -696,8 +734,6 @@ local function generic_compile_code(functionname, body, passcontrol)  -- functio
 		end
 	end
 
-
-
 	-- then, convert `need` table to indexed table (fixed order)
 	for _, v in ipairs(statements) do
 		local n={}
@@ -738,13 +774,13 @@ local function generic_compile_code(functionname, body, passcontrol)  -- functio
 		prettyprint "========"
 		for i, v in ipairs(statements) do
 
-			s="need="
+			local s="need="
 			if v.need then
 				for _, kv in ipairs(v.needsequence) do
 					local k, v=kv[1], kv[2]
 				--for k, v in pairs(v.need) do
 					s=s..tostring(k)
-					if w==Ntypemark then s=s.."^" end
+					if v==Ntypemark then s=s.."^" end
 					s=s..","
 				end
 			end
@@ -765,7 +801,7 @@ local function generic_compile_code(functionname, body, passcontrol)  -- functio
 	for i=1, #statements-1 do
 		if statements[i].generate_code then --TODO everything must have handler
 			local success, val=xpcall(function()
-				statements[i]:generate_code()
+				statements[i]:generate_code(statements)
 			end, debug.traceback)
 			if not success then
 				debugprintstatements()
@@ -779,13 +815,10 @@ local function generic_compile_code(functionname, body, passcontrol)  -- functio
 	end
 	assert(#statements>0)
 	assert(#statements[#statements].needsequence==0)
-	finalize_generate_code({statements[#statements].caller}, passcontrol)
-
-
-	
+	finalize_generate_code(statements[#statements], {statements[#statements].caller}, passcontrol)
 end
 
-function generic_def_call(passcontrol)
+function generic_def_call(passcontrol, statement_extra)
 	local header=token.scan_toks()
 	if #header==0 then error("header cannot be empty") end
 	local functionname=header[1]
@@ -802,15 +835,15 @@ function generic_def_call(passcontrol)
 	-- special handler: get linenumber for each token in body
 	body=populatelinenumber(body)
 
-	generic_compile_code(functionname, body, passcontrol)
+	generic_compile_code(functionname, body, passcontrol, statement_extra)
 end
 
 function rdef_call()
-	generic_def_call({faketoken "exp_end:"})
+	generic_def_call({faketoken "exp_end:"}, {r_statement=true})
 end
 
 function zdef_call()
-	generic_def_call({})
+	generic_def_call({}, {})
 end
 
 function debug_rdef()
@@ -828,18 +861,202 @@ local function get_execute_pending_definitions_tl(pending_definitions)
 end
 
 function debug_rdef2()
-	print()
-	print()
-	print()
+	print("\n\n")
 	print(get_tlreprx(get_execute_pending_definitions_tl(pending_definitions)))
-	print()
-	print()
-	print()
+	print("\n\n")
 end
 
 function execute_pending_definitions()
 	print_fake_tokenlist(get_execute_pending_definitions_tl(pending_definitions))
 	pending_definitions={}
+end
+
+function optimize_pending_definitions()
+	local function refcount(tok)
+		-- inefficient...
+		local result=0
+		for _, v in pairs(pending_definitions) do
+			local replacementtext=v[2]
+			for _, t in ipairs(replacementtext) do
+				if t.tok==tok then
+					result=result+1
+					break
+				end
+			end
+		end
+		return result
+	end
+
+	local function find_def(caller)  -- given a token, return (index, pending_definitions[index])
+		for j, w in pairs(pending_definitions) do
+			if w[1][1].csname==caller.csname then
+				return j, w
+			end
+		end
+		return nil, nil
+	end
+
+	local function replace_macro(search, replace)
+		for _, w in pairs(pending_definitions) do
+			for j=2, #w[1] do assert(w[1][j].tok~=search.tok) end
+			for j, t in ipairs(w[2]) do if t.tok==search.tok then
+				w[2][j]=replace
+			end end
+		end
+	end
+
+
+
+	while true do
+		local done_anything=false
+
+		-- optimize by replacing macro X with macro Y if X is defined to be Y without any arguments
+		for _, v in ipairs(pending_definitions) do if v.z_optimizable and v.is_internal then
+			local paramtext, replacementtext=v[1], v[2]
+			if #paramtext==1 and #replacementtext==1 then
+				local caller=paramtext[1]
+				local replacement=replacementtext[1]
+				replace_macro(caller, replacement)
+				done_anything=true
+			end
+		end end
+
+
+		-- optimize special pattern \expandafter \<macro expands to nothing>
+		for _, v in ipairs(pending_definitions) do if v.z_optimizable then
+			local paramtext, replacementtext=v[1], v[2]
+			if #replacementtext>=2
+				and replacementtext[1].csname=="expandafter"
+			then
+				local j, w=find_def(replacementtext[2])
+				if w~=nil and #w[1]==1 and #w[2]==0 then
+					v[2]=slice(replacementtext, 3)
+					done_anything=true
+				end
+			end
+		end end
+
+		
+		-- optimize special pattern \expandafter \exp_end: \exp:w
+		for _, v in ipairs(pending_definitions) do if v.r_optimizable then
+			local paramtext, replacementtext=v[1], v[2]
+			if #replacementtext>=3
+				and replacementtext[1].csname=="expandafter"
+				and replacementtext[2].csname=="exp_end:"
+				and replacementtext[3].csname=="exp:w"
+			then
+				v[2]=slice(replacementtext, 4)
+				done_anything=true
+			end
+		end end
+
+		-- optimize by deduplicating macros with same definition
+		for i, v in ipairs(pending_definitions) do if v.is_internal then
+			for j=i+1, #pending_definitions do
+				local w=pending_definitions[j]
+				if tl_equal(slice(v[1], 2), slice(w[1], 2)) and tl_equal(v[2], w[2]) then
+					replace_macro(v[1][1], w[1][1])
+					done_anything=true
+					break --inner loop
+				end
+			end
+		end end
+
+		-- optimize by simulating some expansion steps within macro definition
+		for _, v in ipairs(pending_definitions) do if v.z_optimizable then
+		--for i=1, #pending_definitions do local v=pending_definitions[i] if v and v.z_optimizable then
+			local paramtext, replacementtext=v[1], v[2]
+			local caller=paramtext[1]
+			local target=replacementtext[1]
+			local caller_param_tag=v.param_tag
+			if target and target.csname and target.csname~=caller.csname  -- this might be violated if user intentionally make infinite loop
+				--and refcount(target.tok)==1   -- TODO may bloat the code but...
+				and not target.active
+			then
+				local target_index, target_def=find_def(target)
+				if target_def and target_def.is_internal then
+					local target_paramtext, target_replacementtext=target_def[1], target_def[2]
+					if simple_args(target_paramtext)
+						-- and not have_double_arg_use(target_replacementtext)  -- TODO this might exponentially increase the code size
+					then
+						local stack=reverse(replacementtext)  -- #1 etc. here belong to the caller, so look up in caller_param_tag
+						popstack(stack)  -- discard the caller macro which is == target
+
+						local matched_args={}
+
+						-- attempt to match args. If returns true, the stack is guaranteed to be in clean state (i.e. with X args removed), if return false, no guarantee
+						local function work()
+							for _=1, #target_paramtext//2 do
+								-- attempt to absorb an undelimited argument
+								while #stack>0 and is_space(stack[#stack]) do
+									pop_stack()
+								end
+								if #stack==0 then return false end  -- maybe target is a matchrm that looks ahead
+
+								local t=popstack(stack)
+								local d=degree(t)
+								if d==1 then
+									-- it's an bgroup
+									stack[#stack+1]=t
+									matched_args[#matched_args+1]=getbracegroupinside(stack)
+								elseif d==-1 then
+									errorx("} seen while scanning argument of \\"..target.csname)
+								else
+									assert(d==0)
+									if is_paramsign(t) then
+										local u=popstack(stack)
+										matched_args[#matched_args+1]={t, u}  -- guess
+										if not is_paramsign(u) then  -- it might be #1 that expands to something unknown...?
+											local paramnumber=get_paramnumber(u)
+											assert(paramnumber)
+											if Ntypemark~=caller_param_tag[paramnumber] then
+												return false
+											end
+										end
+									else
+										-- it's a simple token, will be grabbed
+										matched_args[#matched_args+1]={t}
+									end
+								end
+							end
+							return true
+						end
+
+						if work() then
+							-- can be optimized
+							-- we have: v[2]=replacementtext= \target {args...} rest...
+							-- currently:
+							--
+							--   \target{args...} should expand to
+							--     target_replacementtext
+							--     [where each #i is replaced with matched_args[i]]
+							--
+							--           rest=reverse(stack)
+							done_anything=true
+							v[2]=cat(substitute_replacementtext(target_replacementtext, matched_args), reverse(stack))
+							-- target will be deleted later
+						end
+					end
+				end
+			end
+		end end
+
+		-- remove internal ones with refcount==0
+		local pending_definitionsx={}
+		for _, v in ipairs(pending_definitions) do
+			local caller=v[1][1]
+			if v.is_internal and refcount(caller.tok)==0 then
+				done_anything=true
+				--prettyprint("removed ", caller.csname)
+			else
+				pending_definitionsx[#pending_definitionsx+1]=v
+			end
+		end
+		pending_definitions=pending_definitionsx
+
+		if not done_anything then break end
+	end
+			
 end
 
 do  -- block for withexpand.

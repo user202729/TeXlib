@@ -173,10 +173,29 @@
 \end{document}
 \fi
 
+\iffalse
 \ExplSyntaxOn
 \makeatletter
 
 
+
+
+\rdeflinenumbered \f {
+	\assign #x{1}
+	\assign #y{2}
+	\conditional{\use_i:nn} {
+		\assigno #x{\the\numexpr #x+1\relax}
+	} {
+		\assigno #y{\the\numexpr #y+1\relax}
+	}
+	\return {{#x}{#y}}
+}
+
+\rdeflinenumbered \g {
+	\putnext{\string} \expandonce
+	\matchrm{#1}
+	\rcall{\removeuntilegroup}
+}
 
 \rdeflinenumbered \exchange {}!
 %\rdef \exchange {
@@ -190,7 +209,7 @@
 		\matchrm{#y}
 	}
 
-	\conditional{\ifblank{#x}}{
+	\conditional{\izfblank{#x}}{
 		\assign #x{true}
 	}{
 		\assign #x{false}
@@ -198,7 +217,7 @@
 
 	\matchrm{#y#}
 
-	\while{}{\ifblank{#x}}{\assigno #x{\tail{#x}}}
+	\while{}{\izfblank{#x}}{\assigno #x{\tail{#x}}}
 
 	\assertisNtype #x
 	\expandonce
@@ -211,6 +230,10 @@
 	\putnext{#x abc}
 !
 
+\fi
+
+\ExplSyntaxOn
+\makeatletter
 
 
 %\odef \removespace \cS\ {}  % (low-level) def that expands to result in single step. Identical to \def in TeX.
@@ -571,26 +594,11 @@
 	\return {}
 !
 
-\rdeflinenumbered \f {
-	\assign #x{1}
-	\assign #y{2}
-	\conditional{\use_i:nn} {
-		\assigno #x{\the\numexpr #x+1\relax}
-	} {
-		\assigno #y{\the\numexpr #y+1\relax}
-	}
-	\return {{#x}{#y}}
-}
-
-\rdeflinenumbered \g {
-	\putnext{\string} \expandonce
-	\matchrm{#1}
-	\rcall{\removeuntilegroup}
-}
 
 % ========
 
-%\directlua{debug_rdef()}
+\directlua{optimize_pending_definitions()}
+\directlua{debug_rdef()}
 \directlua{debug_rdef2()}
 \directlua{execute_pending_definitions()}
 
