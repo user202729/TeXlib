@@ -1,5 +1,9 @@
 \ProvidesExplPackage{imperative}{2022-06-17}{0.0.0}{Imperative-style programming for LaTeX}
 \RequirePackage{imperative_util}
+\RequirePackage{genvar}
+\GenerateVariantsFile:n {imperative.sty}
+
+\msg_new:nnn {imperative} {cannot-rebuild-fn} {Library~function~\detokenize{#1}~cannot~be~rebuilt!}
 
 \tl_set:Nn\withexpandinit {
 	\def\assertissingletoken #1{\directlua{withexpand_cmds.assertissingletoken()}{#1}}
@@ -54,5 +58,56 @@
 	\__odef_helper:Nnn #1 {#2}
 }
 
+\protected\def \__try_def:nNnn #1 #2 #3 #4 {
+	#1 \def \__test #3 {#4}
+
+	\token_if_eq_meaning:NNTF \__test #2 {
+		\directlua{register_lib_fn()} {#1} {#2} {#3} {#4}
+	} {
+		\msg_error:nnn {imperative} {cannot-rebuild-fn} {#2}
+	}
+}
+
+\protected\def\register_lib_fn:N #1 {
+	%\tl_set_rescan:Nnn \__ {\ExplSyntaxOn \catcode `\{ =1 \catcode `\} = }
+
+	\tl_set_rescan:Nnx \__prefix {\ExplSyntaxOn} {\cs_prefix_spec:N #1}
+
+	\tl_set_rescan:Nnx \__args {\ExplSyntaxOn
+		%\catcode `\{ =10 \catcode `\} =10
+	} {\cs_argument_spec:N #1}
+
+	\tl_set_rescan:Nnx \__body {\ExplSyntaxOn
+		%\catcode `\{ =1 \catcode `\} = 10
+	} {\cs_replacement_spec:N #1}
+
+	\__try_def:VNVV \__prefix #1 \__args \__body
+}
+
 \directlua{ require "imperative"}
+
+\register_lib_fn:N \use:n
+\register_lib_fn:N \use:nn
+\register_lib_fn:N \use:nnn
+\register_lib_fn:N \use:nnnn
+\register_lib_fn:N \use_i:nn
+\register_lib_fn:N \use_i:nnn
+\register_lib_fn:N \use_i:nnnn
+\register_lib_fn:N \use_i_ii:nnn
+\register_lib_fn:N \use_ii:nn
+\register_lib_fn:N \use_ii:nnn
+\register_lib_fn:N \use_ii:nnnn
+\register_lib_fn:N \use_ii_i:nn
+\register_lib_fn:N \use_iii:nnn
+\register_lib_fn:N \use_iii:nnnn
+\register_lib_fn:N \use_iv:nnnn
+\register_lib_fn:N \use_none:n
+\register_lib_fn:N \use_none:nn
+\register_lib_fn:N \use_none:nnn
+\register_lib_fn:N \use_none:nnnn
+\register_lib_fn:N \use_none:nnnnn
+\register_lib_fn:N \use_none:nnnnnn
+\register_lib_fn:N \use_none:nnnnnnn
+\register_lib_fn:N \use_none:nnnnnnnn
+\register_lib_fn:N \use_none:nnnnnnnnn
 

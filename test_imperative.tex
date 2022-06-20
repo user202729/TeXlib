@@ -479,7 +479,7 @@
 % same as above but the first argument is a single token.
 % might be slightly faster, benchmark to be sure.
 \rdeflinenumbered \firstargsingletoken #x {
-	\putnext {\removebgroup{#x}}
+	\putnext {\Iremovebgroup{#x}}
 	\expandonce  % remove the bgroup of course.
 	\matchrm {#y}  % now #y is the first argument
 	\assertisNtype #y

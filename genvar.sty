@@ -11,6 +11,7 @@
 \cs_generate_variant:Nn \tl_put_right:Nn {Nv}
 \cs_generate_variant:Nn \tl_build_gput_right:Nn {NV}
 \cs_generate_variant:Nn \tl_to_str:n {x}
+\exp_args_generate:n {Nnc}
 
 \ior_new:N \_GV_file
 
@@ -96,7 +97,7 @@
 						\prop_put:Nnn \_GV_seen {##1 : ##2} {1}
 
 						%\pretty:x {\cs_generate_variant:cn {##1 : \_GV_baseform} {##2}}
-						\_GV_aux:ncn {#1} {##1 : \_GV_baseform} {##2}
+						\begingroup \exp_args:NNnc \endgroup \_GV_aux:nNn {#1} {##1 : \_GV_baseform} {##2}  % avoid accidentally defining the base form
 					}
 
 				}
@@ -111,7 +112,6 @@
 \cs_set_protected:Npn \_GV_aux:nNn #1 #2 #3 {
 	#1 {\cs_generate_variant:Nn #2 {#3}}
 }
-\cs_generate_variant:Nn \_GV_aux:nNn {ncn}
 
 \cs_set_protected:Npn \GenerateVariantsTL: {
 	\GenerateVariantsTL:N \use:n
@@ -119,6 +119,7 @@
 
 % file name will be x-expanded.
 % #1: callback function
+% you'd likely want to use :n variant in simple cases
 \cs_set_protected:Npn \GenerateVariantsFile:Nn #1 #2 {
 	\sys_if_engine_luatex:T { \directlua{tex.set_synctex_no_files(1)} }  % temporary, bug https://github.com/jlaurens/synctex/issues/45
 	%\file_get:xnNTF {#2} {

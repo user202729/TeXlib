@@ -129,7 +129,7 @@ local function populatelinenumber(body) -- return new table with _linenumber pro
 	return result
 end
 
-local pending_definitions={}  -- list of {paramtext, replacementtext, (something else)}
+local pending_definitions={}  -- list of {paramtext=paramtext, replacementtext=replacementtext, (something else)}
 -- possible keys: see function finalize_generate_code() below
 
 local function finalize_generate_code(statement, paramtext, replacementtext)  -- the macro itself is included in paramtext
@@ -138,12 +138,15 @@ local function finalize_generate_code(statement, paramtext, replacementtext)  --
 	--prettyprint("finalize:", paramtext, "→", replacementtext)
 	local param_tag=namedef_to_macrodef(paramtext, replacementtext, statement)
 	for _, kv in pairs(pending_definitions) do
-		if kv[1][1].csname==paramtext[1].csname and kv[1][1].active==paramtext[1].active then
+		if kv.caller.csname==paramtext[1].csname and kv.caller.active==paramtext[1].active then
 			errorx("duplicate definition of ", paramtext[1])  -- not very efficient but okay
 		end
 	end
 	table.insert(pending_definitions, {
-		paramtext, replacementtext,
+		paramtext=paramtext,
+		caller=paramtext[1],
+		paramtext2=slice(paramtext, 2),
+		replacementtext=replacementtext,
 		z_optimizable=true,  -- that is, the number of expansion steps for this is not important
 		r_optimizable=statement.r_optimizable,  -- that is, this statement will always be called in r-expansion mode
 		param_tag=param_tag,
@@ -486,8 +489,8 @@ local command_handler={
 		local operations=getbracegroupinside(stack)
 
 		local localfn=next_st(lastlinenumber)
-		localfn._internal_function=true
-		generic_compile_code(localfn, operations, {faketoken "exp_end:"}, {r_optimizable=true})
+		localfn._internal_function=true  -- TODO maybe remove this
+		generic_compile_code(localfn, operations, {faketoken "exp_end:"}, {r_optimizable=true, is_internal=true})
 
 		pushtostackfront(stack, 
 			{faketoken "assigno", paramsign, varname, bgroup, faketoken "exp:w", localfn}, 
@@ -846,16 +849,33 @@ function zdef_call()
 	generic_def_call({}, {})
 end
 
+local lib_definitions={}
+
+function register_lib_fn()
+	local prefix=token.scan_toks()
+	local caller=token.scan_toks()
+	assert(#caller==1)
+	caller=caller[1]
+	local paramtext2=token.scan_toks()
+	local replacementtext=token.scan_toks()
+	table.insert(lib_definitions, {
+		prefix=prefix,
+		caller=caller,
+		paramtext2=paramtext2,
+		replacementtext=replacementtext,
+	})
+end
+
 function debug_rdef()
 	for _, pr in ipairs(pending_definitions) do
-		prettyprint(pr[1], "→", pr[2])
+		prettyprint(pr.paramtext, "→", pr.replacementtext)
 	end
 end
 
 local function get_execute_pending_definitions_tl(pending_definitions)
 	local result={}
 	for _, pr in ipairs(pending_definitions) do
-		result=cati(result, {faketoken "def"}, pr[1], wrapinbracegroup(pr[2]))
+		result=cati(result, {faketoken "def"}, pr.paramtext, wrapinbracegroup(pr.replacementtext))
 	end
 	return result
 end
@@ -876,7 +896,7 @@ function optimize_pending_definitions()
 		-- inefficient...
 		local result=0
 		for _, v in pairs(pending_definitions) do
-			local replacementtext=v[2]
+			local replacementtext=v.replacementtext
 			for _, t in ipairs(replacementtext) do
 				if t.tok==tok then
 					result=result+1
@@ -889,7 +909,7 @@ function optimize_pending_definitions()
 
 	local function find_def(caller)  -- given a token, return (index, pending_definitions[index])
 		for j, w in pairs(pending_definitions) do
-			if w[1][1].csname==caller.csname then
+			if w.caller.csname==caller.csname then
 				return j, w
 			end
 		end
@@ -898,9 +918,9 @@ function optimize_pending_definitions()
 
 	local function replace_macro(search, replace)
 		for _, w in pairs(pending_definitions) do
-			for j=2, #w[1] do assert(w[1][j].tok~=search.tok) end
-			for j, t in ipairs(w[2]) do if t.tok==search.tok then
-				w[2][j]=replace
+			for j=2, #w.paramtext do assert(w.paramtext[j].tok~=search.tok) end
+			for j, t in ipairs(w.replacementtext) do if t.tok==search.tok then
+				w.replacementtext[j]=replace
 			end end
 		end
 	end
@@ -912,9 +932,8 @@ function optimize_pending_definitions()
 
 		-- optimize by replacing macro X with macro Y if X is defined to be Y without any arguments
 		for _, v in ipairs(pending_definitions) do if v.z_optimizable and v.is_internal then
-			local paramtext, replacementtext=v[1], v[2]
+			local paramtext, replacementtext, caller=v.paramtext, v.replacementtext, v.caller
 			if #paramtext==1 and #replacementtext==1 then
-				local caller=paramtext[1]
 				local replacement=replacementtext[1]
 				replace_macro(caller, replacement)
 				done_anything=true
@@ -924,28 +943,45 @@ function optimize_pending_definitions()
 
 		-- optimize special pattern \expandafter \<macro expands to nothing>
 		for _, v in ipairs(pending_definitions) do if v.z_optimizable then
-			local paramtext, replacementtext=v[1], v[2]
+			local paramtext, replacementtext=v.paramtext, v.replacementtext
+
 			if #replacementtext>=2
 				and replacementtext[1].csname=="expandafter"
 			then
 				local j, w=find_def(replacementtext[2])
-				if w~=nil and #w[1]==1 and #w[2]==0 then
-					v[2]=slice(replacementtext, 3)
+				if w~=nil and #w.paramtext==1 and #w.replacementtext==0 then
+					v.replacementtext=slice(replacementtext, 3)
 					done_anything=true
 				end
 			end
+
+			if #replacementtext>=6
+				and replacementtext[1].csname=="expandafter"
+				and replacementtext[3].csname=="expandafter"
+				and replacementtext[5].csname=="exp:w"
+			then
+				local j, w=find_def(replacementtext[6])
+				if w.replacementtext[1] and w.replacementtext[1].csname=="exp_end:"
+					and refcount(w.caller.tok)==1 -- TODO
+				then
+					w.replacementtext=slice(w.replacementtext, 2)
+					v.replacementtext=cati(slice(replacementtext, 1, 4), slice(replacementtext, 6))
+					done_anything=true
+				end
+			end
+
 		end end
 
 		
 		-- optimize special pattern \expandafter \exp_end: \exp:w
 		for _, v in ipairs(pending_definitions) do if v.r_optimizable then
-			local paramtext, replacementtext=v[1], v[2]
+			local paramtext, replacementtext=v.paramtext, v.replacementtext
 			if #replacementtext>=3
 				and replacementtext[1].csname=="expandafter"
 				and replacementtext[2].csname=="exp_end:"
 				and replacementtext[3].csname=="exp:w"
 			then
-				v[2]=slice(replacementtext, 4)
+				v.replacementtext=slice(replacementtext, 4)
 				done_anything=true
 			end
 		end end
@@ -954,8 +990,19 @@ function optimize_pending_definitions()
 		for i, v in ipairs(pending_definitions) do if v.is_internal then
 			for j=i+1, #pending_definitions do
 				local w=pending_definitions[j]
-				if tl_equal(slice(v[1], 2), slice(w[1], 2)) and tl_equal(v[2], w[2]) then
-					replace_macro(v[1][1], w[1][1])
+				if tl_equal(v.paramtext2, w.paramtext2) and tl_equal(v.replacementtext, w.replacementtext) then
+					replace_macro(v.caller, w.caller)
+					done_anything=true
+					break --inner loop
+				end
+			end
+		end end
+
+		-- deduplicating macros with same definition as a library function
+		for i, v in ipairs(pending_definitions) do if v.is_internal then
+			for j, w in ipairs(lib_definitions) do
+				if tl_equal(v.paramtext2, w.paramtext2) and tl_equal(v.replacementtext, w.replacementtext) then
+					replace_macro(v.caller, w.caller)
 					done_anything=true
 					break --inner loop
 				end
@@ -965,17 +1012,17 @@ function optimize_pending_definitions()
 		-- optimize by simulating some expansion steps within macro definition
 		for _, v in ipairs(pending_definitions) do if v.z_optimizable then
 		--for i=1, #pending_definitions do local v=pending_definitions[i] if v and v.z_optimizable then
-			local paramtext, replacementtext=v[1], v[2]
+			local paramtext, replacementtext=v.paramtext, v.replacementtext
 			local caller=paramtext[1]
 			local target=replacementtext[1]
 			local caller_param_tag=v.param_tag
 			if target and target.csname and target.csname~=caller.csname  -- this might be violated if user intentionally make infinite loop
 				--and refcount(target.tok)==1   -- TODO may bloat the code but...
-				and not target.active
 			then
+				assert(not target.active)
 				local target_index, target_def=find_def(target)
-				if target_def and target_def.is_internal then
-					local target_paramtext, target_replacementtext=target_def[1], target_def[2]
+				if target_def then
+					local target_paramtext, target_replacementtext=target_def.paramtext, target_def.replacementtext
 					if simple_args(target_paramtext)
 						-- and not have_double_arg_use(target_replacementtext)  -- TODO this might exponentially increase the code size
 					then
@@ -1024,7 +1071,7 @@ function optimize_pending_definitions()
 
 						if work() then
 							-- can be optimized
-							-- we have: v[2]=replacementtext= \target {args...} rest...
+							-- we have: v.replacementtext=replacementtext= \target {args...} rest...
 							-- currently:
 							--
 							--   \target{args...} should expand to
@@ -1033,7 +1080,7 @@ function optimize_pending_definitions()
 							--
 							--           rest=reverse(stack)
 							done_anything=true
-							v[2]=cat(substitute_replacementtext(target_replacementtext, matched_args), reverse(stack))
+							v.replacementtext=cat(substitute_replacementtext(target_replacementtext, matched_args), reverse(stack))
 							-- target will be deleted later
 						end
 					end
@@ -1044,7 +1091,7 @@ function optimize_pending_definitions()
 		-- remove internal ones with refcount==0
 		local pending_definitionsx={}
 		for _, v in ipairs(pending_definitions) do
-			local caller=v[1][1]
+			local caller=v.caller
 			if v.is_internal and refcount(caller.tok)==0 then
 				done_anything=true
 				--prettyprint("removed ", caller.csname)
