@@ -22,10 +22,6 @@ local function getvarsexpr(expr)  -- TODO when support operateon, need to exclud
 	return getvarsraw(expr)
 end
 
-local Ntypemark={}  -- this is used as a mark in `need` and `produce` table
--- e.g. `need={[a.tok]=true, [b.tok]=Ntypemark}` means the statement
--- needs a and b, and b is guaranteed to be a single token
-
 local function namedef_to_macrodef(paramtext, replacementtext, statement)
 	-- paramtext&replacementtext are tokenlists
 	-- operate in-place.
@@ -949,10 +945,10 @@ function optimize_pending_definitions()
 		end end
 
 
-		-- optimize special pattern \expandafter \<macro expands to nothing>
 		for _, v in ipairs(pending_definitions) do if v.z_optimizable then
 			local paramtext, replacementtext=v.paramtext, v.replacementtext
 
+			-- optimize special pattern \expandafter \<macro expands to nothing>
 			if #replacementtext>=2
 				and replacementtext[1].csname=="expandafter"
 			then
@@ -963,6 +959,9 @@ function optimize_pending_definitions()
 				end
 			end
 
+			-- optimize special pattern \expandafter A \expandafter B \exp:w \mymacro ...
+			-- where \mymacro expansion starts with \exp_end:
+			-- so \exp:w \mymacro is actually equivalent to \mymacro'o  (one expansion step expands to something)
 			if #replacementtext>=6
 				and replacementtext[1].csname=="expandafter"
 				and replacementtext[3].csname=="expandafter"
@@ -1070,54 +1069,12 @@ function optimize_pending_definitions()
 				local target_def=find_def_include_library(target)
 				if target_def then
 					local target_paramtext, target_replacementtext=target_def.paramtext, target_def.replacementtext
-					if simple_args(target_paramtext)
-						-- and not have_double_arg_use(target_replacementtext)  -- TODO this might exponentially increase the code size
+					if true
+						--and not have_double_arg_use(target_replacementtext)  -- TODO disabling this might exponentially increase the code size
 					then
-						local stack=reverse(slice(replacementtext, target_replacementtext_pos+1))  -- #1 etc. here belong to the caller, so look up in caller_param_tag
+						local matched_args, stack=try_grab_args(caller_param_tag, target_paramtext, slice(replacementtext, target_replacementtext_pos+1))
 
-						local matched_args={}
-
-						-- attempt to match args.
-						-- If returns true, the stack is guaranteed to be in clean state (i.e. with X args removed),
-						-- if return false, no guarantee (on the resulting state of the stack)
-						local function work()
-							for _=1, #target_paramtext//2 do
-								-- attempt to absorb an undelimited argument
-								while #stack>0 and is_space(stack[#stack]) do
-									pop_stack()
-								end
-								if #stack==0 then return false end  -- maybe target is a matchrm that looks ahead
-
-								local t=popstack(stack)
-								local d=degree(t)
-								if d==1 then
-									-- it's an bgroup
-									stack[#stack+1]=t
-									matched_args[#matched_args+1]=getbracegroupinside(stack)
-								elseif d==-1 then
-									errorx("} seen while scanning argument of \\"..target.csname)
-								else
-									assert(d==0)
-									if is_paramsign(t) then
-										local u=popstack(stack)
-										matched_args[#matched_args+1]={t, u}  -- guess
-										if not is_paramsign(u) then  -- it might be #1 that expands to something unknown...?
-											local paramnumber=get_paramnumber(u)
-											assert(paramnumber)
-											if Ntypemark~=caller_param_tag[paramnumber] then
-												return false
-											end
-										end
-									else
-										-- it's a simple token, will be grabbed
-										matched_args[#matched_args+1]={t}
-									end
-								end
-							end
-							return true
-						end
-
-						if work() then
+						if matched_args then
 							-- can be optimized
 							-- we have: v.replacementtext=replacementtext= <some tokens before target_replacementtext_pos>   \target {args...} rest...
 							-- currently:

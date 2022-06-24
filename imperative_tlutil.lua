@@ -264,6 +264,78 @@ function F.have_double_arg_use(replacementtext)  -- return whether some arg is u
 	return false
 end
 
+F.Ntypemark={}  -- this is used as a mark in `need` and `produce` table
+-- e.g. `need={[a.tok]=true, [b.tok]=Ntypemark}` means the statement
+-- needs a and b, and b is guaranteed to be a single token
+
+
+
+-- attempt to match args.
+-- If returns true, the stack is guaranteed to be in clean state (i.e. with X args removed),
+-- if return false, no guarantee (on the resulting state of the stack)
+
+-- caller_param_tag: a "param_tag" table, see namedef_to_macrodef() function documentation
+-- target_paramtext: ...
+-- caller_replacementtext: ...
+--
+-- return (matched_args, stack) if matches, else return nil
+-- note that target_replacementtext is not given
+--
+--
+-- it's a bit hard to explain. For example:
+--
+-- caller_param_tag = {1=true, 2=Ntypemark}
+-- caller replacement text = tokenlist '{#1}#2abc'
+-- target_paramtext = tokenlist '#1#2'
+--
+-- → matches
+-- return
+--    matched_args={1='#1', 2='#2'}
+--    stack=reverse(tokenlist 'abc')  i.e. the remaining part, as a stack
+--
+-- matched_args can be used in the argument of substitute_replacementtext() below.
+function F.try_grab_args(caller_param_tag, target_paramtext, caller_replacementtext)
+	if not simple_args(target_paramtext) then return nil end
+
+	local stack=reverse(caller_replacementtext)
+
+	local matched_args={}
+	for _=1, #target_paramtext//2 do
+		-- attempt to absorb an undelimited argument
+		while #stack>0 and is_space(stack[#stack]) do
+			pop_stack()
+		end
+		if #stack==0 then return nil end  -- maybe target is a matchrm that looks ahead
+
+		local t=popstack(stack)
+		local d=degree(t)
+		if d==1 then
+			-- it's an bgroup
+			stack[#stack+1]=t
+			matched_args[#matched_args+1]=getbracegroupinside(stack)
+		elseif d==-1 then
+			errorx("} seen while scanning argument of \\"..target.csname)
+		else
+			assert(d==0)
+			if is_paramsign(t) then
+				local u=popstack(stack)
+				matched_args[#matched_args+1]={t, u}  -- guess
+				if not is_paramsign(u) then  -- it might be #1 that expands to something unknown...?
+					local paramnumber=get_paramnumber(u)
+					assert(paramnumber)
+					if Ntypemark~=caller_param_tag[paramnumber] then
+						return nil
+					end
+				end
+			else
+				-- it's a simple token, will be grabbed
+				matched_args[#matched_args+1]={t}
+			end
+		end
+	end
+	return matched_args, stack
+end
+
 function F.substitute_replacementtext(replacementtext, args)
 	local i, n=1, #replacementtext
 	local result={}
