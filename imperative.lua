@@ -1061,6 +1061,19 @@ function optimize_pending_definitions()
 				prettyprint("weird? expandafter chain expands to nothing (", v.caller, ")")
 			end
 
+			-- remove '\exp:w \expandafter \exp_end:' at appropriate places
+			if target then
+				assert(target.csname~="exp:w")
+				if target.csname=="expandafter" and  --TODO write tests for this. This depends on some assumptions in other parts of the code
+					replacementtext[target_replacementtext_pos+1] and
+					replacementtext[target_replacementtext_pos+1].csname=="exp_end:"
+				then
+					done_anything=true
+					v.replacementtext=cati(slice(replacementtext, 1, target_replacementtext_pos-2), slice(replacementtext, target_replacementtext_pos+2))
+					target=nil  -- break the next check
+				end
+			end
+
 			local caller_param_tag=v.param_tag
 			if target and target.csname and target.csname~=caller.csname  -- this might be violated if user intentionally make infinite loop or something-else, anyway better not touching it
 				--and refcount(target.tok)==1   -- TODO may bloat the code but...
