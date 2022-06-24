@@ -148,6 +148,8 @@ function F.get_tlreprx(tokens)
 			else
 				s[#s+1]="D"..t.csname
 			end
+		elseif t.tok==prettyprint_frozenrelaxtok then  -- TODO requires prettyprint library
+			s[#s+1]="R"
 		else
 			assert(not t.csname:find("/", 1, true))
 			s[#s+1]="0"..t.csname.."/"

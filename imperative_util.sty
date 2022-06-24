@@ -266,8 +266,12 @@
 			\token_if_eq_charcode:NNTF #1 S { % S <cat> → a space
 				\__process_space_other_cat
 			} {
-				\token_if_eq_charcode:NNF #1 . { % . → end
-					\__process_char #1
+				\token_if_eq_charcode:NNTF #1 R { % R → frozenrelax
+					\cFrozenRelax \__process_s
+				} {
+					\token_if_eq_charcode:NNF #1 . { % . → end
+						\__process_char #1
+					}
 				}
 			}
 		}

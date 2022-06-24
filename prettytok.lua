@@ -3,7 +3,8 @@ local function looks_like_token(t)
 	return type(t)=="userdata" or (type(t)=="table" and t.cmdname~=nil and t.tok~=nil)
 end
 
-local frozenrelaxtok
+-- public API :: once the package is loaded, this holds the .tok value of the frozen relax token
+prettyprint_frozenrelaxtok=nil
 
 local function prettyprint_one_arg(tokenlist)
 
@@ -41,7 +42,7 @@ local function prettyprint_one_arg(tokenlist)
 			else
 				if t.active then
 					s=s.."token("..utf8.codepoint(t.csname)..',"D"),'
-				elseif t.tok==frozenrelaxtok then
+				elseif t.tok==prettyprint_frozenrelaxtok then
 					s=s.."csfrozenrelax(),"
 				else
 					s=s.."cs("
@@ -78,10 +79,6 @@ function prettyprint(...)
 	end
 
 	texio.write(prettyfilenumber, s..")//</script><script>\n")
-end
-
-function prettyprint_setfrozenrelaxtok()  -- for internal use, run once only.
-	frozenrelaxtok=token.get_next().tok
 end
 
 function prettyprintw()

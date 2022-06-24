@@ -72,7 +72,7 @@
 
 \precattl_exec:n {
 
-	\directlua{prettyprint_setfrozenrelaxtok()}\cFrozenRelax
+	\directlua{prettyprint_frozenrelaxtok=token.get_next().tok}\cFrozenRelax
 
 	\cs_new_protected:Npn \pretty:n #1 {
 
