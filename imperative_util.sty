@@ -50,9 +50,16 @@
 	% #1: the index, #2: the line itself
 	% x-expand to the result (some string that will be rescanned)
 	\def\__addlinemarker_line_handler #1 #2{
-		\noexpand\zzlinemark { \int_eval:n{\__baselinenumber+#1} } \tl_tail:n {#2}
+		\noexpand\zzlinemark { \int_eval:n{\__baselinenumber+#1} } #2
 		\cO\^^M
 	}
+
+
+	% ======== difference between the versions:
+	% \addlinemarker            adds the line marker to all lines
+	% \addlinemarkerconditional adds the line marker to lines prepended with `.` only
+	% \addlinemarkerconditionalb has \linemarkeron and \linemarkeroff (must not be indented!)
+	% ========
 
 
 	% use this version if you already have verbatim data.

@@ -150,7 +150,6 @@ local function finalize_generate_code(statement, paramtext, replacementtext)  --
 		z_optimizable=true,  -- that is, the number of expansion steps for this is not important
 		r_optimizable=statement.r_optimizable,  -- that is, this statement will always be called in r-expansion mode
 		param_tag=param_tag,
-		is_internal=statement.is_internal,
 	})
 end
 
@@ -489,8 +488,8 @@ local command_handler={
 		local operations=getbracegroupinside(stack)
 
 		local localfn=next_st(lastlinenumber)
-		localfn._internal_function=true  -- TODO maybe remove this
-		generic_compile_code(localfn, operations, {faketoken "exp_end:"}, {r_optimizable=true, is_internal=true})
+		localfn.is_internal=true
+		generic_compile_code(localfn, operations, {faketoken "exp_end:"}, {r_optimizable=true})
 
 		pushtostackfront(stack, 
 			{faketoken "assigno", paramsign, varname, bgroup, faketoken "exp:w", localfn}, 
@@ -600,8 +599,7 @@ generic_compile_code=function(functionname, body, passcontrol, statement_extra)
 			statement.caller=functionname
 		else
 			statement.caller=next_st(lastlinenumber)
-			statement.is_internal=true
-			statement.caller._internal_function=true  -- i.e. it's possible to eliminate this function, "not public API"
+			statement.caller.is_internal=true  -- i.e. it's possible to eliminate/rename this function, "not public API"
 		end
 		for k, v in pairs(statement_extra) do
 			statement[k]=v
@@ -861,6 +859,7 @@ function register_lib_fn()
 	table.insert(lib_definitions, {
 		prefix=prefix,
 		caller=caller,
+		paramtext=cat({caller}, paramtext2),  -- "backward compatibility"
 		paramtext2=paramtext2,
 		replacementtext=replacementtext,
 	})
@@ -891,6 +890,8 @@ function execute_pending_definitions()
 	pending_definitions={}
 end
 
+local hide_error_optimization=true  -- whether to apply optimizations that might turn code that errors to code that does unexpected things
+
 function optimize_pending_definitions()
 	local function refcount(tok)
 		-- inefficient...
@@ -907,13 +908,20 @@ function optimize_pending_definitions()
 		return result
 	end
 
-	local function find_def(caller)  -- given a token, return (index, pending_definitions[index])
-		for j, w in pairs(pending_definitions) do
+	local function find_def_generic(t, caller)  -- given a token, return (index, t[index])
+		-- where t is pending_definitions or lib_definitions
+		for j, w in pairs(t) do
 			if w.caller.csname==caller.csname then
 				return j, w
 			end
 		end
 		return nil, nil
+	end
+
+	local function find_def_include_library(caller)  -- return the statement only, not the index (or null if not found)
+		local _, result=find_def_generic(lib_definitions, caller)
+		if not result then _, result=find_def_generic(pending_definitions, caller) end
+		return result
 	end
 
 	local function replace_macro(search, replace)
@@ -931,7 +939,7 @@ function optimize_pending_definitions()
 		local done_anything=false
 
 		-- optimize by replacing macro X with macro Y if X is defined to be Y without any arguments
-		for _, v in ipairs(pending_definitions) do if v.z_optimizable and v.is_internal then
+		for _, v in ipairs(pending_definitions) do if v.z_optimizable and v.caller.is_internal then
 			local paramtext, replacementtext, caller=v.paramtext, v.replacementtext, v.caller
 			if #paramtext==1 and #replacementtext==1 then
 				local replacement=replacementtext[1]
@@ -948,7 +956,7 @@ function optimize_pending_definitions()
 			if #replacementtext>=2
 				and replacementtext[1].csname=="expandafter"
 			then
-				local j, w=find_def(replacementtext[2])
+				local w=find_def_include_library(replacementtext[2])
 				if w~=nil and #w.paramtext==1 and #w.replacementtext==0 then
 					v.replacementtext=slice(replacementtext, 3)
 					done_anything=true
@@ -960,8 +968,8 @@ function optimize_pending_definitions()
 				and replacementtext[3].csname=="expandafter"
 				and replacementtext[5].csname=="exp:w"
 			then
-				local j, w=find_def(replacementtext[6])
-				if w.replacementtext[1] and w.replacementtext[1].csname=="exp_end:"
+				local w=find_def_include_library(replacementtext[6])
+				if w and w.replacementtext[1] and w.replacementtext[1].csname=="exp_end:"
 					and refcount(w.caller.tok)==1 -- TODO
 				then
 					w.replacementtext=slice(w.replacementtext, 2)
@@ -987,7 +995,7 @@ function optimize_pending_definitions()
 		end end
 
 		-- optimize by deduplicating macros with same definition
-		for i, v in ipairs(pending_definitions) do if v.is_internal then
+		for i, v in ipairs(pending_definitions) do if v.caller.is_internal then
 			for j=i+1, #pending_definitions do
 				local w=pending_definitions[j]
 				if tl_equal(v.paramtext2, w.paramtext2) and tl_equal(v.replacementtext, w.replacementtext) then
@@ -999,7 +1007,7 @@ function optimize_pending_definitions()
 		end end
 
 		-- deduplicating macros with same definition as a library function
-		for i, v in ipairs(pending_definitions) do if v.is_internal then
+		for i, v in ipairs(pending_definitions) do if v.caller.is_internal then
 			for j, w in ipairs(lib_definitions) do
 				if tl_equal(v.paramtext2, w.paramtext2) and tl_equal(v.replacementtext, w.replacementtext) then
 					replace_macro(v.caller, w.caller)
@@ -1014,24 +1022,64 @@ function optimize_pending_definitions()
 		--for i=1, #pending_definitions do local v=pending_definitions[i] if v and v.z_optimizable then
 			local paramtext, replacementtext=v.paramtext, v.replacementtext
 			local caller=paramtext[1]
-			local target=replacementtext[1]
+
+			-- compute target_replacementtext_pos (first "nontrivial" token that is going to be expanded)
+			local target_replacementtext_pos=1
+			while replacementtext[target_replacementtext_pos] and replacementtext[target_replacementtext_pos].csname=="expandafter" do
+				if replacementtext[target_replacementtext_pos+1] and is_paramsign(replacementtext[target_replacementtext_pos+1]) then
+					if replacementtext[target_replacementtext_pos+1] and is_paramsign(replacementtext[target_replacementtext_pos+1]) then
+						-- skip through a ##
+						target_replacementtext_pos=target_replacementtext_pos+3
+					else
+						-- #1, #2 etc.
+						local paramnumber=get_paramnumber(replacementtext[target_replacementtext_pos+2])
+						assert(paramnumber)
+						if Ntypemark==v.param_tag[paramnumber] then
+							-- skip through this token as usual
+							target_replacementtext_pos=target_replacementtext_pos+3
+						else
+							-- attempt to expand the second token inside #1. Cannot do anything
+							break
+						end
+					end
+				else
+					-- normal token, skip through it
+					target_replacementtext_pos=target_replacementtext_pos+2
+				end
+			end
+
+			local target=replacementtext[target_replacementtext_pos]
+			local is_r_expansion=false
+			while target and ({romannumeral=true, ["exp:w"]=true})[target.csname] do
+				is_r_expansion=true
+				target_replacementtext_pos=target_replacementtext_pos+1
+				target=replacementtext[target_replacementtext_pos]
+			end
+
+			if target_replacementtext_pos~=1 and target and target.csname==nil and not is_paramsign(target) then
+				-- user have macro \expandafter ... <firsttoken> where firsttoken is unexpandable
+				-- actually followed by ## is also a weird case, but ignore it for now.
+				prettyprint("weird? expandafter chain expands to nothing (", v.caller, ")")
+			end
+
 			local caller_param_tag=v.param_tag
-			if target and target.csname and target.csname~=caller.csname  -- this might be violated if user intentionally make infinite loop
+			if target and target.csname and target.csname~=caller.csname  -- this might be violated if user intentionally make infinite loop or something-else, anyway better not touching it
 				--and refcount(target.tok)==1   -- TODO may bloat the code but...
 			then
 				assert(not target.active)
-				local target_index, target_def=find_def(target)
+				local target_def=find_def_include_library(target)
 				if target_def then
 					local target_paramtext, target_replacementtext=target_def.paramtext, target_def.replacementtext
 					if simple_args(target_paramtext)
 						-- and not have_double_arg_use(target_replacementtext)  -- TODO this might exponentially increase the code size
 					then
-						local stack=reverse(replacementtext)  -- #1 etc. here belong to the caller, so look up in caller_param_tag
-						popstack(stack)  -- discard the caller macro which is == target
+						local stack=reverse(slice(replacementtext, target_replacementtext_pos+1))  -- #1 etc. here belong to the caller, so look up in caller_param_tag
 
 						local matched_args={}
 
-						-- attempt to match args. If returns true, the stack is guaranteed to be in clean state (i.e. with X args removed), if return false, no guarantee
+						-- attempt to match args.
+						-- If returns true, the stack is guaranteed to be in clean state (i.e. with X args removed),
+						-- if return false, no guarantee (on the resulting state of the stack)
 						local function work()
 							for _=1, #target_paramtext//2 do
 								-- attempt to absorb an undelimited argument
@@ -1071,7 +1119,7 @@ function optimize_pending_definitions()
 
 						if work() then
 							-- can be optimized
-							-- we have: v.replacementtext=replacementtext= \target {args...} rest...
+							-- we have: v.replacementtext=replacementtext= <some tokens before target_replacementtext_pos>   \target {args...} rest...
 							-- currently:
 							--
 							--   \target{args...} should expand to
@@ -1080,8 +1128,34 @@ function optimize_pending_definitions()
 							--
 							--           rest=reverse(stack)
 							done_anything=true
-							v.replacementtext=cat(substitute_replacementtext(target_replacementtext, matched_args), reverse(stack))
-							-- target will be deleted later
+
+							if is_r_expansion then  -- need to keep the exp:w etc.
+								v.replacementtext=cati(
+									slice(v.replacementtext, 1, target_replacementtext_pos-1),
+									substitute_replacementtext(target_replacementtext, matched_args),
+									reverse(stack))
+							else  -- remove the expandafter chain
+								local new_replacementtext={}
+								for i=2, target_replacementtext_pos-1, 2 do
+									new_replacementtext[#new_replacementtext+1]=replacementtext[i]
+								end
+								appendto(new_replacementtext, substitute_replacementtext(target_replacementtext, matched_args))
+								appendto(new_replacementtext, reverse(stack))
+								v.replacementtext=new_replacementtext
+							end
+							-- target will be deleted later if necessary (if its refcount=0)
+
+
+						elseif not is_r_expansion and target_replacementtext_pos==5 and find_def_include_library(replacementtext[2]) and degree(replacementtext[4])==1 and hide_error_optimization then
+							-- format: expandafter \X expandafter { \target ... }, where target is a user-defined macro (so one-step expansion of it cannot change the balance)
+							-- then attempt to expand \X one-step over it
+							-- actually this can be made more general (it's okay for the \expandafter to not stop at the first, as long as it's inside the first group)
+
+
+							--TODO
+							--local matching_close_brace=5
+
+							--errorx("okay", v.caller)
 						end
 					end
 				end
@@ -1092,7 +1166,7 @@ function optimize_pending_definitions()
 		local pending_definitionsx={}
 		for _, v in ipairs(pending_definitions) do
 			local caller=v.caller
-			if v.is_internal and refcount(caller.tok)==0 then
+			if caller.is_internal and refcount(caller.tok)==0 then
 				done_anything=true
 				--prettyprint("removed ", caller.csname)
 			else

@@ -21,10 +21,19 @@
 \protected\def\rdef#1 #{
 	\directlua{rdef_call()}{#1}
 }
+
+% rdeflinenumbered can be called as
+%    \rdeflinenumbered #1 #2 { body }   % (format 1)
+% or
+%    \rdeflinenumbered #1 #2 {} ! body !   % (format 2, if the first brace group is empty)
+% only format 2 support delimiting the verbatim argument with something other than braces.
+
 \TabsafeNewDocumentCommand \__rdeflinenumbered_help {m +v} {
 	\tl_if_empty:nTF {#2} {
+		% use format 2, \addlinemarker will grab a v-type argument
 		\addlinemarker {\rdef #1}
 	} {
+		% use format 1
 		\addlinemarker:nn {\rdef #1} {#2}
 	}
 }
@@ -36,7 +45,7 @@
 	\directlua{zdef_call()}{#1}
 }
 \TabsafeNewDocumentCommand \__zdeflinenumbered_help {m +v} {
-	\tl_if_empty:nTF {#2} {
+	\tl_if_empty:nTF {#2} {  % similar to above
 		\addlinemarker {\zdef #1}
 	} {
 		\addlinemarker:nn {\zdef #1} {#2}

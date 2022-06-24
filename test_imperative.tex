@@ -11,6 +11,22 @@
 \errorcontextlines=100
 \begin{document}
 
+\iffalse
+\ExplSyntaxOn
+\makeatletter
+
+\rdeflinenumbered\f {}!
+\assigno #x {\use:n{123}}
+\return {#x}
+!
+
+\directlua{optimize_pending_definitions()}
+\directlua{debug_rdef()}
+\directlua{debug_rdef2()}
+\directlua{execute_pending_definitions()}
+
+\end{document}
+\fi
 
 \iffalse
 \ExplSyntaxOn
