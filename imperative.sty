@@ -41,6 +41,10 @@
 	\__rdeflinenumbered_help {#1}
 }
 
+\protected\def\imperative_allow_inline:{
+	\directlua{imperative_nextstatement_properties.allow_inline=true}
+}
+
 \protected\def\zdef#1 #{
 	\directlua{zdef_call()}{#1}
 }

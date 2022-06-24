@@ -138,15 +138,19 @@ local function finalize_generate_code(statement, paramtext, replacementtext)  --
 			errorx("duplicate definition of ", paramtext[1])  -- not very efficient but okay
 		end
 	end
-	table.insert(pending_definitions, {
-		paramtext=paramtext,
-		caller=paramtext[1],
-		paramtext2=slice(paramtext, 2),
-		replacementtext=replacementtext,
-		z_optimizable=true,  -- that is, the number of expansion steps for this is not important
-		r_optimizable=statement.r_optimizable,  -- that is, this statement will always be called in r-expansion mode
-		param_tag=param_tag,
-	})
+
+	statement.paramtext=paramtext
+	statement.caller=paramtext[1]
+	statement.paramtext2=slice(paramtext, 2)
+	statement.replacementtext=replacementtext
+	statement.z_optimizable=true  -- that is, the number of expansion steps for this is not important
+	-- statement.r_optimizable:  that is, this statement will always be called in r-expansion mode
+	statement.param_tag=param_tag
+
+
+	table.insert(pending_definitions, statement)
+	-- some properties are not needed (e.g. `need`, `produce`),
+	-- but r_optimizable/allow_inline are copied over
 end
 
 local tokenfromtok_t={} -- actually this could be eliminated, but it's convenient
@@ -484,8 +488,7 @@ local command_handler={
 		local operations=getbracegroupinside(stack)
 
 		local localfn=next_st(lastlinenumber)
-		localfn.is_internal=true
-		generic_compile_code(localfn, operations, {faketoken "exp_end:"}, {r_optimizable=true})
+		generic_compile_code(localfn, operations, {faketoken "exp_end:"}, {r_optimizable=true, is_internal=true})
 
 		pushtostackfront(stack, 
 			{faketoken "assigno", paramsign, varname, bgroup, faketoken "exp:w", localfn}, 
@@ -560,7 +563,7 @@ local command_handler={
 
 -- functionname: single token, body: tokenlist (possibly with _linenumber info added)
 -- passcontrol: tokenlist consist of tokens that will be prepended when this function returns
-generic_compile_code=function(functionname, body, passcontrol, statement_extra)
+function generic_compile_code(functionname, body, passcontrol, statement_extra)
 
 	for _, t in ipairs(body) do tokenfromtok_t[t.tok]=t end
 
@@ -595,7 +598,7 @@ generic_compile_code=function(functionname, body, passcontrol, statement_extra)
 			statement.caller=functionname
 		else
 			statement.caller=next_st(lastlinenumber)
-			statement.caller.is_internal=true  -- i.e. it's possible to eliminate/rename this function, "not public API"
+			statement.is_internal=true  -- i.e. it's possible to eliminate/rename this function, "not public API"
 		end
 		for k, v in pairs(statement_extra) do
 			statement[k]=v
@@ -815,6 +818,7 @@ generic_compile_code=function(functionname, body, passcontrol, statement_extra)
 	finalize_generate_code(statements[#statements], {statements[#statements].caller}, passcontrol)
 end
 
+-- statement_extra: extra properties to be appended to the statement object
 function generic_def_call(passcontrol, statement_extra)
 	local header=token.scan_toks()
 	if #header==0 then error("header cannot be empty") end
@@ -835,12 +839,19 @@ function generic_def_call(passcontrol, statement_extra)
 	generic_compile_code(functionname, body, passcontrol, statement_extra)
 end
 
+imperative_nextstatement_properties={}
+
 function rdef_call()
-	generic_def_call({faketoken "exp_end:"}, {r_statement=true})
+	local tmp=imperative_nextstatement_properties
+	tmp.r_optimizable=true
+	imperative_nextstatement_properties={}
+	generic_def_call({faketoken "exp_end:"}, tmp)
 end
 
 function zdef_call()
-	generic_def_call({}, {})
+	local tmp=imperative_nextstatement_properties
+	imperative_nextstatement_properties={}
+	generic_def_call({}, tmp)
 end
 
 local lib_definitions={}
@@ -858,6 +869,7 @@ function register_lib_fn()
 		paramtext=cat({caller}, paramtext2),  -- "backward compatibility"
 		paramtext2=paramtext2,
 		replacementtext=replacementtext,
+		allow_inline=true,
 	})
 end
 
@@ -935,7 +947,7 @@ function optimize_pending_definitions()
 		local done_anything=false
 
 		-- optimize by replacing macro X with macro Y if X is defined to be Y without any arguments
-		for _, v in ipairs(pending_definitions) do if v.z_optimizable and v.caller.is_internal then
+		for _, v in ipairs(pending_definitions) do if v.z_optimizable and v.is_internal then
 			local paramtext, replacementtext, caller=v.paramtext, v.replacementtext, v.caller
 			if #paramtext==1 and #replacementtext==1 then
 				local replacement=replacementtext[1]
@@ -994,7 +1006,7 @@ function optimize_pending_definitions()
 		end end
 
 		-- optimize by deduplicating macros with same definition
-		for i, v in ipairs(pending_definitions) do if v.caller.is_internal then
+		for i, v in ipairs(pending_definitions) do if v.is_internal then
 			for j=i+1, #pending_definitions do
 				local w=pending_definitions[j]
 				if tl_equal(v.paramtext2, w.paramtext2) and tl_equal(v.replacementtext, w.replacementtext) then
@@ -1006,7 +1018,7 @@ function optimize_pending_definitions()
 		end end
 
 		-- deduplicating macros with same definition as a library function
-		for i, v in ipairs(pending_definitions) do if v.caller.is_internal then
+		for i, v in ipairs(pending_definitions) do if v.is_internal then
 			for j, w in ipairs(lib_definitions) do
 				if tl_equal(v.paramtext2, w.paramtext2) and tl_equal(v.replacementtext, w.replacementtext) then
 					replace_macro(v.caller, w.caller)
@@ -1080,7 +1092,9 @@ function optimize_pending_definitions()
 			then
 				assert(not target.active)
 				local target_def=find_def_include_library(target)
-				if target_def then
+				if target_def
+					and (target_def.is_internal or target_def.allow_inline)
+				then
 					local target_paramtext, target_replacementtext=target_def.paramtext, target_def.replacementtext
 					if true
 						--and not have_double_arg_use(target_replacementtext)  -- TODO disabling this might exponentially increase the code size
@@ -1136,7 +1150,7 @@ function optimize_pending_definitions()
 		local pending_definitionsx={}
 		for _, v in ipairs(pending_definitions) do
 			local caller=v.caller
-			if caller.is_internal and refcount(caller.tok)==0 then
+			if v.is_internal and refcount(caller.tok)==0 then
 				done_anything=true
 				--prettyprint("removed ", caller.csname)
 			else

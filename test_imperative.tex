@@ -392,12 +392,12 @@
 
 
 
-\rdef \putnextbgroup {
+\imperative_allow_inline: \rdef \putnextbgroup {
 	\putnext {\Iexpandtobgroup}
 	\expandonce
 }
 
-\rdef \putnextegroup {
+\imperative_allow_inline: \rdef \putnextegroup {
 	\putnext {\Iexpandtoegroup}
 	\expandonce
 }
@@ -412,7 +412,7 @@
 \odefmark:N \use_none:nnn
 
 % TODO optimize this somehow
-\rdeflinenumbered \dropfirst #1 {
+\imperative_allow_inline: \rdeflinenumbered \dropfirst #1 {
 	\backquote{
 		\return {
 			,O {#1} {
@@ -459,6 +459,7 @@
 % internally it's generated using \exp_end:
 
 
+
 \zdeflinenumbered \ifnotempty #1 {
 	\conditional {\ifempty {#1}} {
 		\return {\use_ii:nn}
@@ -466,6 +467,17 @@
 		\return {\use_i:nn}
 	}
 }
+
+%TODO suboptimal
+\iffalse
+\imperative_allow_inline: \zdeflinenumbered \ifnotempty #1 #2 #3 {
+	\conditional {\ifempty {#1}} {
+		\return {#3}
+	} {
+		\return {#2}
+	}
+}
+\fi
 
 
 % same as UD@ExtractFirstArg
