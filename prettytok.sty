@@ -71,6 +71,9 @@
 
 
 \precattl_exec:n {
+
+	\directlua{prettyprint_setfrozenrelaxtok()}\cFrozenRelax
+
 	\cs_new_protected:Npn \pretty:n #1 {
 
 		% ======== first write out the preamble if it isn't written. Only do once.

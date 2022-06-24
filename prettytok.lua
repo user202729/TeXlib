@@ -3,6 +3,8 @@ local function looks_like_token(t)
 	return type(t)=="userdata" or (type(t)=="table" and t.cmdname~=nil and t.tok~=nil)
 end
 
+local frozenrelaxtok
+
 local function prettyprint_one_arg(tokenlist)
 
 	if looks_like_token(tokenlist) then
@@ -39,6 +41,8 @@ local function prettyprint_one_arg(tokenlist)
 			else
 				if t.active then
 					s=s.."token("..utf8.codepoint(t.csname)..',"D"),'
+				elseif t.tok==frozenrelaxtok then
+					s=s.."csfrozenrelax(),"
 				else
 					s=s.."cs("
 					for j=1, #t.csname do
@@ -74,6 +78,10 @@ function prettyprint(...)
 	end
 
 	texio.write(prettyfilenumber, s..")//</script><script>\n")
+end
+
+function prettyprint_setfrozenrelaxtok()  -- for internal use, run once only.
+	frozenrelaxtok=token.get_next().tok
 end
 
 function prettyprintw()
