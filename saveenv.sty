@@ -1,0 +1,67 @@
+\ProvidesExplPackage{saveenv}{2022/06/25}{0.0.0}{Save the verbatim content inside an environment}
+\RequirePackage{precattl}
+\msg_new:nnn {saveenv} {trailing-content-or-pretokenized}
+	{Trailing~content~found~on~line,~or~content~pretokenized!}
+
+\precattl_exec:n{
+% args: char code, content, environment name
+\msg_new:nnn {saveenv} {leading-content-last-line}
+	{Leading~content~found~on~\cO\\end{#3}~line,~first~char~code~=~#1,~content~=~'#2'}
+}
+
+\makeatletter
+
+\seq_new:N \__lines
+
+\precattl_exec:n {
+\NewDocumentEnvironment {saveenvkeepspaces} {m} {
+	\int_step_inline:nnn {0} {255} {\char_set_catcode_other:n{##1}}
+
+	% first generate the character, then set endlinechar to 10
+	\exp_args:Nx \peek_meaning_remove:NTF {\char_generate:nn{\endlinechar}{12}}  %12 is other
+	{
+		\endlinechar=10~
+		\str_set:NV \__env \@currenvir
+		\tl_replace_all:Nnn \__env {~} {\cO\  }
+		\exp_args:NNVV \__helper #1 \__env \@currenvir
+	}
+	{
+		\msg_error:nn {saveenv} {trailing-content-or-pretokenized}
+	}
+} {
+}
+
+% #1: target macro
+% #2: value of \@currenvir but with all tokens catcode 12 (other)
+% #3: value of \@currenvir
+\def \__helper #1 #2 #3 {
+	\cs_set_protected:cpn {[saveenv]~verbatim~body~scanner~for~#2} ##1 \cO{ \\end\{ } #2 \cO\} {
+		% ##1: the body
+		\str_gset:Nn #1 {##1}
+		\end{#3}
+	}
+
+	\use:c {[saveenv]~verbatim~body~scanner~for~#2}
+}
+
+
+\NewDocumentEnvironment {saveenv} {m} {
+	\saveenvkeepspaces \__content
+} {
+	\endsaveenvkeepspaces
+	\seq_set_split:NnV \__lines {\cO\^^J} \__content
+	\seq_pop_right:NN \__lines \__lastline
+	\tl_map_inline:Nn \__lastline {  % debug check, ensure last line is empty
+		\int_case:nnF {`##1}  {
+			{32} {}  %space
+			{9} {}   %tab
+		}
+		{
+			\msg_error:nnoVV {saveenv} {leading-content-last-line} {\number`##1} \__lastline \@currenvir
+		}
+	}
+	\str_gset:Nx #1 {\seq_use:Nn \__lines {\cO\^^J}}
+}
+}
+
+\cs_generate_variant:Nn \msg_error:nnnnn {nnoVV}

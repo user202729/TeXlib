@@ -1,0 +1,54 @@
+%! TEX program = lualatex
+\documentclass{article}
+\errorcontextlines=100
+\usepackage{prettytok}
+\usepackage{saveenv}
+\begin{document}
+
+\ExplSyntaxOn
+\prettyinit:
+\ExplSyntaxOff
+
+	\begin{saveenv}\data
+		12 3
+		123
+	\end{saveenv}
+
+\prettyV\data
+
+\ExplSyntaxOn
+\NewDocumentEnvironment{custom}{}{
+	\saveenv \data
+}{
+	\endsaveenv
+}
+
+\NewDocumentEnvironment{custom~*^}{}{
+	\saveenv \data
+}{
+	\endsaveenv
+}
+\ExplSyntaxOff
+
+	\begin{custom}
+		123	
+		123 
+	\end{custom}
+
+	\prettyV\data
+
+	\begin{custom *^}
+		123  
+		123		
+	\end{custom *^}
+
+	\begin{custom *^}
+		123  
+		123		
+	\end{custom *^}
+
+\prettyV\data
+
+stuff
+
+\end{document}
