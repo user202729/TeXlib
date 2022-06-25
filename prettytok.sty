@@ -47,11 +47,11 @@
 
 \msg_new:nnn {prettytok} {already-initialized} {Output~file~is~already~initialized!} 
 
-\let \pretty_check_already_init: \relax
+\global\let \pretty_check_already_init: \relax
 
 \precattl_exec:n {
 	\cs_new_protected:Npn \__prettyinit_unchecked: {
-		\protected\def \pretty_check_already_init: {\msg_error:nn {prettytok} {already-initialized}}
+		\global\protected\def \pretty_check_already_init: {\msg_error:nn {prettytok} {already-initialized}}
 
 		\iow_open:NV \__prettyh_file \prettyfilename
 
@@ -176,6 +176,8 @@
 \cs_new_protected:Nn \prettyshow:N {
 	\exp_args:No \pretty:n {\meaning #1}
 }
+\cs_generate_variant:Nn \prettyshow:N {c}
 \let\prettyshowN\prettyshow:N
+\let\prettyshowC\prettyshow:c
 
 
