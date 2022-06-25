@@ -1,0 +1,107 @@
+#!/bin/bash
+if [[ $# != 1 ]]; then
+	echo "Usage: $0 <package name>" >&2
+	exit 1
+fi
+
+set -o errexit
+set -o xtrace
+
+a=${1/.*/}  # .* is glob, not regex
+target=/tmp/a/$a
+mkdir -p $target
+
+
+cat                                       > $target/$a.sty << EOF
+% File: $a.sty
+% Copyright $(date +%Y) user202729
+%
+% This work  may be  distributed and/or  modified under  the conditions  of the
+% LaTeX Project Public License (LPPL),  either version 1.3c  of this license or
+% (at your option) any later version.  The latest version of this license is in
+% the file:
+%
+%   http://www.latex-project.org/lppl.txt
+%
+% This work has the LPPL maintenance status \`maintained'.
+% 
+% The Current Maintainer of this work is user202729.
+
+EOF
+cat $a.sty >> $target/$a.sty
+
+
+
+
+
+cd "$(dirname "$0")"
+cp doc/$a.tex $target 2> /dev/null  # if not exist ignore
+
+if false; then
+		if [[ -f $a\_README ]]; then
+			cp $a\_README $target/README
+		else
+			cp package_README $target/README
+		fi
+fi
+
+# error check
+grep -q 'begin{abstract}' doc/$a.tex 
+grep -q 'end{abstract}' doc/$a.tex 
+
+# generate README
+
+printf "%s -- " $a > $target/README
+head -n1 $a.sty |sed -e 's/.*{//' -e 's/}//' >> $target/README
+
+sed -n '/begin{abstract}/,/end{abstract}/p' doc/$a.tex |head -n-1 |tail -n+2 >> $target/README
+
+cat >> $target/README << EOF 
+
+Released under the LaTeX Project Public License v1.3c or later
+See http://www.latex-project.org/lppl.txt
+
+Report bugs at https://github.com/user202729/TeXlib
+
+========
+
+Copyright $(date +%Y) user202729
+
+This work  may be  distributed and/or  modified under  the conditions  of the
+LaTeX Project Public License (LPPL),  either version 1.3c  of this license or
+(at your option) any later version.  The latest version of this license is in
+the file:
+
+  http://www.latex-project.org/lppl.txt
+
+This work has the LPPL maintenance status \`maintained'.
+
+The Current Maintainer of this work is user202729.
+
+This work consists of the files $a.sty.
+EOF
+
+
+
+
+
+# compile documentation
+cd $target
+if [[ -f $a.tex ]]; then
+
+	lualatex $a.tex < /dev/null
+	makeindex -s gind.ist $a < /dev/null
+	lualatex $a.tex < /dev/null
+	lualatex $a.tex < /dev/null
+
+	rm $a.ilg $a.idx $a.glo $a.ind $a.out $a.hd $a.aux $a.log  # should have used latexmk
+fi
+
+grep -P -o '(?<=RequirePackage{).*?(?=})' $a.sty > $target/DEPENDS.txt || true  # allow this command to fail (no dependency)
+
+# zip up
+cd /tmp/a
+rm -f $a.zip
+zip -r $a.zip $a/
+
+echo Success!
