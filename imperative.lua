@@ -1406,4 +1406,14 @@ do  -- block for withexpand.
 		--	prettyprint(x[1], x[2])
 		--end
 	end
+
+	-- debug function
+	function replace_expandafter_with_ex(tokens)
+		for i, v in ipairs(tokens) do
+			if v.csname=="expandafter" then
+				tokens[i]=faketoken "ex"
+			end
+		end
+		return tokens
+	end
 end

@@ -1,0 +1,40 @@
+%! TEX program = lualatex
+\documentclass{article}
+\usepackage{prettytok}
+\ExplSyntaxOn \prettyinit: \ExplSyntaxOff
+\usepackage{imperative}
+\AutoGenerateVariants
+\errorcontextlines=100
+\begin{document}
+
+\ExplSyntaxOn
+\makeatletter
+
+\debug_putnextwithexpand {
+	\in@ {\foo} {\cslist}
+} {
+	\expandat \cslist
+	\expandat \foo
+}
+
+
+\debug_putnextwithexpand {
+	\in@{ ! \csname foo * \endcsname}{ ^ \csname cslist\endcsname}
+} {
+	\expandatlabel !
+	\expandatlabel !
+	\onlabel * \expandatlabel ^
+	\onlabel * \expandatlabel ^
+}
+
+\debug_putnextwithexpand {
+	\uppercase { \foo }
+} {
+	\after \uppercase \expandat \foo
+}
+
+\ExplSyntaxOff
+\makeatother
+
+\end{document}
+

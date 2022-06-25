@@ -14,8 +14,8 @@
 	\def\before       #1 #2 #3{\directlua{withexpand_cmds.before()} {#1}{#2}{#3}}
 }
 
-\def\putnextwithexpand #1 #2 {
-	\directlua{withexpand_compile(token.scan_toks(), token.scan_toks())} {#1} {#2}
+\def\debug_putnextwithexpand #1 #2 {
+	\directlua{prettyprint(replace_expandafter_with_ex(withexpand_compile(token.scan_toks(), token.scan_toks())))} {#1} {#2}
 }
 
 \protected\def\rdef#1 #{
