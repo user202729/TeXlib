@@ -2,6 +2,8 @@
 \documentclass[12pt]{article}
 \usepackage{cprotectinside}
 \usepackage{cprotect}
+\usepackage{listings}
+\usepackage{amsmath}
 \begin{document}
 
 \begin{filecontents*}[overwrite]{tmp.tex}
@@ -36,14 +38,14 @@ scantokens: & \textbf{\scantokens{using \verb|-i| as\relax}} ... \\
 cprotectinside: &
 {
 \cprotectinside{*}{
-	\textbf{*using \verb|-i| as\relax*} ...}} \\
+	\textbf{*using \verb|-i| as*} ...}} \\
 
 input (small): & \textbf{using \input{tmp.tex} as} ... \\
 scantokens (small): & \textbf{using \scantokens{\verb|-i|\relax} as} ... \\
 cprotectinside (small): &
 {
 \cprotectinside{!}{
-	\textbf{using !\verb|-i|\relax! as} ...}} \\
+	\textbf{using !\verb|-i|! as} ...}} \\
 
 \end{tabular}
 
@@ -57,5 +59,20 @@ line 2
 \end{verbatim}
 * text text}
 }
+
+\cprotectinside{*}{
+\begin{lstlisting}[language=Perl,
+caption={text *\verb+myverb+* some more text}]
+code code
+code code
+\end{lstlisting}
+}
+
+\cprotectinside{*}{
+	\begin{align}
+		1 &= 2+\text{text *\verb+text+* text}
+	\end{align}
+}
+
 
 \end{document}

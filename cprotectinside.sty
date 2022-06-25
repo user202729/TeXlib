@@ -1,22 +1,28 @@
-\ProvidesExplPackage{cprotectinside}{2022/04/10}{0.0.0}{Use cprotect arbitrarily deeply nested}
-\RequirePackage{strrepr}
-\RequirePackage{etoolbox}
-\RequirePackage{precattl}
+\ProvidesExplPackage{cprotectinside}{2022/06/25}{0.0.0}{Use cprotect arbitrarily deeply nested}
+
+% '__' ↔ '_cpi_'
 
 \msg_new:nnn {cprotectinside} {delimiter-not-match} {Delimiters~does~not~match!}
 
+\int_new:N \_cpi_used
+
+\edef \cprotectinsideAppend { \c_backslash_str empty }
+% 12 is other catcode
+
+\cs_generate_variant:Nn \tl_replace_all:Nnn {Nnx}
 
 % #1: single character for the delimiter e.g. '+'
 % #2: the body
-\precattl_exec:n{
+
+
 \NewDocumentCommand\cprotectinside{v +v}{
 
 	%\seq_set_split_keep_spaces:Nnn \_cpi_entries {#1} {#2}
 	% cannot do this in old version
 
 	\tl_set:Nn \_cpi_entries {#2}
-	\tl_replace_all:Nnn \_cpi_entries {~} { \cO\  }  % replace space <space> with other <space>
-	\seq_set_split:NnV \_cpi_entries {#1} \_cpi_entries
+	\tl_replace_all:Nnx \_cpi_entries {~} { \char_generate:nn {`\ } {12} }  % replace space <space> with other <space>
+	\seq_set_split:NnV \_cpi_entries {#1} \_cpi_entries  % so that they're not lost here. Support older versions without \seq_set_split_keep_spaces
 
 	\int_if_even:nT {\seq_count:N \_cpi_entries} {
 		\msg_error:nn {cprotectinside} {delimiter-not-match}
@@ -26,30 +32,32 @@
 		% ##1 is index, ##2 is item
 		\int_if_even:nTF {##1} {
 			% index 2, 4, 6...: content to be cprotect-ed
-			\strrepr_set:Nn \_cpi_tmp {##2}
-			\_cpi_aux:V \_cpi_tmp
+			\int_incr:N \_cpi_used
+			\exp_args:NV \_cpi_aux:nn \cprotectinsideAppend {##2}
+			\tl_build_gput_right:Nx \_cpi_result { \c_backslash_str cpiContentA \romannumeral \_cpi_used / }
+
 		} {
 			% index 1, 3, 5...: normal text
 			\tl_build_gput_right:Nn \_cpi_result {##2}
 		}
 	}
+	%\tl_build_gput_right:Nn \_cpi_result {##2}
 	\tl_build_gend:N \_cpi_result
 	\begingroup
-		\newlinechar=13\relax  % have to setup like this because +v collect newline as char 13
+		\newlinechar=13~  % have to setup like this because +v collect newline as char 13
 	\exp_args:NNNV \expandafter \endgroup \scantokens \_cpi_result
 }
-}
 
-% it's complex to explain what this does... see its usage for details
-\def \_cpi_aux:n #1 {
-	\tl_build_gput_right:Nn \_cpi_result {\protecting{\cprotectinsideReexec{#1}}}
+\def \_cpi_aux:nn #1 #2 {
+	\protected \cs_set_protected:cpn {cpiContentA \romannumeral \_cpi_used} / {\cprotectinsideReexec{#2 #1}}
 }
 
 \def \cprotectinsideReexec #1 {
 	\begingroup
-		\escapechar=-1 \newlinechar=13\relax
-		\everyeof {}
-		\exp_args:NNNo \expandafter \endgroup \scantokens {\detokenize {#1}}
+		\newlinechar=13~
+		\expandafter  % expand the \scantokens once when newlinechar=13
+	\endgroup
+	\scantokens {#1}  % then execute the code with original newlinechar value
 }
 
 \cs_generate_variant:Nn \_cpi_aux:n {V}
