@@ -7,7 +7,7 @@
 
 \msg_new:nnn {cprotectinside} {delimiter-not-match} {Delimiters~does~not~match!}
 
-\int_new:N \__used
+\int_new:N \_cpi_used
 
 \edef \cprotectinsideAppend { \c_backslash_str empty }
 % 12 is other catcode
@@ -26,9 +26,9 @@
 	\cprotectinsideDisableSync
 }
 
-\seq_new:N \__entries
-\seq_new:N \__local_lines
-\int_new:N \__lineoffset
+\seq_new:N \_cpi_entries
+\seq_new:N \_cpi_local_lines
+\int_new:N \_cpi_lineoffset
 
 \precattl_exec:n {
 
@@ -36,78 +36,78 @@
 % #2: the body
 \NewDocumentCommand\cprotectinside{v +v}{
 
-	%\seq_set_split_keep_spaces:Nnn \__entries {#1} {#2}
+	%\seq_set_split_keep_spaces:Nnn \_cpi_entries {#1} {#2}
 	% cannot do this in old version
 
 	
-	\seq_set_split:Nnn \__local_lines { \cO\^^M } {#2}
-	\int_set:Nn \__lineoffset {\inputlineno - \seq_count:N \__local_lines}
-	\edef \__linebase {\int_use:N \__lineoffset}
+	\seq_set_split:Nnn \_cpi_local_lines { \cO\^^M } {#2}
+	\int_set:Nn \_cpi_lineoffset {\inputlineno - \seq_count:N \_cpi_local_lines}
+	\edef \_cpi_linebase {\int_use:N \_cpi_lineoffset}
 
-	\tl_set:Nn \__entries {#2}
-	\tl_replace_all:Nnx \__entries {~} { \char_generate:nn {`\ } {12} }  % replace space <space> with other <space>
-	\seq_set_split:NnV \__entries {#1} \__entries  % so that they're not lost here. Support older versions without \seq_set_split_keep_spaces
+	\tl_set:Nn \_cpi_entries {#2}
+	\tl_replace_all:Nnx \_cpi_entries {~} { \char_generate:nn {`\ } {12} }  % replace space <space> with other <space>
+	\seq_set_split:NnV \_cpi_entries {#1} \_cpi_entries  % so that they're not lost here. Support older versions without \seq_set_split_keep_spaces
 
-	\int_if_even:nT {\seq_count:N \__entries} {
+	\int_if_even:nT {\seq_count:N \_cpi_entries} {
 		\msg_error:nn {cprotectinside} {delimiter-not-match}
 	}
-	\tl_build_gbegin:N \__result
-	\seq_map_indexed_inline:Nn \__entries {
+	\tl_build_gbegin:N \_cpi_result
+	\seq_map_indexed_inline:Nn \_cpi_entries {
 
 
-		\seq_set_split:Nnn \__local_lines { \cO\^^M } {##2}
+		\seq_set_split:Nnn \_cpi_local_lines { \cO\^^M } {##2}
 
 		% ##1 is index, ##2 is item
 		\int_if_even:nTF {##1} {
 			% index 2, 4, 6...: content to be cprotect-ed
-			\int_incr:N \__used
-			\__aux:Vnxxx \cprotectinsideAppend {##2} {\int_use:N \__lineoffset} {\currfilename} {\rescansync_gettag:}
-			\tl_build_gput_right:Nx \__result {
+			\int_incr:N \_cpi_used
+			\_cpi_aux:Vnxxx \cprotectinsideAppend {##2} {\int_use:N \_cpi_lineoffset} {\currfilename} {\rescansync_gettag:}
+			\tl_build_gput_right:Nx \_cpi_result {
 
 					% the control sequence itself
-					\c_backslash_str cpiContentA \romannumeral \__used
+					\c_backslash_str cpiContentA \romannumeral \_cpi_used
 
-					\prg_replicate:nn {\seq_count:N \__local_lines-1} {\cO{\%\^^M}}
+					\prg_replicate:nn {\seq_count:N \_cpi_local_lines-1} {\cO{\%\^^M}}
 
 					% the slash
 					/
 				}
 		} {
 			% index 1, 3, 5...: normal text
-			\tl_build_gput_right:Nn \__result {##2}
+			\tl_build_gput_right:Nn \_cpi_result {##2}
 		}
 
-		\int_add:Nn \__lineoffset {\seq_count:N \__local_lines-1}
+		\int_add:Nn \_cpi_lineoffset {\seq_count:N \_cpi_local_lines-1}
 
 	}
-	%\tl_build_gput_right:Nn \__result {##2}
-	\tl_build_gend:N \__result
+	%\tl_build_gput_right:Nn \_cpi_result {##2}
+	\tl_build_gend:N \_cpi_result
 
 
 	\cprotectinsideSync:TF {
-		\tl_replace_all:Nnn \__result {\cO\^^M} {\cO\^^J}
-		\rescansync:VV \__result \__linebase
+		\tl_replace_all:Nnn \_cpi_result {\cO\^^M} {\cO\^^J}
+		\rescansync:VV \_cpi_result \_cpi_linebase
 	} {
 		\begingroup
 			\newlinechar=13~  % have to setup like this because +v collect newline as char 13
-		\exp_args:NNNV \expandafter \endgroup \scantokens \__result
+		\exp_args:NNNV \expandafter \endgroup \scantokens \_cpi_result
 	}
 }
 
-\cs_generate_variant:Nn \__aux:nnnnn {Vnxxx}
+\cs_generate_variant:Nn \_cpi_aux:nnnnn {Vnxxx}
 \cs_generate_variant:Nn \rescansync:nn {VV}
 
-% #1: \cprotectinsideAppend content, #2: the body, #3: __lineoffset, #4: \currfilename content, #5: \rescansync_gettag: content
-\cs_new_protected:Npn \__aux:nnnnn #1 #2 #3 #4 #5 {
+% #1: \cprotectinsideAppend content, #2: the body, #3: _cpi_lineoffset, #4: \currfilename content, #5: \rescansync_gettag: content
+\cs_new_protected:Npn \_cpi_aux:nnnnn #1 #2 #3 #4 #5 {
 	
 	\cprotectinsideSyncInner:TF {
-		\cs_set_protected:cpn {cpiContentA \romannumeral \__used} / {
-			\tl_set:Nn \__content {#2 #1}
-			\tl_replace_all:Nnn \__content {\cO\^^M} {\cO\^^J}
-			\exp_args:NV \rescansync:nnnn \__content {#3}{#4}{#5}
+		\cs_set_protected:cpn {cpiContentA \romannumeral \_cpi_used} / {
+			\tl_set:Nn \_cpi_content {#2 #1}
+			\tl_replace_all:Nnn \_cpi_content {\cO\^^M} {\cO\^^J}
+			\exp_args:NV \rescansync:nnnn \_cpi_content {#3}{#4}{#5}
 		}
 	}{
-		\cs_set_protected:cpn {cpiContentA \romannumeral \__used} / {\cprotectinsideReexec{#2 #1}}
+		\cs_set_protected:cpn {cpiContentA \romannumeral \_cpi_used} / {\cprotectinsideReexec{#2 #1}}
 	}
 }
 
