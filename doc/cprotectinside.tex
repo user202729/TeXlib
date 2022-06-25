@@ -1,0 +1,167 @@
+%%! TEX program = lualatex
+\ProvidesFile{cprotectinside.tex} [2022/06/25 v0.0.0 Use cprotect arbitrarily deeply nested]
+\documentclass{l3doc}
+\EnableCrossrefs
+\CodelineIndex
+\RecordChanges
+\usepackage{hyperref}
+\usepackage{csquotes}
+%\MakeOuterQuote{"}
+\begin{document}
+\GetFileInfo{\jobname.tex}
+
+\title{\textsf{cprotectinside} --- Use cprotect arbitrarily deeply nested
+\thanks{This file describes version \fileversion, last revised \filedate.}
+}
+\author{user202729%
+%\thanks{E-mail: (not set)}
+}
+\date{Released \filedate}
+
+\maketitle
+
+\changes{v0.0.0}{2022/05/18}{First public release}
+
+\let\backtick=`
+\MakeShortVerb{`}
+
+\begin{abstract}
+	Extends on `cprotect` package to allow users to use verbatim-like commands inside arbitrary
+	parameters.
+	
+\end{abstract}
+
+\section{Usage}
+
+
+\subsection{Main function}
+\begin{function}{\cprotectinside}
+  \begin{syntax}
+	  \cs{cprotectinside} \meta{delimiter} \meta{content} \\
+  \end{syntax}
+  Execute \meta{content} that possibly contains verbatim content.
+
+  This is a bit hard to explain. To give an example:
+
+  Take an example from \url{https://tex.stackexchange.com/q/24574},
+  you want to write \verb+\textbf{using \verb|-i| as}+. Unfortunately, `\textbf` does not accept
+  `\verb` %`  %workaround for syntax highlighter
+  in input.
+
+  Then you need to
+
+  \begin{itemize}
+	  \item Wrap the whole code inside `\cprotectinside{!}{ ... }`
+	  \item Wrap each `\verb` %`
+		  command (and its arguments) inside `!...!`.
+  \end{itemize}
+
+The resulting code would be:
+
+		\begin{verbatim}
+		\cprotectinside{!}{\textbf{\using !\verb|-i|! as}}}
+		\end{verbatim}
+
+The first argument `!` is the delimiter, it can be changed as long as it's changed correspondingly in the \meta{content} part.
+
+In this simple case, it's possible to simply use `cprotect`. Nevertheless this package is useful in some cases, for example...
+
+\begin{itemize}
+	\item Value of keyval argument:
+
+		\begin{verbatim}
+		\cprotectinside{*}{
+		\begin{lstlisting}[language=Perl,
+			caption={text *\verb+myverb+* some more text}]
+		code code
+		code code
+		\end{lstlisting}
+		}
+		\end{verbatim}
+
+	\item  Pseudo-environments (contrived example):
+
+		\begin{verbatim}
+		\cprotectinside{*}{
+			\begin{align}
+				1 &= 2+\text{text *\verb+text+* text}
+			\end{align}
+		}
+		\end{verbatim}
+\end{itemize}
+
+
+
+\end{function}
+
+
+\subsection{Common issues}
+
+\begin{itemize}
+
+	\item If you get the error message
+
+		\begin{quote}
+			LaTeX cmd Error: Verbatim-like command \backtick `\cprotectinside`' illegal in argument.
+		\end{quote}
+
+		You can't use a literal TAB character inside \meta{content}
+		because of a known bug: \url{https://tex.stackexchange.com/q/508001}
+
+		(when the tab character is at the begin of a line -- which is the most common case, it will give no error message but they will be removed from the code. Which might matter for `verbatim` environments, for example.)
+
+	\item Note that the following code will not work as desired
+		\begin{verbatim}
+		\cprotectinside{!}{
+			some content
+			%}
+			some other content
+		}
+		\end{verbatim}
+		because of the unbalanced brace in the comment. It's possible to use characters different from braces to delimit the second argument
+		\begin{verbatim}
+		\cprotectinside{!}|
+			some content
+			%}
+			some other content
+		|
+		\end{verbatim}
+		or use the workarounds described in the documentation of \texttt{cprotect} package.
+
+	\item Contents that is intended to be passed as
+		\enquote{text}
+		to the outer command must not be `cprotect`ed.
+
+		As a general rule of thumb, if the content inside can be replaced with a `\includegraphics` with no compilation error,
+		it can be `cprotect`ed.
+
+
+\end{itemize}
+
+\subsection{Implementation note}
+
+The working of the code is similar to how \texttt{cprotect} package works. Described in more details
+in \url{https://tex.stackexchange.com/q/622512} (post by the package author).
+
+In particular, given the code
+\verb+\textbf{using \verb|-i| as}+
+the command might transform it to become
+\verb+\textbf{using \cpiContentAi/ as}+
+then execute the resulting code.
+Where `\cpiContentAi/` is defined to be something similar to `\input{inner.tex}`, with the (imaginary) file
+`inner.tex` has the content `\verb|-i|\empty`.
+
+The string to be appended inside each inner chunk defaults to `\empty`, used to remove the space generated at the
+end of each file (similar in purpose to `^^E^^L` used by `cprotect` package), but it can be configured:
+
+\begin{variable}{\cprotectinsideAppend}
+	The content to be appended to every inner macro. Should already be detokenized. Defaults to the detokenized string \texttt{\textbackslash empty}.
+\end{variable}
+
+
+\StopEventually{%
+  \PrintChanges
+  \PrintIndex
+}
+\Finale
+\end{document}
