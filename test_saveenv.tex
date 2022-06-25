@@ -1,6 +1,7 @@
 %! TEX program = lualatex
 \documentclass{article}
 \errorcontextlines=100
+\usepackage{currfile}
 \usepackage{prettytok}
 \usepackage{saveenv}
 \begin{document}
@@ -9,8 +10,18 @@
 \prettyinit:
 \ExplSyntaxOff
 
+
+	\begin{saveenvghost}\data
+  12 3  
+  12 3  
+		123
+	\end{saveenvghost}
+
+\prettyV\data
+
 	\begin{saveenv}\data
-		12 3
+  12 3  
+  12 3  
 		123
 	\end{saveenv}
 

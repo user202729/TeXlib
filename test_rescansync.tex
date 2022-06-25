@@ -1,12 +1,16 @@
 %! TEX program = lualatex
 \documentclass[12pt]{article}
+\errorcontextlines=100
 %\usepackage[paper=a4paper,margin=0.6cm]{geometry}
 %\usepackage{luacode}
-%\usepackage{prettytok}
+\usepackage{prettytok}
+\ExplSyntaxOn \prettyinit: \ExplSyntaxOff
 %\usepackage[abspath]{currfile}
 \usepackage{rescansync}
+\usepackage{precattl}
 \usepackage{filecontentsdef}
 \usepackage{genvar}
+\usepackage{saveenv}
 \AutoGenerateVariants
 \begin{document}
 
@@ -16,17 +20,41 @@ content
 
 
 \edef\aalineno{1+\the\inputlineno}
-\begin{filecontentsdefmacro}{\aa}
-\ExplSyntaxOff
-123
-
+\begin{saveenv}\aa
+\ExplSyntaxOff 123
 456
 
 789
-\end{filecontentsdefmacro}
+
+789
+\end{saveenv}
 
 \ExplSyntaxOn
+
 \exp_args:NV \rescansync:nn \aa {\aalineno}
+
+
+done
+
+done
+
 \ExplSyntaxOff
+
+\begin{rescansyncSaveenvPacked}\aa
+	12 3
+
+	45 6
+
+	78 9
+\end{rescansyncSaveenvPacked}
+
+\rescansyncPacked\aa
+
+\ExplSyntaxOn
+
+
+
+\ExplSyntaxOff
+
 
 \end{document}
