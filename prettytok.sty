@@ -17,7 +17,12 @@
 \RequirePackage{filecontentsdef}
 \RequirePackage{precattl}
 
-\sys_if_engine_luatex:T{\directlua{require("prettytok")}}
+\sys_if_engine_luatex:T{
+	\directlua{require("prettytok")}
+	\precattl_exec:n {
+		\directlua{prettyprint_frozenrelaxtok=token.get_next().tok}\cFrozenRelax
+	}
+}
 
 % usage: \pretty:n, etc.
 
@@ -70,9 +75,9 @@
 }
 
 
+
 \precattl_exec:n {
 
-	\directlua{prettyprint_frozenrelaxtok=token.get_next().tok}\cFrozenRelax
 
 	\cs_new_protected:Npn \pretty:n #1 {
 
