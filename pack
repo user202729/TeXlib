@@ -97,7 +97,7 @@ if [[ -f $a.tex ]]; then
 	rm $a.ilg $a.idx $a.glo $a.ind $a.out $a.hd $a.aux $a.log  # should have used latexmk
 fi
 
-grep -P -o '(?<=RequirePackage{).*?(?=})' $a.sty > $target/DEPENDS.txt || true  # allow this command to fail (no dependency)
+grep -P -o '(?<=RequirePackage{).*?(?=})' $a.sty > $target/DEPENDS.txt || rm $target/DEPENDS.txt
 
 # zip up
 cd /tmp/a
