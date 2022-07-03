@@ -59,7 +59,8 @@ local function prettyprint_one_arg(tokenlist)
 end
 
 local function check_file_opened()
-	if token.get_macro("prettypreamble") ~= nil then
+	-- if it's \relax then get_macro() also returns nil
+	if token.get_macro("pretty_check_already_init:") == nil then
 		error("pretty file not initialized!")
 	end
 end

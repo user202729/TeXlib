@@ -47,6 +47,9 @@
 
 \msg_new:nnn {prettytok} {already-initialized} {Output~file~is~already~initialized!} 
 
+
+% See also Lua function: local function check_file_opened()
+
 \global\let \pretty_check_already_init: \relax
 
 \precattl_exec:n {
@@ -59,6 +62,7 @@
 		\begingroup
 			\ior_open:Nn \__pretty_template_file {prettytok_template.html}
 			\ior_str_map_variable:NNn \__pretty_template_file \__line {
+				\str_replace_all:Nnn \__line {\cO\^^I} {~}  % workaround: XeTeX prints literal tab character as ^^I which obviously breaks JavaScript
 				\iow_now:NV \__prettyh_file \__line
 			}
 			\ior_close:N \__pretty_template_file
