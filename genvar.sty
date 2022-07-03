@@ -1,4 +1,4 @@
-\RequirePackage[abspath]{currfile}
+\RequirePackage{currfile}
 \ProvidesExplPackage{genvar}{2022/03/29}{0.0.2}{Automatically generate variants for expl3 commands}
 
 \msg_new:nnn {genvar} {cannot-open-file} {Cannot~open~file~\detokenize{#1}.}
@@ -148,7 +148,14 @@
 }
 
 \cs_gset_protected:Npn \AutoGenerateVariants {
-	%\exp_args:Nx \pretty:n {file ~= ~\currfilename}
-	%\pretty:x {file ~= ~\currfileabspath}
-	\GenerateVariantsFile:n {\currfileabspath}
+	\ifdefined \currfileabspath
+		\tl_if_empty:NTF \currfileabspath {
+			\GenerateVariantsFile:n {\currfilename}
+		}
+		{
+			\GenerateVariantsFile:n {\currfileabspath}
+		}
+	\else
+		\GenerateVariantsFile:n {\currfilename}
+	\fi
 }
