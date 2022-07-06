@@ -289,7 +289,7 @@ local command_handler={
 
 	matchrm=function(selftoken, lastlinenumber, stack, add_statement, context)
 		local group=getbracegroupinside(stack)
-		for _, v in ipairs(group) do assert(degree(v)==0) end
+		for _, v in ipairs(group) do if degree(v)~=0 then errorx "content of matchrm contain braces!" end end
 		add_statement {
 			debug=cati({faketoken "matchrm"}, wrapinbracegroup(group)),
 			produce=getvarsraw(group),
@@ -325,7 +325,7 @@ local command_handler={
 
 				for _, kv in ipairs(statements[n].needsequence) do
 					if kv[2]~=Ntypemark then
-						error("expandonce but some parameters are not single token")
+						error("expandonce but some parameters (e.g. " .. tokenfromtok(kv[1]).csname .. ") are not single token")
 					end
 					appendto(replacementtext, {expandafter, paramsign, tokenfromtok(kv[1])})
 				end
@@ -344,7 +344,7 @@ local command_handler={
 		}
 	end,
 
-	conditionalgoto=function(selftoken, lastlinenumber, stack, add_statement, context)
+	conditionalgoto=function(selftoken, lastlinenumber, stack, add_statement, context)  -- star = peek
 		local star=get_optional_star(stack)
 		local conditional=getbracegroupinside(stack)
 		local targetiftrue=popstack(stack)
@@ -433,6 +433,29 @@ local command_handler={
 		}
 	end,
 
+	assignoo=function(selftoken, lastlinenumber, stack, add_statement)
+		local varname=getvarname(stack)
+		local content=getbracegroup(stack)
+		add_statement {
+			debug=cati({faketoken "assignoo", varname}, content),
+			need=getvarsexpr(content),
+			assigno_tok=varname.tok,
+			produce={[varname.tok]=true},
+			generate_code=function(statement, statements)
+				local paramtext=standard_paramtext(statement)
+				local nextvalue=standard_nextvalue(statement)
+				local next_statement=statements[statement.nextindex]
+				assert(next_statement.needsequence[1][1]==varname.tok)
+				nextvalue[varname.tok]=content
+				local replacementtext=standard_replacementtext(next_statement, nextvalue)
+				finalize_generate_code(statement, paramtext, cati(
+					{expandafter, expandafter, expandafter, replacementtext[1], expandafter, expandafter, expandafter},
+					slice(replacementtext, 2)
+					))
+			end,
+		}
+	end,
+
 	expcall=function(selftoken, lastlinenumber, stack, add_statement, context)
 		local content=getbracegroupinside(stack)
 		add_statement {
@@ -462,6 +485,16 @@ local command_handler={
 		local content=getbracegroupinside(stack)
 		pushtostackfront(stack, 
 			{faketoken "assigno", paramsign, varname, bgroup, faketoken "exp:w"}, content, {egroup}
+		)
+	end,
+
+	assignc=function(selftoken, lastlinenumber, stack, add_statement)
+		local varname=getvarname(stack)
+		local content=getbracegroupinside(stack)
+		pushtostackfront(stack, 
+			{faketoken "assigno", paramsign, varname, bgroup, faketoken "csname"}, content, {faketoken "endcsname", egroup,
+				faketoken "assertisNtype", paramsign, varname
+			}
 		)
 	end,
 
@@ -497,7 +530,7 @@ local command_handler={
 		)
 	end,
 
-	conditional=function(selftoken, lastlinenumber, stack, add_statement, context)
+	conditional=function(selftoken, lastlinenumber, stack, add_statement, context)  -- star = peek
 		local star=get_optional_star(stack)
 		local condition=getbracegroup(stack)
 		local codeiftrue=getbracegroupinside(stack)
@@ -513,6 +546,16 @@ local command_handler={
 			faketoken "label", labeltrue},
 			codeiftrue,
 			{faketoken "label", labelend}
+		)
+	end,
+
+	-- usage: e.g. \texconditional <optional star> { \ifnum 1 = 2~ } {true} {false}
+	texconditional=function(selftoken, lastlinenumber, stack, add_statement, context)  -- star = peek
+		local star=get_optional_star(stack)
+		local condition=getbracegroupinside(stack)
+
+		pushtostackfront(stack,
+			{faketoken "conditional", star}, {bgroup}, condition, {faketoken "use_ii_to_i:w", faketoken "fi", faketoken "use_ii:nn", egroup}
 		)
 	end,
 
@@ -620,6 +663,7 @@ function generic_compile_code(functionname, body, passcontrol, statement_extra)
 		if t.csname==nil or command_handler[t.csname]==nil then
 			errorx("invalid token seen: (", t, ") on line ", lastlinenumber)
 		end
+		print("======== processing line", lastlinenumber)
 		command_handler[t.csname](t, lastlinenumber, stack, add_statement, context)
 	end
 

@@ -1,0 +1,362 @@
+%! TEX program = lualatex
+\documentclass[12pt]{article}
+\usepackage[paper=a4paper,margin=0.6cm]{geometry}
+\usepackage{luacode}
+\usepackage{prettytok}
+\ExplSyntaxOn \prettyinit: \ExplSyntaxOff
+\usepackage{precattl}
+\usepackage{genvar}
+\usepackage{imperative}
+\usepackage{minitest}
+\AutoGenerateVariants
+\errorcontextlines=100
+\begin{document}
+
+\ExplSyntaxOn
+\makeatletter
+
+
+
+\zdef \ifescapenull {
+	\return  { \texconditional { \ifnum 0 > \escapechar } }
+}
+
+\addlinemarker {} !
+\precattl_exec:n {
+
+% initially there's some token in front of the input stream, either some character cat other, or blank space cat 10
+% that token will be removed
+\rdef\remove_next_stringified_character {
+	\putnext{\meaning} \expandonce
+	\matchrm{#\firstchar}
+	\texconditional{\if b #\firstchar}{
+		\matchrm{\cO{lank}~\cO{space}~} \matchrm{~}
+	}{
+		\matchrm{\cO{he}~\cO{character}~#1}
+	}
+}
+
+}!
+
+\use_none:n{{{
+
+
+% usage: \checkouter { ... }
+% must start with a {.
+% will eventually execute \pretty{true} or \pretty{false} depends on whether or not there is an outer macro there.
+\rdeflinenumbered\checkouter {}!
+
+	% first remove the initial { token
+	\putnext{\string} \expandonce  \matchrm{#\first_lbrace_stringified}
+
+	\assignc #\degree{1}
+	\assignc #\tokennumber{0}  % an arbitrary number that is incremented every time a token is processed by this algorithm
+	\while {
+		\assignoo #\degree_as_number {\cs_to_str:N \degree}
+	}{
+		\texconditional{\ifnum 0=#\degree_as_number~}
+	}{
+		\putnext{\meaning} \expandonce
+
+		\matchrm{#\firstchar}
+
+		% check if it's "begin-group character"
+		\texconditional{\if b #\firstchar}{
+			\matchrm{#\secondchar}
+			\texconditional{\if e #\secondchar}{
+				\matchrm{#\thirdchar}
+				\texconditional{\if g #\thirdchar}{
+					% okay, is begin-group character
+					\assignc #\degree{\the\numexpr\cs_to_str:N#\degree+1}
+					\matchrm{in-group~character~}
+					\rcall {\remove_next_stringified_character}
+				}{
+				}
+			}{
+			}
+		}{
+			% check if it's "end-group character"
+			\matchrm{#\secondchar}
+			\texconditional{\if n #\secondchar}{
+				\matchrm{#\thirdchar}
+				\texconditional{\if d #\thirdchar}{
+					% problem: it might be just "\end" (escapechar=-1|32) followed by an outer token.
+					% Need to \meaning the next token to tell?
+
+					\putnext{\meaning} \expandonce
+					% now the following might be "the character -" or some outer token, or even { / } etc.
+
+					\assignc #\degree{\the\numexpr\cs_to_str:N#\degree-1}
+					\matchrm{group~character~}
+					\rcall {\remove_next_stringified_character}
+				}{
+				}
+			}{
+			}
+			
+		}
+
+
+
+	}
+
+	% finally done, degree=0 now
+!
+
+
+}}}
+
+
+\makeatletter
+\zdeflinenumbered \debug {} !
+	\putnextwithexpand {
+		\begingroup
+		\escapechar=-1~
+		*
+		\pretty:n { \meaning \noexpand \@@end }
+		\endgroup
+	} {
+		\onlabel * \expandat \noexpand
+		\onlabel * \expandat \meaning
+	}
+!
+
+\addlinemarker {} !
+\precattl_exec:n{
+
+
+
+% function that does the following:
+% assume initially the input stream has <some tokens> ...... <some token whose \string contains 'A'> ...
+% it will replace each character in the previous tokens with a dot (.) until the A is seen
+% the time complexity of this algorithm is linear instead of the usual quadratic (at the cost of linear \romannumeral recursion depth)
+% see examples/tests below
+\rdef \stringify_until_A {
+	\putnext{\string} \expandonce
+
+	% the following token might either be some character or blank space, need to be careful
+	\putnext{\meaning} \expandonce
+	\matchrm{#\firstchar}
+	\texconditional{\ifx #\firstchar b} {
+		\matchrm{lank~space\cS{\ \ }}  % TODO merge two matchrm into one
+	}{
+		\matchrm{\cO{he}~\cO{character}~#1}
+		\texconditional{\ifx #1 \cO{A}}{
+			\putnext{A}
+			\return{}
+		}{}
+	}
+	\putnext{ \expandafter . \romannumeral \stringify_until_A }
+	\expandonce
+}
+
+
+
+% this one does the following thing:
+% following in the input stream is ....\relax  with X dots in total (the dot can be any N-type token whose meaning is not \relax)
+% #\token is some N-type token
+% when called once, it will replace the following in the token list with #\token #\token #\token #\token \relax
+% the time complexity of this algorithm is linear instead of the usual quadratic (at the cost of linear \romannumeral recursion depth)
+\rdef \replicate_helper #\token {
+	\assertisNtype #\token
+	\matchrm{#\nexttoken}
+	\assertisNtype #\nexttoken
+
+	\texconditional{\ifx #\nexttoken \relax} {
+		% done, just return
+		\putnext {\relax}
+	}{
+		% in this case, following in the input stream is ...\relax with X-1 dots left, call recursively
+		\rcall {\replicate_helper #\token}
+		% then put one token
+		\putnext{#\token}
+	}
+}
+
+
+% #\repeat: {...}
+% #\token: some N-type token
+% return \token repeated \repeat times.
+% the time complexity of this algorithm is linear instead of the usual quadratic (at the cost of linear \romannumeral recursion depth)
+\rdef \replicate #\repeat #\token {
+	\putnext {#\repeat \relax}
+	\rcall {\replicate_helper #\token}
+	\matchrm {#\result \relax}  % magically this still works even if #\token = \relax, because it just remove one relax, everything checks out (although it's cheating)
+	\return{#\result}
+}
+
+% TODO the code below ought to work but it doesn't. ↑ Ugly
+
+	%\prettyw
+	%\pretty{repeat=#\repeat token=#\token}
+	%\assignoperate #\result {#\repeat \relax} {
+	%	\pretty{token=#\token}
+	%	\prettyw
+	%	\rcall {\replicate_helper #\token}
+	%}
+	%\return{#\result}
+
+
+% usage: \romannumeral \stringify_remove_next_repeated \stringify_remove_next_repeated \stringify_remove_next_repeated \exp_end: ⟨some tokens⟩
+% will expand once to ⟨some tokens⟩, but with \string repeatedly applied on the first token and that token removed
+% the time complexity of this algorithm is linear instead of the usual quadratic (at the cost of linear \romannumeral recursion depth)
+% see test below
+\rdef \stringify_remove_next_repeated {
+	\rcall{}  % call the following, which is either \stringify_remove_next_repeated (which will stringify-remove next N-1 characters), or \exp_end: (which does nothing)
+	% then remove one remaining character
+	\putnext{\string} \expandonce
+	\rcall{\remove_next_stringified_character}
+}
+
+
+% same as above, but does not stringify or check for space, just remove the next item
+\rdef \remove_next_repeated {
+	\rcall{}  % call the following, same as above
+	% then remove one remaining item
+	\matchrm{#1}
+}
+
+% usage: r-expansion of \exp_forward \exp_forward \exp_forward \exp_forward ⟨token list⟩
+% is equal to \exp_forward \exp_forward \exp_forward \exp_forward + r-expansion of ⟨token list⟩
+\rdef \exp_forward {
+	\rcall {}
+	\return {\exp_forward}
+}
+
+% usage: r-expansion of \exp_forward \exp_forward \exp_forward \exp_forward \exp_forward_end ⟨token list⟩
+% is equal to \exp_forward \exp_forward \exp_forward \exp_forward \exp_forward_end + o-expansion of ⟨token list⟩
+\rdef \exp_forward_end {
+	\expandonce
+	\return {\exp_forward_end}
+}
+
+
+% count the length of the concatenated string representation of all tokens in the o-expansion of #container
+% the time complexity of this one is quadratic, I think (although it could be linear if there's only one A appear in the token list)
+
+% #\known_removable is a sequence of X \exp_forward tokens, that represents if X \stringify_remove_next_repeated operations are applied on #container, it will remain nonempty
+
+\rdef \count_string_len #\container #\known_removable {
+	\assertisNtype #\container
+
+	\putnext {#\container A}
+	\rcall {#\known_removable \exp_forward_end} \matchrm{#\known_removable \exp_forward_end}
+	% input stream → ⟨dangerous tokens⟩ A
+
+	\assignr #\stringify_remove_next_repeated_seq {\replicate {#\dots} \stringify_remove_next_repeated}
+	\rcall {#\known_removable \exp_forward_end} \matchrm{#\known_removable \exp_forward_end}
+	% input stream → ⟨dangerous tokens after first X tokens removed, might be empty⟩ A
+
+
+	% call \stringify_until_A
+	\rcall {#\known_removable \exp_forward_end \stringify_until_A} \matchrm{#\known_removable \exp_forward_end}
+	% now the following in the input stream is either `.........A` or `.........A ⟨remaining potentially dangerous tokens⟩ A`
+
+	\matchrm{#\dots A}
+
+	% convert each dot to a \exp_forward
+	\assignr #\dots {\replicate {#\dots} \exp_forward}
+
+	% then, put ⟨the tokens⟩ B forward in the token list
+	\putnext {#\container B}
+	\rcall {#\dots \exp_forward_end} \matchrm{#\dots \exp_forward_end}   % each line of this is equivalent to a expandonce, but we can't do that directly because of #\dots
+
+
+	% → ⟨potentially dangerous tokens⟩ B ⟨remaining potentially dangerous tokens⟩ A
+
+
+	% now we remove ⟨count⟩ of first following characters using \stringify_remove_next_repeated, then check if the following token is A or B
+	\assignr #\stringify_remove_next_repeated_seq {\replicate {#\dots} \stringify_remove_next_repeated}
+
+	\putnext {#\stringify_remove_next_repeated_seq}
+	\rcall {#\dots \exp_forward_end} \matchrm{#\dots \exp_forward_end}
+
+	\putnext {\string}
+	\rcall {#\dots \exp_forward_end} \matchrm{#\dots \exp_forward_end}
+
+	% input stream becomes →
+	%   A ⟨potentially dangerous tokens⟩ B ⟨potentially dangerous tokens⟩ A
+	%   or
+	%   B
+
+	\matchrm{#1}
+	\texconditional{\ifx #1 \cO{A}} {
+		% not good, need to keep working
+	} {
+		% okay, this is the result
+	}
+
+	
+}
+
+}
+!
+
+
+
+
+\directlua{optimize_pending_definitions()}
+\directlua{debug_rdef()}
+\directlua{debug_rdef2()}
+\directlua{execute_pending_definitions()}
+
+%\debug
+
+% test for \stringify_until_A
+\precattl_exec:n{
+\assertequal:on {\romannumeral \stringify_until_A abcAdef} {...Adef}
+\assertequal:on {\romannumeral \stringify_until_A abc\xxAyy def} {......A\cO{yy}def}  % inside string representation of other token
+\begingroup
+\escapechar=-1~
+\assertequal:on {\romannumeral \stringify_until_A abc\xxAyy def} {.....A\cO{yy}def}  % one shorter if escapechar empty
+\endgroup
+\assertequal:on {\romannumeral \stringify_until_A abc{}dAdef} {......Adef}  % can break through groups  (a bit too hard to test unbalanced token list...)
+
+% test for \stringify_remove_next_repeated
+\assertequal:on {\romannumeral \stringify_remove_next_repeated \stringify_remove_next_repeated \stringify_remove_next_repeated \exp_end: 1~2456} {456}
+\assertequal:on {\romannumeral \stringify_remove_next_repeated \stringify_remove_next_repeated \stringify_remove_next_repeated \exp_end: \abcdef ghi} {\cO{cdef} ghi}
+
+% test for \remove_next_repeated
+\assertequal:on {\romannumeral \remove_next_repeated \remove_next_repeated \remove_next_repeated \exp_end: \abcdef ghi} {i}
+\assertequal:on {\romannumeral \remove_next_repeated \remove_next_repeated \remove_next_repeated \exp_end: 1~2456} {56}
+\assertequal:on {\romannumeral \remove_next_repeated \remove_next_repeated \remove_next_repeated \exp_end: 124~56} {~56}
+
+% test for \replicate
+\assertequal:on {\romannumeral \replicate {...}{\relax}} {\relax\relax\relax}
+\assertequal:on {\romannumeral \replicate {}{\relax}} {}
+\assertequal:on {\romannumeral \replicate {......}{A}} {AAAAAA}
+
+% test for \exp_forward
+\begingroup
+\def \__a {\__b}
+\def \__b {c}
+\assertequal:on {\romannumeral \exp_forward \exp_forward \exp_forward \exp_forward_end \__a} {\exp_forward \exp_forward \exp_forward \exp_forward_end \__b}
+\endgroup
+
+
+
+}
+
+
+
+
+
+
+% great, this can be used to store a sequence of numbers
+
+\def \__a {\__b}
+\def \__b {\__c}
+\precattl_exec:n {
+	\def \numbersplit { \expandafter \cS\  \expandafter \numbersplit \number }
+	\def \numberend { \expandafter \cS\  \expandafter \numberend }
+}
+
+\pretty:o { \number 123 \numbersplit 456 \numbersplit 789 \numberend \__a }
+% →                 123 \numbersplit 456 \numbersplit 789 \numberend \__b
+
+\pretty:o { \expandafter { \number 123 \numbersplit 456 \numbersplit 789 \expandafter } \__a }
+% →                      {         123 \numbersplit 456 \numbersplit 789              } \__b }
+
+\prettystop
+
+\end{document}
