@@ -51,22 +51,32 @@
 
 }
 
+
+% #1: target macro
 \NewDocumentEnvironment {saveenvkeeplast} {m} {
 	\begingroup
 	\int_step_inline:nnn {0} {255} {\char_set_catcode_other:n{##1}}
-	\exp_last_unbraced:Nf \peek_meaning_remove:NTF { \char_generate:nn{\endlinechar}{12} }    %12 is other
-	{
-		\endlinechar=10~
-		\str_set:NV \_senv_env \@currenvir
-		\tl_replace_all:Nnn \_senv_env {~} {\cO\  }
-		\exp_args:NNVV \_senv_helper #1 \_senv_env \@currenvir
-	}
-	{
-		\msg_error:nn {saveenv} {trailing-content-or-pretokenized}
+	\int_compare:nNnTF {\endlinechar} < {0} {
+		\_senv_start_get_body:N #1
+	} {
+		\exp_last_unbraced:Nf \peek_meaning_remove:NTF { \char_generate:nn{\endlinechar}{12} }    %12 is other
+		{
+			\_senv_start_get_body:N #1
+		}
+		{
+			\msg_error:nn {saveenv} {trailing-content-or-pretokenized}
+		}
 	}
 } {
 }
 
+% #1: target macro
+\cs_new_protected:Npn \_senv_start_get_body:N #1 {
+	\endlinechar=10~
+	\str_set:NV \_senv_env \@currenvir
+	\tl_replace_all:Nnn \_senv_env {~} {\cO\  }
+	\exp_args:NNVV \_senv_helper #1 \_senv_env \@currenvir
+}
 
 % #1: target macro
 % #2: value of \@currenvir but with all tokens catcode 12 (other)

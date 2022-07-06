@@ -1,0 +1,128 @@
+%%! TEX program = lualatex
+\ProvidesFile{saveenv.tex} [2022/07/06 v0.0.0 Save environment content verbatim]
+\documentclass{l3doc}
+\EnableCrossrefs
+\CodelineIndex
+\RecordChanges
+\usepackage{hyperref}
+\usepackage{csquotes}
+%\MakeOuterQuote{"}
+\begin{document}
+\GetFileInfo{\jobname.tex}
+
+\title{\textsf{saveenv} --- Save environment content verbatim
+\thanks{This file describes version \fileversion, last revised \filedate.}
+}
+\author{user202729%
+%\thanks{E-mail: (not set)}
+}
+\date{Released \filedate}
+
+\maketitle
+
+
+\let\backtick=`
+\MakeShortVerb{`}
+
+\begin{abstract}
+Allow users to grab environment content verbatim.
+\end{abstract}
+
+\section{Usage}
+
+\subsection{Comparison to existing similar packages}
+
+\begin{itemize}
+	\item \pkg{scontents} package is similar; however it does not allow programmer to programmatically retrieve the macro content.
+	\item \pkg{fancyvrb} and \pkg{verbatimcopy} provides some internal macro for defining similar environments, however they're internal.
+	\item \pkg{filecontentsdef} provides an similar environment; however it requires \verb+\endlinechar=13+ and does not support \cs{ExplSyntaxOn} environment.
+\end{itemize}
+
+This package provides tools to create your own verbatim environments, and works in all values of \cs{endlinechar}.
+
+Limitations: This package does not process the content line-by-line. Therefore
+
+\begin{itemize}
+	\item There might be larger memory consumption.
+	\item If it's desirable to typeset the content, it's not straightforward to preserve the Sync\TeX\ information.
+\end{itemize}
+
+\subsection{Main environment}
+\DescribeEnv{saveenv}
+  Environment that saves its body.
+  
+  For example, the following code
+
+		\begin{verbatim}
+		\begin{saveenv}{\data}
+		123
+		456
+		\end{saveenv}
+		\end{verbatim}
+
+will save the string \texttt{123\meta{newline}456} globally into \cs{data}.
+
+The braces around \verb+{\data}+ is optional; however, in the unlikely case if \cs{endlinechar} has the \enquote{letter} catcode, it might be absorbed.
+
+A newline is represented as a token with charcode 10 (\verb+^^J+) and catcode other.
+
+The assignment is global, and done before the macro \cs{endsaveenv} is executed.
+
+The data is represented as an \pkg{expl3}-string, that is, a sequence of tokens with catcode 12 (for non-space characters) or 10 (for space character).
+
+In other words, the token list is equal to its own \cs{detokenize}.
+
+\DescribeEnv{saveenvghost}
+Similar to above; however the content inside is still typesetted/executed, and the Sync\TeX\ information is preserved.
+
+\DescribeEnv{saveenvkeeplast}
+Similar to above; however the final newline and the space characters before \texttt{\cs{end}\{\meta{environment name}\}} are preserved.
+
+For example, the example above with \texttt{saveenv} replaced with \texttt{saveenvkeeplast}
+will save the string \texttt{123\meta{newline}456\meta{newline}} into \cs{data} instead.
+
+\subsection{Extending the environments}
+
+All of the environments are extensible.
+
+Follow the instruction in \url{https://tex.stackexchange.com/q/14683/250119} to define an environment based on an existing one.
+
+For example, the following definition
+
+		\begin{verbatim}
+		\ExplSyntaxOn
+		\NewDocumentEnvironment{custom}{}{
+			\saveenv \data
+		}{
+			\endsaveenv
+			% the user may want to modify \data here
+		}
+		\end{verbatim}
+will define an environment \env{custom} that wraps \env{saveenv}.
+
+\subsection{Common issues}
+
+\begin{itemize}
+	\item The \cs{endlinechar} must not be tokenized in advance. This might happen when for example your environment looks ahead for optional argument.
+		See \url{https://tex.stackexchange.com/q/649331/250119} for an example.
+
+		Alternatively, you can 
+		\begin{itemize}
+			\item manually remove the end line token,
+			\item set \verb+\endlinechar=-1\relax+ before calling \cs{saveenv}
+			\item (optional) reset the value of \cs{endlinechar} afterwards.
+				
+		\end{itemize}
+
+	\item Note that there must be nothing after the \texttt{\cs{begin}\{\meta{environment name}\}} or the \texttt{\cs{end}\{\meta{environment name}\}} line.
+\end{itemize}
+
+
+
+\StopEventually{%
+  \PrintChanges
+  \PrintIndex
+}
+\Finale
+\end{document}
+

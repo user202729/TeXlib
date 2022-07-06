@@ -1,13 +1,17 @@
 %! TEX program = lualatex
 \documentclass{article}
 \errorcontextlines=100
-\usepackage{currfile}
+\usepackage[abspath]{currfile}
+\usepackage{precattl}
 \usepackage{prettytok}
+\usepackage{minitest}
 \usepackage{saveenv}
+\usepackage{genvar}
+\AutoGenerateVariants
 \begin{document}
 
 \ExplSyntaxOn
-\prettyinit:
+%\prettyinit:
 \ExplSyntaxOff
 
 
@@ -17,7 +21,97 @@
 		123
 	\end{saveenvghost}
 
-\prettyV\data
+\ExplSyntaxOn
+\precattl_exec:n {
+	\assertequal:Vn \data {
+		\cS\  \cS\  \cO{12} ~ \cO{3 \^^J}
+		\cS\  \cS\  \cO{12} ~ \cO{3 \^^J}
+		\cO{ \^^I \^^I 123}
+	}
+}
+\global\let\data\undefined
+\ExplSyntaxOff
+
+\begingroup
+\endlinechar=-1\relax
+\begin{saveenvghost}\data
+123
+123
+\end{saveenvghost}
+
+\begin{saveenv}\datab
+123
+123
+\end{saveenv}
+\endgroup
+
+\ExplSyntaxOn
+\precattl_exec:n {
+	\assertequal:Vn \data {
+		\cO{123 \^^J}
+		\cO{123}
+	}
+	\assertequal:Vn \datab {
+		\cO{123 \^^J}
+		\cO{123}
+	}
+}
+\global\let\data\undefined
+\ExplSyntaxOff
+
+\begingroup
+\endlinechar=`A\relax  % in this case need braces because `A has catcode letter, so otherwise \dataA doesn't make sense
+\begin{saveenvghost}{\data}
+123
+123
+\end{saveenvghost}
+
+\begin{saveenv}{\datab}
+123
+123
+\end{saveenv}
+\endgroup%
+
+\ExplSyntaxOn
+\precattl_exec:n {
+	\assertequal:Vn \data {
+		\cO{123 \^^J}
+		\cO{123}
+	}
+	\assertequal:Vn \datab {
+		\cO{123 \^^J}
+		\cO{123}
+	}
+}
+\global\let\data\undefined
+\ExplSyntaxOff
+
+\begingroup
+\endlinechar=`/\relax
+\begin{saveenvghost}\data
+123
+123
+\end{saveenvghost}
+
+\begin{saveenv}\datab
+123
+123
+\end{saveenv}
+\endgroup
+
+\ExplSyntaxOn
+\precattl_exec:n {
+	\assertequal:Vn \data {
+		\cO{123 \^^J}
+		\cO{123}
+	}
+	\assertequal:Vn \datab {
+		\cO{123 \^^J}
+		\cO{123}
+	}
+}
+\global\let\data\undefined
+\ExplSyntaxOff
 
 	\begin{saveenv}\data
   12 3  
@@ -25,7 +119,16 @@
 		123
 	\end{saveenv}
 
-\prettyV\data
+\ExplSyntaxOn
+\precattl_exec:n {
+	\assertequal:Vn \data {
+		\cS\  \cS\  \cO{12} ~ \cO{3 \^^J}
+		\cS\  \cS\  \cO{12} ~ \cO{3 \^^J}
+		\cO{ \^^I \^^I 123}
+	}
+}
+\global\let\data\undefined
+\ExplSyntaxOff
 
 \ExplSyntaxOn
 \NewDocumentEnvironment{custom}{}{
@@ -41,25 +144,36 @@
 }
 \ExplSyntaxOff
 
+% tab at the end of first line, space at the end of second line
 	\begin{custom}
 		123	
 		123 
 	\end{custom}
 
-	\prettyV\data
+\ExplSyntaxOn
+\precattl_exec:n {
+	\assertequal:Vn \data {
+		\cO{\^^I\^^I123\^^I\^^J}
+		\cO{\^^I\^^I123}
+	}
+}
+\global\let\data\undefined
+\ExplSyntaxOff
 
 	\begin{custom *^}
-		123  
-		123		
+		123
+		123
 	\end{custom *^}
 
-	\begin{custom *^}
-		123  
-		123		
-	\end{custom *^}
+\ExplSyntaxOn
+\precattl_exec:n {
+	\assertequal:Vn \data {
+		\cO{\^^I\^^I123\^^J}
+		\cO{\^^I\^^I123}
+	}
+}
+\global\let\data\undefined
+\ExplSyntaxOff
 
-\prettyV\data
-
-stuff
 
 \end{document}
