@@ -4,6 +4,35 @@
 
 \ExplSyntaxOn
 
+% ======== temporary patch for expl3 bug https://github.com/latex3/latex3/issues/1109
+
+% #1: some explicit char with char 32 and cat X
+% #2: the original explicit char
+\cs_new_protected:Npn \__broken_tl_peek_analysis_char:nN #1#2
+  {
+    \cs_set_protected:Npn \__tl_tmp:w ##1 #1 ##2 ##3 \scan_stop:
+      { \exp_args:No \l__tl_peek_code_tl { \int_value:w `#2 } ##2 }
+    \exp_after:wN \__tl_tmp:w \c__tl_peek_catcodes_tl \scan_stop:
+  }
+
+% only patch in this particular condition.
+\ifx \__tl_peek_analysis_char:nN \__broken_tl_peek_analysis_char:nN
+	\cs_set_protected:Npn \__tl_peek_analysis_char:nN #1#2
+	{
+		\pretty:n  {#1, #2}
+		\token_if_parameter:NTF #1 {
+			\exp_args:No \l__tl_peek_code_tl { \int_value:w `#2 } 6
+		} {
+			\cs_set_protected:Npn \__tl_tmp:w ##1 #1 ##2 ##3 \scan_stop:
+			{ \exp_args:No \l__tl_peek_code_tl { \int_value:w `#2 } ##2 }
+			\exp_after:wN \__tl_tmp:w \c__tl_peek_catcodes_tl \scan_stop:
+		}
+	}
+\fi
+
+% ========
+
+
 \cs_generate_variant:Nn \exp_args:NN {Nc}
 \cs_generate_variant:Nn \EI_append:n {x}
 \cs_generate_variant:Nn \exp_args:Nn {No}
@@ -58,8 +87,9 @@
 		}
 
 		% then pass it to the specific handler.
-		\exp_args:NV #1 \_precattltmp
+		\exp_args:NNV
 	\endgroup
+	#1 \_precattltmp
 }
 
 
@@ -110,10 +140,153 @@
 	\precattl_prepare:n {#2}
 	\tl_set_eq:NN #1 \_precattlvalueg
 }
+
+
+
+
+
+
+\cs_new_protected:Npn \__resume_peek: {
+	\peek_analysis_map_inline:n {
+		\__process {##1} {##2} {##3}
+	}
+}
+
+\def \__help:NN #1 #2 {
+	\def #1 { \peek_analysis_map_break:n { \_precattldo_special #2 } }
+}
+\cs_generate_variant:Nn \__help:NN {cc}
+\str_map_inline:nn {CBEMTPUDSLOA} {
+	\__help:cc {__special c #1} {__special c #1 _continue: }
+}
+
+\def \__help:NN #1 #2 {
+	\def #1 { \peek_analysis_map_break:n { #2 } }
+}
+
+\str_map_inline:nn {BEMTPUDSLOA} {
+	\__help:cc {__special c #1} {__special c #1 _continue: }
+}
+
+
+\def \__help:n #1 {
+	\def \__specialcFrozenRelax {
+		\tl_build_gput_right:Nn \__result { #1 }
+	}
+	% #1 here will be substituted by the frozen relax
+}
+\expandafter \__help:n \ifnum0=0\fi
+\let \__help:n \undefined
+
+
+
+% ======== define \__specialcB_continue:, etc.
+
+\def \__help:Nn #1 #2 {
+	\def #1 ##1 {
+		\tl_analysis_map_inline:nn {##1} {
+			\str_map_inline:xn {\expandafter\string####1} {
+				\tl_build_gput_right:Nn \__result {
+					\char_generate:nn {`########1} {#2}
+				}
+			}
+		}
+		\__resume_peek:
+	}
+}
+\__help:Nn \__specialcB_continue: {1}
+\__help:Nn \__specialcE_continue: {2}
+\__help:Nn \__specialcM_continue: {3}
+\__help:Nn \__specialcT_continue: {4}
+\__help:Nn \__specialcU_continue: {7}
+\__help:Nn \__specialcD_continue: {8}
+\__help:Nn \__specialcS_continue: {10}
+\__help:Nn \__specialcL_continue: {11}
+\__help:Nn \__specialcO_continue: {12}
+
+
+\def \__specialcC_continue: #1 {
+	\begingroup
+		\exp_args:NNo \tl_build_gput_right:Nn \__result {\expandafter \noexpand \csname #1 \endcsname}
+	\endgroup
+	\__resume_peek:
+}
+\def \__specialcA_continue: #1 {
+	\tl_analysis_map_inline:nn {#1} {
+		\str_map_inline:xn {\expandafter\string##1} {
+			\tl_build_gput_right:Nn \__result {
+				\expandafter \expandafter \expandafter \noexpand \char_generate:nn {`####1} {13}
+			}
+		}
+	}
+	\__resume_peek:
+}
+\def \__specialcP_continue: #1 {
+	\tl_analysis_map_inline:nn {#1} {
+		\str_map_inline:xn {\expandafter\string##1} {
+			\tl_build_gput_right:Nn \__result {
+				######## \char_generate:nn {`####1} {6}
+				%## \char_generate:nn {`#1} {6}
+			}
+		}
+	}
+	\__resume_peek:
+}
+
+% ========
+
+\cs_new_protected:Npn \__process #1 #2 #3 {
+	\token_if_eq_meaning:NNTF #3 0 {
+
+		%\ifcsname __special \expandafter \cs_to_str:N #1 \endcsname
+		%	\csname __special \expandafter \cs_to_str:N #1 \expandafter \endcsname
+		%\else
+		%	\tl_build_gput_right:Nn \__result {#1}
+		%\fi
+
+		\ifcsname __special \expandafter \cs_to_str:N #1 \endcsname
+			\expandafter \use_i:nn
+		\else
+			\expandafter \use_ii:nn
+		\fi
+		{\csname __special \expandafter \cs_to_str:N #1 \endcsname}
+		{\tl_build_gput_right:Nn \__result {#1}}
+	}
+	{
+		\tl_build_gput_right:Nn \__result {#1}
+	}
+}
+
+
+
+\def \_precattl_tmp_help #1 {
+	\def \_precattl_do_frozen_relax { \EI_append:n {#1} }
+	% #1 here will be substituted by the frozen relax
+}
+\expandafter \_precattl_tmp_help \ifnum0=0\fi
+\let \_precattl_tmp_help \undefined
+
+
+\def \precattl_setx:Nn #1 #2 {
+	\begingroup
+	\escapechar=-1~
+	\tl_build_gbegin:N \__result
+	\cs_set_protected:Npn \__special__stop {
+		\tl_build_gend:N \__result
+		\endgroup
+		\tl_set:Nx #1 {\__result}
+		\peek_analysis_map_break:
+	}
+	\__resume_peek:
+	#2
+	\__stop
+}
 \let\precattlSet\precattl_set:Nn
 
 \def \precattl_exec:n #1 {
 	\precattl_prepare:n {#1}
 	\_precattlvalueg
+	%\precattl_set:Nn \__tmp {#1}
+	%\__tmp
 }
 \let\precattlExec\precattl_exec:n

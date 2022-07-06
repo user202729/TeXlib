@@ -1,33 +1,31 @@
 %! TEX program = lualatex
 \documentclass[12pt]{article}
-\usepackage[paper=a4paper,margin=0.6cm]{geometry}
+\usepackage{prettytok}
+\prettyinit
 
 
 \errorstopmode
 \errorcontextlines=999
 
-\usepackage{benchmark}
-%\benchmark c
-\usepackage{precattl}
-%\benchmark d
-\ExplSyntaxOn
-%\def\benchmark #1 {}
-\cs_undefine:N \pretty:n
-\ExplSyntaxOff
-
-\usepackage{prettytok}
-\benchmark a
 \usepackage[abspath]{currfile}
-\benchmark d
 \usepackage{genvar}
-\benchmark b
+\usepackage{minitest}
+\ExplSyntaxOn
+\GenerateVariantsFile:n{precattl.sty}
+\ExplSyntaxOff
+\usepackage{precattl}
+
 \AutoGenerateVariants
 \begin{document}
 
 
 \ExplSyntaxOn
-\pretty:n {1234}
-\benchmark{run~start}
+
+
+
+
+\testname:n {general check}
+
 \tl_set:Nn \__content {
 	\cFrozenRelax
 	\relax
@@ -36,15 +34,15 @@
 	\cB \a \cE \z
 	\cB \{ \cE \}
 	\cB \( \cE \)
-	\cM \b
+	\cM {\b \b \~}
 	\cT \c
-	\cP \d
-	\cU \e
+	\cP {\d \d \~}
+	\cU {\e \e \~}
 	\cD \f
 	\cS \j
 	\cL \g
 	\cO \h
-	\cA \i \cA {\~\ }
+	\cA {\i \i \~} \cA \~ \cA \ 
 	
 	\cM \  %
 	\cT \  %
@@ -55,44 +53,44 @@
 	\cL \  %
 	\cO \  %
 	%\pretty:n {content \cO{something123~?[]} \cO\\ \cO\~ \cO\  \cS\a \cS\   }
-}
-\benchmark{set~content}
 
-\benchmark{--}
+	# \exp_after:wN  % check expl3 bug patched
+	\fi \else \ifx  % some bugs
+}
+
 \precattl_set:NV \__tmp \__content
-\benchmark{precattl~done}
-\precattl_set:NV \__tmp \__content
-\benchmark{precattl~done}
-\precattl_set:NV \__tmp \__content
-\benchmark{precattl~done}
+
+
 \pretty:V \__tmp
 
-%\benchmark{--}
-%\precattl_setx:NV \__tmp \__content
-%\benchmark{precattl~done}
-%\pretty:V \__tmp
+\tl_build_begin:N \__tmpa
+\tl_analysis_map_inline:Nn \__tmp {
+	\tl_build_put_right:Nx \__tmpa {#2, #3;}
+}
+\tl_build_end:N \__tmpa
 
-\benchmark{--}
-\tl_analysis_map_inline:Nn \__content {}
-\benchmark{analysis_map~alone}
+\assertequal_str:Vn \__tmpa {
+-1,0;-1,0;-1,0;97,1;122,2;123,1;125,2;40,1;41,2;98,3;98,3;126,3;99,4;100,6;100,6;126,6;101,7;101,7;126,7;102,8;106,A;103,B;104,C;105,D;105,D;126,D;126,D;32,D;32,3;32,4;32,6;32,7;32,8;32,A;32,B;32,C;35,6;-1,0;-1,0;-1,0;-1,0;
+}
+
+\testname:n {check relax versus frozen relax}
 
 \precattl_exec:n {
 	\begingroup
 	\let\relax\undefined
 
 	\ifx \relax \undefined
-		\pretty:n{normal~relax~become~undefined}
+	\else
+		\testfail:n {normal relax should be undefined}
 	\fi
 
 	\ifx \cFrozenRelax \undefined
-		\pretty:n{NOOOOO}
-	\else
-		\pretty:n{frozen~relax~remains~relax}
+		\testfail:n {frozen relax should remain relax}
 	\fi
 	\endgroup
 
-	\pretty:no {string~representation~of~\cFrozenRelax~is~}
-		{\string\cFrozenRelax}
+	\tl_if_eq:nnT {\cFrozenRelax} {\relax} {\testfail:}
+	\str_if_eq:nnF {\cFrozenRelax} {\relax} {\testfail:}
 }
 
 \ExplSyntaxOff
