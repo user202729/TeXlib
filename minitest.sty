@@ -1,0 +1,50 @@
+% I don't really like l3test I guess. No token list comparison.
+% actually that's somewhat "trivial" to fix
+% also should learn l3build system some day...
+
+
+
+\ProvidesExplPackage{minitest}{2022/07/03}{0.0.0}{Test}
+
+\cs_new_protected:Npn \testname:n {\str_set:Nn \__testname}
+\let \testname \testname:n
+
+\str_set:Nn \__testname {}
+
+\cs_new_protected:Npn \testfail:nn
+	#1 %message
+	#2 %extra code to be executed e.g. additional \pretty:n calls
+{
+	\pretty:x
+		{Test~\__testname,~line~\the\inputlineno :~#1}
+	#2
+	\errmessage {#1}
+}
+
+\cs_new_protected:Npn \testfail:n #1 {\testfail:nn {#1} {}}
+
+\cs_new_protected:Npn \testfail: {\testfail:n {Error}}
+
+\cs_new_protected:Npn \assertequal:nn #1 #2 {
+	\tl_if_eq:nnF {#1} {#2} {
+		\testfail:nn {Token~lists~not~equal!} {
+			\pretty:x {The~token~lists~are:}
+			\pretty:n {#1}
+			\pretty:n {#2}
+		}
+	}
+}
+
+\cs_new_protected:Npn \assertequal_str:nn #1 #2 {
+	\str_if_eq:nnF {#1} {#2} {
+		\testfail:nn {Strings~not~equal!} {
+			\pretty:x {The~input~token~lists~are:}
+			\pretty:n {#1}
+			\pretty:n {#2}
+		}
+	}
+}
+
+\AtEndDocument{\pretty:n
+	{All~tests~passed!}
+}
