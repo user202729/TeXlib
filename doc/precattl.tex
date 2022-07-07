@@ -1,0 +1,146 @@
+%%! TEX program = lualatex
+\ProvidesFile{precattl.tex} [2022/07/07 v0.0.0 ]
+\documentclass{l3doc}
+\EnableCrossrefs
+\CodelineIndex
+\RecordChanges
+\fvset{gobble=0,tabsize=4,frame=single,numbers=left,numbersep=3pt}
+\usepackage{hyperref}
+\usepackage{csquotes}
+
+%\MakeOuterQuote{"}
+\begin{document}
+\GetFileInfo{\jobname.tex}
+
+\title{\textsf{precattl} --- Prepare special catcodes from token list
+\thanks{This file describes version \fileversion, last revised \filedate.}
+}
+\author{user202729%
+%\thanks{E-mail: (not set)}
+}
+\date{Released \filedate}
+
+\maketitle
+
+\begin{abstract}
+Allow users to write code that contains tokens with unusual catcodes.
+\end{abstract}
+
+\section{Motivation}
+
+This package allows developers to quickly prototype writing code by specifying the exact token list to be executed.
+
+For example, classically if you want to define a space gobbler you would do this
+\begin{verbatim}
+\lowercase{\def\spacegobbler} {}
+\end{verbatim}
+which is equivalent to the token list |\def\spacegobbler|\meta{explicit space token}\verb+{}+.
+
+In such simple cases there's negligible benefit in using this package; nevertheless in some more complex cases such as the following...
+\begin{verbatim}
+\begingroup
+\lccode `?=`_
+\lowercase{
+	\endgroup
+	\peek_analysis_map_inline:n {
+		\expandafter \string #1
+		\peek_analysis_map_break:
+	}
+	\c_begin_group_token ?
+}
+
+\lowercase{\lowercase{\def\twospacegobbler} } {}
+
+\catcode`\^^M\active
+\edef^^M{\string^^M}
+\end{verbatim}
+it would be beneficial to have simpler construct to express the code.
+
+A side benefit is that there's no need to do explicit |\begingroup| ... |\endgroup| (and keep track of when |\endgroup| should be executed),
+and no risk of accidentally pretokenizing the token list/it can be used inside argument of anything.
+
+\section{Limitation}
+
+\begin{itemize}
+	\item There's some performance hit. I think it's about 5 times slower than |\tl_analysis_map_inline:nn| on the same token list.
+
+		Nevertheless this is not a big problem, as it's possible to precompile the token list and include it in the generated \texttt{.sty} file.
+	\item It's not allowed to pass |\outer| tokens into the macro directly; however, generating |\outer| tokens with |\cC| and |\cA| is supported.
+\end{itemize}
+
+
+\section{Syntax}
+
+
+\begin{function}{\precattl_exec:n}
+  \begin{syntax}
+	  \cs{precattl_exec:n} \Arg{token list}
+  \end{syntax}
+  Executes the \Arg{token list} after preprocessing it in the following manner:
+
+  \begin{itemize}
+	  \item |\cC|\Arg{control sequence name} is replaced by that control sequence.
+	  \item |\cFrozenRelax| is replaced with the frozen relax control sequence.
+	  \item |\cA|\Arg{tokens}, |\cO|\Arg{tokens}, etc. are replaced with sequence of tokens with catcode active/other respectively.
+  \end{itemize}
+\end{function}
+  In particular, \Arg{tokens} or \Arg{control sequence name} might consist of normal \enquote{characters} or control sequences.
+  Control sequences will have its csname appended. (nevertheless don't use the null control sequence here)
+
+  The full list of supported catcodes is the same as \pkg{l3regex} package: 
+  |\cB|, |\cE|, |\cM|, |\cT|, |\cP|, |\cU|, |\cD|, |\cS|, |\cL|, |\cO|, |\cA|.
+
+  As an example, the examples above can be executed as following:
+\begin{verbatim}
+\precattl_exec:n {
+	\def\spacegobbler\cS\ {}
+
+	\peek_analysis_map_inline:n {
+		\expandafter \string #1
+		\peek_analysis_map_break:
+	}
+	\c_begin_group_token \cO\_
+
+	\def\twospacegobbler\cS\ \cS\ {}
+
+	\def \cA\^^M {\cO\^^M}
+}
+\end{verbatim}
+More details: the token list following one of the |\c|\meta{character} token might either be a single token, or a braced group. In the latter case their string representation without any |\escapechar| will be concatenated together.
+
+For example:
+
+\begin{itemize}
+	\item |\cL{12~34}| in |\ExplSyntaxOn| mode results in the 5 tokens with catcode letter and char code 1, 2, \meta{space}, 3, 4 respectively.
+	\item |\cO\abc| results in 3 tokens |abc| with catcode other.
+	\item |\cO{\ab\cd\ef}| results in 6 tokens |abcdef|. Note that this is different from the |\detokenized| value (that is, the spaces are removed) even when |\escapechar=-1|.
+	\item |\cC{\ab\cd\ef}| results in the control sequence |\abcdef|.
+	\item |\cO\\| results in a single token with char code |\| and catcode other.
+	\item |\cA\^^M| results in a single token with catcode active and char code 13. (because normal \TeX\ processing rules transform the token |\^^M| to a control sequence with name length = 1 before passing it to the function \cs{precattl_exec:n})
+\end{itemize}
+
+Remark: don't put explicit space token right after a |\cO| or similar. (nevertheless this is nontrivial to trigger because of how \TeX\ works normally)
+
+Warning: a  \verb*|\ | at the end of a line will be interpreted as an escape sequence containing the |\endlinechar|.
+
+
+\begin{function}{\precattlExec}
+\LaTeX2-style synonym for the function above.
+\end{function}
+
+\begin{function}{\precattl_set:Nn}
+  \begin{syntax}
+	  \cs{precattl_set:Nn} \meta{tl var} \Arg{token list}
+  \end{syntax}
+  Same as above, but instead of executing the processed \Arg{token list}, the result is stored into \meta{tl var}.
+
+  Mostly equivalent to |\precattl_exec:n {\tl_set:Nn| \meta{tl var} \Arg{token list}|}|.
+\end{function}
+
+\StopEventually{%
+  \PrintChanges
+  \PrintIndex
+}
+\Finale
+\end{document}
+
