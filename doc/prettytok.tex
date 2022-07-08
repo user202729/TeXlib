@@ -1,10 +1,6 @@
 %! TEX program = lualatex
-\ProvidesFile{prettytok.tex} [2022/05/28 v0.0.0 Pretty-print token lists]
-% yes, this is not dtx
+\ProvidesFile{prettytok.tex} [2022/07/08 v0.0.1 ]
 \documentclass{l3doc}
-%\usepackage[a4paper,margin=25mm,left=50mm,nohead]{geometry}
-%\usepackage[numbered]{hypdoc}
-%\usepackage{\jobname}
 \EnableCrossrefs
 \CodelineIndex
 \RecordChanges
@@ -13,7 +9,7 @@
 \DoNotIndex{\newcommand,\newenvironment}
 
 \title{\textsf{prettytok} --- Pretty-print token lists\thanks{This file
-   describes version \fileversion, last revised \filedate.}
+	describes version \fileversion, last revised \filedate.}
 }
 \author{user202729%
 %\thanks{E-mail: (not set)}
@@ -25,28 +21,75 @@
 \changes{v0.0.0}{2022/05/18}{First public release}
 
 \begin{abstract}
-	Pretty-print token lists.
+Pretty-print token lists to HTML file for debugging purposes.
+Open the file in any browser to view the result.
+
+Can be used to replace |\tl_analysis_show:n|.
 \end{abstract}
 
 \section{Usage}
 
 \subsection{Main function}
 \begin{function}{\pretty:n,\pretty:x,\pretty:o,\pretty:V}
-  \begin{syntax}
-	  \cs{pretty:n} \Arg{token list} \\
-  \end{syntax}
-  Print the content of \meta{token list}.
+	\begin{syntax}
+		\cs{pretty:n} \Arg{token list}
+	\end{syntax}
+	Print the content of \meta{token list}.
 \end{function}
 
 \begin{function}{\pretty:N,\pretty:c}
-  \begin{syntax}
-	  \cs{pretty:N} \meta{token} \\
-	  \cs{pretty:c} \Arg{control sequence name} \\
-  \end{syntax}
-  Print \meta{token}. \\
-  This function is not very useful. Usually it's preferable to use |\pretty:V| to print a token list variable's value,
-  or |\prettyshow:N| to print a control sequence's meaning.
+	\begin{syntax}
+		\cs{pretty:N} \meta{token}
+		\cs{pretty:c} \Arg{control sequence name}
+	\end{syntax}
+	Print \meta{token}.
+
+	This function is not very useful. Usually it's preferable to use |\pretty:V| to print a token list variable's value,
+	or |\prettyshow:N| to print a control sequence's meaning.
 \end{function}
+
+\begin{function}{\prettyinit:}
+	\begin{syntax}
+		\cs{prettyinit:}
+	\end{syntax}
+	Do necessary initialization.
+
+	This should be called right after the package is loaded, after setting the configuration variables described below.
+\end{function}
+
+\subsection{Expandable interface (\LuaTeX\ only)}
+
+\cs{prettyinit:} must be called before calling the functions in this section.
+
+\begin{function}[EXP]{\prettye:n}
+	\begin{syntax}
+		\cs{prettye:n} \Arg{token list}
+	\end{syntax}
+	Print the token list, similar to \cs{pretty:n}, but is fully expandable.
+\end{function}
+
+\begin{function}[EXP]{\prettye:w}
+	\begin{syntax}
+		\cs{prettye:w} \meta{tokens} \cs{prettystop}
+	\end{syntax}
+	Print the tokens until \cs{prettystop} is seen. Useful for inspecting the content of the input stream.
+
+	Note that the input stream will be tokenized and has catcode frozen. Use with care.
+\end{function}
+
+\subsection{Lua programming interface}
+
+\cs{prettyinit:} must also be called before calling the functions in this section.
+
+\begin{function}{prettyprint}
+	\begin{syntax}
+		|prettyprint(|\meta{content}|)|
+	\end{syntax}
+	Print the content, which should be a table of token objects.
+
+	For convenience, you can pass multiple arguments. Strings are also supported.
+\end{function}
+
 
 \subsection{View result}
 
@@ -58,23 +101,16 @@ Note that the HTML file will not be touched if nothing is printed, as such it's 
 Why HTML file?
 
 \begin{itemize}
-	\item Because if the TeX program stops with error / has some error that corrupts the PDF output, the output will even with corrupted more by the debug print.
-	\item Printing to the console is extremely limited (difficult syntax highlighting/scrolling/line wrapping), and most likely cluttered with the traceback/other TeX default output.
-	\item Output to another \TeX\ file to be compiled is a bit absurd, and compiling \TeX\ file takes longer than loading a HTML file.
+	\item If the \TeX\ program stops with error / has some error that corrupts the PDF output, the output will even with corrupted more by the debug print.
+	\item Printing to the console is extremely limited (difficult syntax highlighting/scrolling/line wrapping), and most likely cluttered with the traceback/other \TeX\ default output.
+
+		(nevertheless, there might be plan to support output to console with syntax highlighting later.)
+	\item Output to another \TeX\ file to be compiled works as well; however it's necessary to run another instance of |latexmk| (or other tool used to compile \TeX\ code)
+		and compiling \TeX\ file takes longer than loading a HTML file.
 \end{itemize}
 
-By default, the output refreshes whenever the TeX file is recompiled. The behavior
+By default, the output refreshes whenever the \TeX\ file is recompiled. The behavior
 can be customized with \cs{prettyrefreshstrategy} and \cs{prettyrefreshduration}.
-
-\subsection{\LaTeX2 interface}
-
-
-\begin{function}{\prettyN,\prettyX,\prettyO,\prettyV}
-  \begin{syntax}
-	  \cs{prettyN} \Arg{token list} \\
-  \end{syntax}
-  Alias of the correspondingly-named commands.
-\end{function}
 
 \subsection{Additional functions}
 
@@ -85,30 +121,82 @@ There are also these functions, for convenience.
 		\cs{pretty:nn} \Arg{token list} \Arg{token list}
 		\cs{pretty:nnn} \Arg{token list} \Arg{token list} \Arg{token list}
 	\end{syntax}
-	Print multiple token lists.
+	Print multiple token lists. Its effect is similar to multiple consecutive calls to \cs{pretty:n}.
+\end{function}
+
+\begin{function}[EXP]{\prettye:nn, \prettye:nnn}
+	\begin{syntax}
+		\cs{prettye:nn} \Arg{token list} \Arg{token list}
+		\cs{prettye:nnn} \Arg{token list} \Arg{token list} \Arg{token list}
+	\end{syntax}
+	Similar to multiple consecutive calls to \cs{prettye:n}.
+\end{function}
+
+\begin{function}[EXP]{\prettye:nw, \prettye:nnw}
+	\begin{syntax}
+		\cs{prettye:nw} \Arg{token list} \meta{tokens} \cs{prettystop}
+		\cs{prettye:nnw} \Arg{token list} \Arg{token list} \meta{tokens} \cs{prettystop}
+	\end{syntax}
+	Similar to call(s) to \cs{prettye:n} followed by a call to \cs{prettye:w}.
 \end{function}
 
 \begin{function}{\pretty:w}
 	\begin{syntax}
 		\cs{pretty:w} \meta{token list} \cs{prettystop}
 	\end{syntax}
-	Print the content of \meta{token list}. For now, it must be brace-balanced.
+	Print the content of \meta{token list}.
+
+	Same restriction applies -- the catcode is frozen.
+
+	In addition -- for now, it must be brace-balanced and if \meta{token list} has a surrounding brace group it will be removed. Use \cs{prettye:w} instead if possible.
 \end{function}
 
-\begin{function}{\prettyshow:N}
+\begin{function}[EXP]{\prettystop}
+	\begin{syntax}
+		\cs{prettystop}
+	\end{syntax}
+	Only used as a delimiter for |:w| functions. For convenience, this function is defined to do nothing.
+\end{function}
+
+\begin{function}{\prettyshow:N,\prettyshow:c}
 	\begin{syntax}
 		\cs{prettyshow:N} \meta{token}
+		\cs{prettyshow:c} \Arg{control sequence name}
 	\end{syntax}
 	Show the meaning of a |N|-type argument.
 \end{function}
 
+\subsection{\LaTeXe\ interface}
+
+\begin{function}{\prettyN,\prettyX,\prettyO,\prettyV,\prettyinit,\prettyshowN,\prettyshowC}
+	\begin{syntax}
+		\tn{prettyN} \Arg{token list}
+		\tn{prettyX} \Arg{token list}
+		\tn{prettyO} \Arg{token list}
+		\tn{prettyV} \meta{tl var}
+		\tn{prettyinit}
+		\tn{prettyshowN} \meta{token}
+		\tn{prettyshowC} \Arg{control sequence name}
+	\end{syntax}
+	Alias of the correspondingly-named commands.
+\end{function}
+
+\begin{function}[EXP]{\prettyeN,\prettyeW}
+	\begin{syntax}
+		\cs{prettyeN} \Arg{token list}
+		\cs{prettyeW} \meta{tokens} \cs{prettystop}
+	\end{syntax}
+	Alias of the correspondingly-named commands. Only available in \LuaTeX.
+\end{function}
+
+
 \subsection{Customization}
 
 These variables can be redefined before the
-first call to |\pretty:n| to customize the behavior.
+first call to \cs{pretty:n} or \cs{prettyinit:} to customize the behavior.
 
 \begin{variable}{\prettyfilename}
-	The output file name.  Defaults to |pretty-|\meta{jobname}|.html|, as mentioned above.
+	The output file name. Defaults to |pretty-|\meta{jobname}|.html|, as mentioned above.
 \end{variable}
 
 \begin{variable}{\prettyrefreshstrategy}
@@ -121,18 +209,13 @@ first call to |\pretty:n| to customize the behavior.
 	The duration between two consecutive refresh check, in milliseconds. Defaults to 1000.
 \end{variable}
 
-\begin{variable}{\prettypreamble}
-	The HTML source code preamble. This can be redefined to change styles, but the
-	behavior is not guaranteed.
-\end{variable}
-
 \section{Implementation}
 
 Unfortunately, the implementation is not typesetted in \TeX. Read the |.sty| file.
 
 \StopEventually{^^A
-  \PrintChanges
-  \PrintIndex
+	\PrintChanges
+	\PrintIndex
 }
 
 \Finale

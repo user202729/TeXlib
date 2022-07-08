@@ -61,7 +61,7 @@ end
 local function check_file_opened()
 	-- if it's \relax then get_macro() also returns nil
 	if token.get_macro("pretty_check_already_init:") == nil then
-		error("pretty file not initialized!")
+		error("Output file not initialized!")
 	end
 end
 
