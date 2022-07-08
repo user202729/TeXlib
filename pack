@@ -30,12 +30,23 @@ cat                                       > $target/$a.sty << EOF
 EOF
 cat $a.sty >> $target/$a.sty
 
+allfiles=$a.sty
 
 
 
 
 cd "$(dirname "$0")"
-cp doc/$a.tex $target 2> /dev/null  # if not exist ignore
+cp doc/$a.tex $target 2> /dev/null
+
+# special cases (if file not exist ignore)
+for file in $a.lua ${a}_template.html; do
+	if cp $file $target 2> /dev/null; then
+		allfiles="$allfiles, $file";
+	fi
+done
+
+
+
 
 if false; then
 		if [[ -f $a\_README ]]; then
@@ -78,7 +89,7 @@ This work has the LPPL maintenance status \`maintained'.
 
 The Current Maintainer of this work is user202729.
 
-This work consists of the files $a.sty.
+This work consists of the files $allfiles.
 EOF
 
 
