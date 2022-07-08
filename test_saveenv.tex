@@ -4,15 +4,13 @@
 \usepackage[abspath]{currfile}
 \usepackage{precattl}
 \usepackage{prettytok}
+\prettyinit
 \usepackage{minitest}
 \usepackage{saveenv}
 \usepackage{genvar}
 \AutoGenerateVariants
 \begin{document}
 
-\ExplSyntaxOn
-%\prettyinit:
-\ExplSyntaxOff
 
 
 	\begin{saveenvghost}\data
@@ -78,6 +76,8 @@
 		\cO{123 \^^J}
 		\cO{123}
 	}
+}
+\precattl_exec:n {
 	\assertequal:Vn \datab {
 		\cO{123 \^^J}
 		\cO{123}

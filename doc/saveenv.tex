@@ -1,14 +1,19 @@
 %%! TEX program = lualatex
-\ProvidesFile{saveenv.tex} [2022/07/06 v0.0.0 Save environment content verbatim]
+\ProvidesFile{saveenv.tex} [2022/07/08 v0.0.0 ]
 \documentclass{l3doc}
 \EnableCrossrefs
 \CodelineIndex
 \RecordChanges
+\fvset{gobble=0,tabsize=4,frame=single,numbers=left,numbersep=3pt}
 \usepackage{hyperref}
 \usepackage{csquotes}
+
 %\MakeOuterQuote{"}
 \begin{document}
 \GetFileInfo{\jobname.tex}
+\DoNotIndex{\begin,\end,\detokenize,\ExplSyntaxOn}
+
+\iffalse\ExplSyntaxOff\fi  % (fix some syntax highlighting issue)
 
 \title{\textsf{saveenv} --- Save environment content verbatim
 \thanks{This file describes version \fileversion, last revised \filedate.}
@@ -22,49 +27,90 @@
 
 
 \let\backtick=`
-\MakeShortVerb{`}
+\MakeShortVerb{`}  % something wrong with \DefineShortVerb
 
 \begin{abstract}
-Allow users to grab environment content verbatim.
+Allow users to collect environment content verbatim.
 \end{abstract}
 
-\section{Usage}
-
-\subsection{Comparison to existing similar packages}
-
-\begin{itemize}
-	\item \pkg{scontents} package is similar; however it does not allow programmer to programmatically retrieve the macro content.
-	\item \pkg{fancyvrb} and \pkg{verbatimcopy} provides some internal macro for defining similar environments, however they're internal.
-	\item \pkg{filecontentsdef} provides an similar environment; however it requires \verb+\endlinechar=13+ and does not support \cs{ExplSyntaxOn} environment.
-\end{itemize}
+\section{Motivation}
 
 This package provides tools to create your own verbatim environments, and works in all values of \cs{endlinechar}.
 
-Limitations: This package does not process the content line-by-line. Therefore
+\section{Comparison to existing similar packages}
 
 \begin{itemize}
-	\item There might be larger memory consumption.
-	\item If it's desirable to typeset the content, it's not straightforward to preserve the Sync\TeX\ information.
+	\item \pkg{scontents} package is similar; however it does not allow programmer to programmatically retrieve the macro content, only do a limited number of actions with them (execute, typeset as verbatim code, etc.).
+	\item \pkg{fancyvrb} and \pkg{verbatimcopy} provides some internal macro for defining similar environments, however they're internal.
+	\item \pkg{filecontentsdef} and \pkg{newverbs} provides very similar facilities (\env{filecontentsdefmacro} environment and \tn{Collectverbenv} command respectively); however it requires \verb+\endlinechar=13+ and does not support \cs{ExplSyntaxOn} environment.
+	\item \pkg{verbatim} provides facilities to define custom verbatim environment that processes the content line-by-line, however the interface is more complicated.
+
+		For comparison, the following code
+
+\begin{verbatim}
+\ExplSyntaxOn
+\makeatletter
+\cs_generate_variant:Nn \tl_build_gput_right:Nn {No}
+\NewDocumentEnvironment{}{}{
+	\@bsphack
+
+	\endlinechar=`\^^M ~  \let\do\@makeother \dospecials
+	\@makeother \^^I
+	%\cctab_select:N \c_other_cctab
+	% the above cannot be used, as \verbatim@ relies on
+	% the environment name having letter catcode
+
+	\catcode `\^^M \active
+
+	\tl_build_gbegin:N \__all_data
+	\def\verbatim@processline{
+		\tl_build_gput_right:No \__all_data{\the\verbatim@line ^^J}
+	}
+	\verbatim@
+}{
+	\tl_build_gend:N \__all_data
+	\str_gset:NV \__all_data \__all_data
+
+	% can do something else with \__all_data here
+
+	\@esphack
+}
+\makeatother
+\ExplSyntaxOff
+\end{verbatim}
+
+defines an environment that saves the data similar to \env{saveenv} environment described below (with the overhead of |\tl_build_*| functions),
+but inside \cs{ExplSyntaxOn} environment it generates a spurious space at the beginning of the string.
 \end{itemize}
 
-\subsection{Main environment}
+
+
+\section{Main environment}
+
 \DescribeEnv{saveenv}
   Environment that saves its body.
   
   For example, the following code
 
-		\begin{verbatim}
-		\begin{saveenv}{\data}
-		123
-		456
-		\end{saveenv}
-		\end{verbatim}
+\begin{verbatim}
+\begin{saveenv}{\data}
+123
+456
+\end{saveenv}
+\end{verbatim}
 
 will save the string \texttt{123\meta{newline}456} globally into \cs{data}.
 
-The braces around \verb+{\data}+ is optional; however, in the unlikely case if \cs{endlinechar} has the \enquote{letter} catcode, it might be absorbed.
+The braces around \verb+{\data}+ is optional; however, in the unlikely case if \cs{endlinechar} has the \enquote{letter} catcode, it might be absorbed and gives unexpected result.
 
-A newline is represented as a token with charcode 10 (\verb+^^J+) and catcode other.
+A newline is represented as a token with charcode 10 (|^^J|) and catcode other.
+
+\textbf{Note} that this is unusual, for comparison \pkg{filecontentsdef} stores it as an active |^^M|.
+
+In the current implementation, it can be used in functions such as \cs{iow_now:Nn} and newline characters will appear as newline.
+(the number 10 is hard coded in the implementation of |\iow_now:Nn|,
+nevertheless I'm not sure if this behavior is guaranteed. Manually replacing them with |\iow_newline:| tokens and |x|-expand the result
+would be guaranteed to work)
 
 The assignment is global, and done before the macro \cs{endsaveenv} is executed.
 
@@ -75,13 +121,15 @@ In other words, the token list is equal to its own \cs{detokenize}.
 \DescribeEnv{saveenvghost}
 Similar to above; however the content inside is still typesetted/executed, and the Sync\TeX\ information is preserved.
 
+Note that this environment is implemented by reading the whole file from the beginning, therefore there might be some performance hit for large files and multiple usages of the environment. Use sparingly.
+
 \DescribeEnv{saveenvkeeplast}
 Similar to above; however the final newline and the space characters before \texttt{\cs{end}\{\meta{environment name}\}} are preserved.
 
 For example, the example above with \texttt{saveenv} replaced with \texttt{saveenvkeeplast}
 will save the string \texttt{123\meta{newline}456\meta{newline}} into \cs{data} instead.
 
-\subsection{Extending the environments}
+\section{Extending the environments}
 
 All of the environments are extensible.
 
@@ -89,22 +137,37 @@ Follow the instruction in \url{https://tex.stackexchange.com/q/14683/250119} to 
 
 For example, the following definition
 
-		\begin{verbatim}
-		\ExplSyntaxOn
-		\NewDocumentEnvironment{custom}{}{
-			\saveenv \data
-		}{
-			\endsaveenv
-			% the user may want to modify \data here
-		}
-		\end{verbatim}
-will define an environment \env{custom} that wraps \env{saveenv}.
+\begin{verbatim}
+\ExplSyntaxOn
+\NewDocumentEnvironment{custom}{}{
+	\saveenv \data
+}{
+	\endsaveenv
+	\tl_show:N \data
+}
+\end{verbatim}
+will define an environment \env{custom} that prints out the content inside the environment using |\tl_show:N|.
 
-\subsection{Common issues}
+\section{Limitation}
 
 \begin{itemize}
-	\item The \cs{endlinechar} must not be tokenized in advance. This might happen when for example your environment looks ahead for optional argument.
-		See \url{https://tex.stackexchange.com/q/649331/250119} for an example.
+	\item This package does not process the content line-by-line. Therefore:
+		\begin{itemize}
+			\item The memory consumption might be larger than approaches that process the content line-by-line, in case you only need to do something with the line.
+
+				Nevertheless, in modern computers, the overhead is negligible.
+			\item In case it's desired to typeset the content afterwards, it's difficult to preserve the Sync\TeX\ data.
+		\end{itemize}
+		
+	\item Currently nested environments with the same name are not supported (unlike \pkg{scontents} package).
+
+	\item Note that there must be nothing after the \texttt{\cs{begin}\{\meta{environment name}\}} or the \texttt{\cs{end}\{\meta{environment name}\}} line.
+
+	\item Note that \texttt{\cs{end}\{\meta{environment name}\}} must not be in the middle of any line.
+
+	\item The \cs{endlinechar} must not be tokenized in advance (or if it is, its catcode must be 12/other).
+		This might happen when for example your environment looks ahead for optional argument.
+		See \url{https://tex.stackexchange.com/q/649331/250119} for an example and one way how to fix it.
 
 		Alternatively, you can 
 		\begin{itemize}
@@ -113,8 +176,6 @@ will define an environment \env{custom} that wraps \env{saveenv}.
 			\item (optional) reset the value of \cs{endlinechar} afterwards.
 				
 		\end{itemize}
-
-	\item Note that there must be nothing after the \texttt{\cs{begin}\{\meta{environment name}\}} or the \texttt{\cs{end}\{\meta{environment name}\}} line.
 \end{itemize}
 
 
