@@ -1,4 +1,4 @@
-\ProvidesExplPackage{rescansync}{2022/03/27}{0.0.0}{Re-scan tokens with synctex information}
+\ProvidesExplPackage{rescansync}{2022/07/09}{0.0.0}{Re-scan tokens with synctex information}
 
 \cs_generate_variant:Nn \regex_replace_all:nnN {nxN}
 \cs_generate_variant:Nn \tl_replace_all:Nnn {Nxn}
@@ -28,8 +28,7 @@
 
 %\let \rescansyncTMPfixsync \undefined
 
-\def \_RS_count {0}
-\edef \_RS_tab_tl {\char_generate:nn {`\^^I} {12}}
+\tl_gset:Nn \_RS_count {0}
 \edef \_RS_j_tl {\char_generate:nn {`\^^J} {12}}
 
 \iow_new:N \_RS_file
@@ -44,14 +43,14 @@
 % NOTE: because filecontentsdef make character >= 128 in pdftex active character and
 % they cannot be \write safely, we detokenize it then replace ^^M later.
 \cs_new_protected:Npn \rescansync:nnnn #1 #2 #3 #4 {
-	\tl_set:Nx \_RS_count {\int_eval:n {\_RS_count+1}}
+	\tl_gset:Nx \_RS_count {\int_eval:n {\_RS_count+1}}
 	\tl_set:Nx \_RS_filename {RS\_RS_count-#3}
 
-	\begingroup
+	\begingroup  % will be closed by the active `~` later
 		\iow_open:Nn \_RS_file {\_RS_filename}
 
 		\iow_now:Nx \_RS_file {
-			% print some initial %... first
+			% print some initial padding newlines first
 			\prg_replicate:nV {#2} \_RS_j_tl
 
 			% prepend some content to the start of the line...
@@ -64,7 +63,7 @@
 
 		\iow_close:N \_RS_file
 
-		\int_step_inline:nnn {33} {127} {\catcode ##1=11~}  % set all to letter
+		\int_step_inline:nnn {33} {125} {\catcode ##1=11~}  % set all to letter
 		\catcode `\~ \active
 		\catcode `\\ 0
 		\catcode `\{ 1
@@ -88,10 +87,13 @@
 	\cs_if_free:NT \saveenv {
 		\msg_error:nn {rescansync} {saveenv-package-not-loaded}
 	}
+	\cs_if_free:NT \currfilename {
+		\msg_error:nn {rescansync} {currfile-package-not-loaded}
+	}
 	\saveenv \_RS_body
 } {
 	\endsaveenv
-	\global\edef #1 { {\_RS_body} {\_RS_lineno} {\jobname} }
+	\global\edef #1 { {\_RS_body} {\_RS_lineno} {\currfilename} }
 	%\pretty:V #1
 }
 
@@ -100,10 +102,13 @@
 	\cs_if_free:NT \saveenv {
 		\msg_error:nn {rescansync} {saveenv-package-not-loaded}
 	}
+	\cs_if_free:NT \currfilename {
+		\msg_error:nn {rescansync} {currfile-package-not-loaded}
+	}
 	\saveenvghost \_RS_body
 } {
 	\endsaveenvghost
-	\global\edef #1 { {\_RS_body} {\_RS_lineno} {\jobname} }
+	\global\edef #1 { {\_RS_body} {\_RS_lineno} {\currfilename} }
 	%\pretty:V #1
 }
 
