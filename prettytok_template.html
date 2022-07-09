@@ -37,10 +37,9 @@ iframe{
 
 .tokenlist, .fileline{
 	border: 1px solid gray;
-	overflow: scroll;
-	white-space: nowrap;
+  padding: 2px;
+  line-height: 1.5em;
 }
-.tokenlist::-webkit-scrollbar, .fileline::-webkit-scrollbar { width: 0 !important }
 
 .fileline{
 	background-color: #404040;
@@ -56,12 +55,6 @@ iframe{
 
 .cs, .active_char{
 	color: #FFFF00;
-}
-.cs::before{
-	content: "\\";
-}
-.cs::after{
-	content: " ";
 }
 
 #popup{
@@ -132,7 +125,9 @@ function print_tl(...tokens){
 		tl_div.appendChild(token)
 		if({13: true, 10: true}[token.data_charcode]){
 			tl_div.appendChild(document.createElement("br"))
-		}
+    }else{
+      tl_div.appendChild(document.createElement("wbr"))
+    }
 	}
 	output.appendChild(tl_div)
 }
@@ -170,7 +165,7 @@ function cs(...codepoints){
 	const control_sequence_name=String.fromCodePoint(...codepoints)
 	//const meaning_str=readstr()
 
-	token_span.innerText=show_html(control_sequence_name)
+	token_span.innerText='\\' + show_html(control_sequence_name) + ' '
 	//token_span.title=`cs '${control_sequence_name}' → ${meaning_str}`
 	token_span.className="cs"
 
