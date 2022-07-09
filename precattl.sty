@@ -186,10 +186,12 @@
 \def \_precattldo_special_cS #1 { \str_map_inline:nn {#1} { \_precattlappend_space {`##1} } }
 \def \_precattldo_special_cL #1 { \str_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {`##1} {11}} } }
 \def \_precattldo_special_cO #1 { \str_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {`##1} {12}} } }
+\def \_precattldo_special_cStr #1 { \EI_append:n {#1} }
 \def \_precattldo_special_cA #1 { \str_map_inline:nn {#1} {
 	%\exp_args:No \EI_append:o {\char_generate:nn {`##1} {13}}
 	\EI_append_raw:n {\expandafter \expandafter \expandafter \noexpand \char_generate:nn {`##1} {13}}  % handle outer token
 } }
+
 
 
 
@@ -222,6 +224,7 @@
 \def \_precattldo_special_cS_outer { \_precattldo_special\_precattldo_special_cS }
 \def \_precattldo_special_cL_outer { \_precattldo_special\_precattldo_special_cL }
 \def \_precattldo_special_cO_outer { \_precattldo_special\_precattldo_special_cO }
+\def \_precattldo_special_cStr_outer { \_precattldo_special\_precattldo_special_cStr }
 \def \_precattldo_special_cA_outer { \_precattldo_special\_precattldo_special_cA }
 
 \def \_precattl_tmp_help #1 {
@@ -248,6 +251,7 @@
 		\def \EIhandler_cS { \EI_collect_arg:Nn \_precattldo_special_cS_outer 1 }
 		\def \EIhandler_cL { \EI_collect_arg:Nn \_precattldo_special_cL_outer 1 }
 		\def \EIhandler_cO { \EI_collect_arg:Nn \_precattldo_special_cO_outer 1 }
+		\def \EIhandler_cStr { \EI_collect_arg:Nn \_precattldo_special_cStr_outer 1 }
 		\def \EIhandler_cA { \EI_collect_arg:Nn \_precattldo_special_cA_outer 1 }
 		\let \EIhandler_cFrozenRelax \_precattl_do_frozen_relax
 		\execinside_gset:Nn \_precattlvalueg {#1}
