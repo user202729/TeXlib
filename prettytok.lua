@@ -67,7 +67,7 @@ end
 
 local function get_file_number()
 	check_file_opened()
-	return token.get_mode(token.create("__prettyh_file"))
+	return token.get_mode(token.create("_prettytok_file"))
 end
 
 function prettyprint(...)
