@@ -126,7 +126,7 @@
 
 % used in the \texconditional macro below
 % example: \if<some TeX conditional> ... \use_ii_to_i:w \fi \use_ii:nn → can be used as a conditional
-\def \use_ii_to_i:w \fi \use_ii:nn { \fi \use_i:nn }
+\odef \use_ii_to_i:w \fi \use_ii:nn { \fi \use_i:nn }
 
 % usage: for example \def \testEqualToken:TF #1 #2 { \texconditional {\ifx #1 #2} }
 % \texconditional { <TeX conditional expression> } is a <condition> suitable for argument of \conditional{...}

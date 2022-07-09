@@ -21,7 +21,7 @@
 	\return  { \texconditional { \ifnum 0 > \escapechar } }
 }
 
-\addlinemarker {} !
+\begin{addlinemarkerenv}
 \precattl_exec:n {
 
 % initially there's some token in front of the input stream, either some character cat other, or blank space cat 10
@@ -30,98 +30,15 @@
 	\putnext{\meaning} \expandonce
 	\matchrm{#\firstchar}
 	\texconditional{\if b #\firstchar}{
-		\matchrm{\cO{lank}~\cO{space}~} \matchrm{~}
+		\matchrm{\cStr{lank~space~}~}
 	}{
-		\matchrm{\cO{he}~\cO{character}~#1}
+		\matchrm{\cStr{he~character}~#1}
 	}
 }
 
-}!
-
-\use_none:n{{{
+}
 
 
-% usage: \checkouter { ... }
-% must start with a {.
-% will eventually execute \pretty{true} or \pretty{false} depends on whether or not there is an outer macro there.
-\rdeflinenumbered\checkouter {}!
-
-	% first remove the initial { token
-	\putnext{\string} \expandonce  \matchrm{#\first_lbrace_stringified}
-
-	\assignc #\degree{1}
-	\assignc #\tokennumber{0}  % an arbitrary number that is incremented every time a token is processed by this algorithm
-	\while {
-		\assignoo #\degree_as_number {\cs_to_str:N \degree}
-	}{
-		\texconditional{\ifnum 0=#\degree_as_number~}
-	}{
-		\putnext{\meaning} \expandonce
-
-		\matchrm{#\firstchar}
-
-		% check if it's "begin-group character"
-		\texconditional{\if b #\firstchar}{
-			\matchrm{#\secondchar}
-			\texconditional{\if e #\secondchar}{
-				\matchrm{#\thirdchar}
-				\texconditional{\if g #\thirdchar}{
-					% okay, is begin-group character
-					\assignc #\degree{\the\numexpr\cs_to_str:N#\degree+1}
-					\matchrm{in-group~character~}
-					\rcall {\remove_next_stringified_character}
-				}{
-				}
-			}{
-			}
-		}{
-			% check if it's "end-group character"
-			\matchrm{#\secondchar}
-			\texconditional{\if n #\secondchar}{
-				\matchrm{#\thirdchar}
-				\texconditional{\if d #\thirdchar}{
-					% problem: it might be just "\end" (escapechar=-1|32) followed by an outer token.
-					% Need to \meaning the next token to tell?
-
-					\putnext{\meaning} \expandonce
-					% now the following might be "the character -" or some outer token, or even { / } etc.
-
-					\assignc #\degree{\the\numexpr\cs_to_str:N#\degree-1}
-					\matchrm{group~character~}
-					\rcall {\remove_next_stringified_character}
-				}{
-				}
-			}{
-			}
-			
-		}
-
-
-
-	}
-
-	% finally done, degree=0 now
-!
-
-
-}}}
-
-
-\makeatletter
-\zdeflinenumbered \debug {} !
-	\putnextwithexpand {
-		\begingroup
-		\escapechar=-1~
-		*
-		\pretty:n { \meaning \noexpand \@@end }
-		\endgroup
-	} {
-		\onlabel * \expandat \noexpand
-		\onlabel * \expandat \meaning
-	}
-!
-
-\addlinemarker {} !
 \precattl_exec:n{
 
 
@@ -131,16 +48,17 @@
 % it will replace each character in the previous tokens with a dot (.) until the A is seen
 % the time complexity of this algorithm is linear instead of the usual quadratic (at the cost of linear \romannumeral recursion depth)
 % see examples/tests below
+% note that the newly-put A is letter instead of other catcode
 \rdef \stringify_until_A {
 	\putnext{\string} \expandonce
 
 	% the following token might either be some character or blank space, need to be careful
 	\putnext{\meaning} \expandonce
 	\matchrm{#\firstchar}
-	\texconditional{\ifx #\firstchar b} {
-		\matchrm{lank~space\cS{\ \ }}  % TODO merge two matchrm into one
+	\texconditional{\ifx #\firstchar \cO{b}} {
+		\matchrm{\cStr{lank~space~}~}  % TODO optimizer should be able to merge two matchrm into one
 	}{
-		\matchrm{\cO{he}~\cO{character}~#1}
+		\matchrm{\cStr{he~character}~#1}
 		\texconditional{\ifx #1 \cO{A}}{
 			\putnext{A}
 			\return{}
@@ -209,11 +127,27 @@
 }
 
 
+% usage: \stringify_remove_next_repeated_count {<X tokens>}
+% stringify-remove that many following tokens
+\rdef \stringify_remove_next_repeated_count #\count {
+	\assignr #\stringify_remove_next_repeated_seq {\replicate {#\count} \stringify_remove_next_repeated}
+	\putnext {\romannumeral #\stringify_remove_next_repeated_seq \exp_end:}
+	\expandonce
+}
+
+
 % same as above, but does not stringify or check for space, just remove the next item
 \rdef \remove_next_repeated {
 	\rcall{}  % call the following, same as above
 	% then remove one remaining item
 	\matchrm{#1}
+}
+
+% similar to \stringify_remove_next_repeated_count but does not do the stringify part
+\rdef \remove_next_repeated_count #\count {
+	\assignr #\remove_next_repeated_seq {\replicate {#\count} \remove_next_repeated}
+	\putnext {\romannumeral #\remove_next_repeated_seq \exp_end:}
+	\expandonce
 }
 
 % usage: r-expansion of \exp_forward \exp_forward \exp_forward \exp_forward ⟨token list⟩
@@ -231,81 +165,208 @@
 }
 
 
+\rdef \r_function_do_nothing {}
+
+\rdef \r_function_meaning_noexpand {
+	\putnext {\noexpand} \expandonce
+	\putnext {\meaning} \expandonce
+}
+
+\rdef \r_function_meaning {
+	\putnext {\meaning} \expandonce
+}
+
+% this function must be followed with a N-type.
+% It will \meaning that token, and add a token `1` if and only if the nexttoken is outer.
+% See tests below to understand more clearly.
+\rdef \check_outer_aux {
+	\putnext {\noexpand} \expandonce
+	\matchrm {#\dangeroustoken}
+	\putnext {\expandafter { \meaning #\dangeroustoken }}
+	\expandonce
+	\matchrm {#\the_meaning}
+	\putnext {#\the_meaning}
+
+	% okay it's easy now
+	\assignoperate #\tmp {#\the_meaning \cO{macro:}\relax} {
+		\matchrm {#1\cO{macro:}#2\relax}
+		\putnext {{#1} {#2}}
+	}
+	\putnext {#\tmp} \matchrm {#1 #2}
+
+
+	\conditional{\ifempty_simple{#2}}{
+		% case 1, "macro:" string does not appear in its definition, then #2 is empty, it must not be \outer
+	}{
+		% case 2, "macro:" string does appear in its definition
+		% problem: according to https://tex.stackexchange.com/questions/10090/every-possible-meaning-that-a-token-can-have it might be a something-mark
+		% check if the string "mark" appear in #1
+		% for a real macro it can only be \protected\long\outer, where \ can be any character (escapechar). Either way `mark` will not appear
+		\assignoperate #\tmp {#1 \cO{mark}} { \matchrm {#_ \cO{mark}} }
+		\conditional{\ifempty_simple{#\tmp}}{
+			% good, "mark" does not appear in #1
+			% now check if "outer" appear in #1. If it does this is definitely an outer token
+			\assignoperate #\tmp {#1 \cO{outer}} {
+				\matchrm {#_ \cO{outer}}
+			}
+			\conditional{\ifempty_simple{#\tmp}}{
+			}{
+				% it is outer
+				\return{1}
+			}
+		}{}
+	}
+}
+
 % count the length of the concatenated string representation of all tokens in the o-expansion of #container
+%   after #\initial_removable first characters are stringify-removed,
+%   then #\preprocess (a r-function) is applied,
+%   then #\known_removable next characters are stringify-removed.
+
+% this is pretty complex, see tests below to understand more clearly.
+
 % the time complexity of this one is quadratic, I think (although it could be linear if there's only one A appear in the token list)
 
-% #\known_removable is a sequence of X \exp_forward tokens, that represents if X \stringify_remove_next_repeated operations are applied on #container, it will remain nonempty
-
-\rdef \count_string_len #\container #\known_removable {
+\rdef \count_string_len #\container #\initial_removable #\preprocess #\known_removable {
 	\assertisNtype #\container
+	\assertisNtype #\preprocess
+	\assertisExpforwardchain #\known_removable
+	\assertisExpforwardchain #\initial_removable
 
 	\putnext {#\container A}
-	\rcall {#\known_removable \exp_forward_end} \matchrm{#\known_removable \exp_forward_end}
+	\expandonce
 	% input stream → ⟨dangerous tokens⟩ A
 
-	\assignr #\stringify_remove_next_repeated_seq {\replicate {#\dots} \stringify_remove_next_repeated}
-	\rcall {#\known_removable \exp_forward_end} \matchrm{#\known_removable \exp_forward_end}
+	\rcall {\stringify_remove_next_repeated_count {#\initial_removable}}
+	\rcall {#\preprocess}
+	\rcall {\stringify_remove_next_repeated_count {#\known_removable}}
 	% input stream → ⟨dangerous tokens after first X tokens removed, might be empty⟩ A
 
 
-	% call \stringify_until_A
-	\rcall {#\known_removable \exp_forward_end \stringify_until_A} \matchrm{#\known_removable \exp_forward_end}
+	\rcall {\stringify_until_A}
 	% now the following in the input stream is either `.........A` or `.........A ⟨remaining potentially dangerous tokens⟩ A`
 
-	\matchrm{#\dots A}
+	\matchrm{#\new_removable A}
 
-	% convert each dot to a \exp_forward
-	\assignr #\dots {\replicate {#\dots} \exp_forward}
+	% now, more is known to be removable.
+	\assignr #\new_removable {\replicate {#\new_removable} \exp_forward}
+	\assertisExpforwardchain #\new_removable
 
 	% then, put ⟨the tokens⟩ B forward in the token list
 	\putnext {#\container B}
-	\rcall {#\dots \exp_forward_end} \matchrm{#\dots \exp_forward_end}   % each line of this is equivalent to a expandonce, but we can't do that directly because of #\dots
-
+	\expandonce
 
 	% → ⟨potentially dangerous tokens⟩ B ⟨remaining potentially dangerous tokens⟩ A
 
+	\rcall {\stringify_remove_next_repeated_count {#\initial_removable}}
+	\rcall {#\preprocess}
+	\rcall {\stringify_remove_next_repeated_count {#\known_removable #\new_removable}}
 
-	% now we remove ⟨count⟩ of first following characters using \stringify_remove_next_repeated, then check if the following token is A or B
-	\assignr #\stringify_remove_next_repeated_seq {\replicate {#\dots} \stringify_remove_next_repeated}
-
-	\putnext {#\stringify_remove_next_repeated_seq}
-	\rcall {#\dots \exp_forward_end} \matchrm{#\dots \exp_forward_end}
-
-	\putnext {\string}
-	\rcall {#\dots \exp_forward_end} \matchrm{#\dots \exp_forward_end}
-
+	\putnext {\string} \expandonce
 	% input stream becomes →
 	%   A ⟨potentially dangerous tokens⟩ B ⟨potentially dangerous tokens⟩ A
 	%   or
 	%   B
 
-	\matchrm{#1}
+	\matchrm{#1}  % A or B
 	\texconditional{\ifx #1 \cO{A}} {
 		% not good, need to keep working
+		\assignr #\remaining_len {\count_string_len #\container {#\initial_removable} #\preprocess {#\known_removable #\new_removable \exp_forward}}
+		\assertisExpforwardchain #\remaining_len
+
+		% now we know #\remaining_len, and following in the input stream is
+		% ⟨remaining_len characters after stringified⟩ B ⟨remaining_len characters after stringified⟩ A
+		% need to remove #\remaining_len × 2 + 2 characters
+		\rcall {\stringify_remove_next_repeated_count {#\remaining_len #\remaining_len \exp_forward \exp_forward}}
+		\return {#\new_removable \exp_forward #\remaining_len}
 	} {
 		% okay, this is the result
+		\return {#\new_removable}
 	}
+}
 
-	
+% there should be no \relax and no TeX primitive inside #\tokens
+\zdef \ifempty_simple #\tokens {\return{
+	\ifx \relax #\tokens \relax
+		\expandafter \use_i:nn  % blank, return true
+	\else
+		\expandafter \use_ii:nn  % not blank, return false
+	\fi
+}}
+
+% the reverse of the above, for a bit more efficiency
+\zdef \ifnotempty_simple #\tokens {\return{
+	\ifx \relax #\tokens \relax
+		\expandafter \use_ii:nn  % blank, return false
+	\else
+		\expandafter \use_i:nn  % not blank, return true
+	\fi
+}}
+
+% check if #\a and #\b has same number of tokens
+% linear time (the best you can hope given this input format...)
+% only work with some kinds of tokens (e.g. \exp_forward which is the one being used in all the code below anyway)
+\zdef \iflenequal_simple #\a #\b {
+	\putnext {#\a ? #\b +}
+	\rcall{\remove_next_repeated_count {#\b}}  % we can see that this will never touch the +
+	\matchrm{ #\nexttoken #\skip +}  % here #\nexttoken is ? if and only if the two token lists are equal in length. Remember to clean up the input stream
+	\return {\texconditional {\ifx #\nexttoken ?}}
+}
+
+\zdef \if_outer #\container {
+	\assertisNtype #\container
+	\assignr #\string_len { \count_string_len #\container {} \r_function_do_nothing {} }  % ← this is a \exp_forward chain
+
+	% loop counter = string_len-1 down to 0 here
+	\assign #\counter {#\string_len}
+	\while
+	{
+		\assignoperate #\counter {#\counter} {\matchrm{#1}}  % decrease by 1
+
+		\assignr #\parta {\count_string_len #\container {#\counter} \r_function_meaning_noexpand {}}
+		\assignr #\partb {\count_string_len #\container {#\counter} \r_function_meaning {}}
+		\conditional {\iflenequal_simple {#\parta} {#\partb}} {
+		}
+		{
+			% only in this case it might be a outer token (and it definitely is N-type)
+			\assignr #\parta {\count_string_len #\container {#\counter} \check_outer_aux {}}
+			\conditional {\iflenequal_simple {#\parta} {#\partb}} {
+			}{
+				% if they're not equal, a `0` token is inserted which means it's outer
+				\return {\use_i:nn}
+			}
+		}
+	}{
+		\ifnotempty_simple {#\counter}
+	}{}
+
+	\return {\use_ii:nn}
 }
 
 }
+\end{addlinemarkerenv}
+
+\makeatletter
+\rdeflinenumbered \debug {} !
+\matchrm {12}
+\matchrm {34}
 !
-
-
-
 
 \directlua{optimize_pending_definitions()}
 \directlua{debug_rdef()}
-\directlua{debug_rdef2()}
+\directlua{print_tlrepr()}
 \directlua{execute_pending_definitions()}
 
-%\debug
+%\pretty:o {\romannumeral \debug 12~34 end}
+
+
+
 
 % test for \stringify_until_A
 \precattl_exec:n{
 \assertequal:on {\romannumeral \stringify_until_A abcAdef} {...Adef}
 \assertequal:on {\romannumeral \stringify_until_A abc\xxAyy def} {......A\cO{yy}def}  % inside string representation of other token
+\assertequal:on {\romannumeral \stringify_until_A \cS{\ \ \ }Adef} {...Adef}  % can handle space
 \begingroup
 \escapechar=-1~
 \assertequal:on {\romannumeral \stringify_until_A abc\xxAyy def} {.....A\cO{yy}def}  % one shorter if escapechar empty
@@ -316,10 +377,20 @@
 \assertequal:on {\romannumeral \stringify_remove_next_repeated \stringify_remove_next_repeated \stringify_remove_next_repeated \exp_end: 1~2456} {456}
 \assertequal:on {\romannumeral \stringify_remove_next_repeated \stringify_remove_next_repeated \stringify_remove_next_repeated \exp_end: \abcdef ghi} {\cO{cdef} ghi}
 
+% test for \stringify_remove_next_repeated_count
+\assertequal:on {\romannumeral \stringify_remove_next_repeated_count {...} \abcdef ghi} {\cO{cdef} ghi}
+\assertequal:on {\romannumeral \stringify_remove_next_repeated_count {...} 1~2456} {456}
+\assertequal:on {\romannumeral \stringify_remove_next_repeated_count {...} 124~56} {~56}
+
 % test for \remove_next_repeated
 \assertequal:on {\romannumeral \remove_next_repeated \remove_next_repeated \remove_next_repeated \exp_end: \abcdef ghi} {i}
 \assertequal:on {\romannumeral \remove_next_repeated \remove_next_repeated \remove_next_repeated \exp_end: 1~2456} {56}
 \assertequal:on {\romannumeral \remove_next_repeated \remove_next_repeated \remove_next_repeated \exp_end: 124~56} {~56}
+
+% test for \remove_next_repeated_count
+\assertequal:on {\romannumeral \remove_next_repeated_count {...} \abcdef ghi} {i}
+\assertequal:on {\romannumeral \remove_next_repeated_count {...} 1~2456} {56}
+\assertequal:on {\romannumeral \remove_next_repeated_count {...} 124~56} {~56}
 
 % test for \replicate
 \assertequal:on {\romannumeral \replicate {...}{\relax}} {\relax\relax\relax}
@@ -337,7 +408,107 @@
 
 }
 
+\precattl_exec:n {
+% test for \count_string_len
+\begingroup
+\tl_set:Nn \__a {12 \cS\ \cS\ 34\__outerexample{\cA\x}\outer ABABA \__outerexample B \__outerexample}
+% |12  34\__outerexample{x}\outerABABA\__outerexampleB\__outerexample|
+\outer\def \__outerexample{}
+\outer\def \cA\x{}
+\assertequal:xn {\tl_count:o {\romannumeral \count_string_len \__a {} \r_function_do_nothing {}}} {66}
+\endgroup
+}
 
+\precattl_exec:n {
+% weird space
+\tl_set:Nn \__a {\cS\a}
+\assertequal:xn {\tl_count:o {\romannumeral \count_string_len \__a {} \r_function_do_nothing {}}} {1}
+
+\tl_set:Nn \__a {\cS\ }
+\assertequal:xn {\tl_count:o {\romannumeral \count_string_len \__a {} \r_function_do_nothing {}}} {1}
+
+% weird char code for braces
+\tl_set:Nn \__a {\cB\a\cE\ }
+\assertequal:xn {\tl_count:o {\romannumeral \count_string_len \__a {} \r_function_do_nothing {}}} {2}
+}
+
+\precattl_exec:n {
+\tl_set:Nn \__a {\cB\ \cE\a}
+\assertequal:xn {\tl_count:o {\romannumeral \count_string_len \__a {} \r_function_do_nothing {}}} {2}
+}
+
+\precattl_exec:n {
+\tl_set:Nn \__a {\cB\ \cE\ }
+\assertequal:xn {\tl_count:o {\romannumeral \count_string_len \__a {} \r_function_do_nothing {}}} {2}
+}
+
+\precattl_exec:n {
+% only return the not known-removable part
+\assertequal:xn {\tl_count:o {\romannumeral \count_string_len \__a {} \r_function_do_nothing {\exp_forward}}} {1}
+\assertequal:xn {\tl_count:o {\romannumeral \count_string_len \__a {} \r_function_do_nothing {\exp_forward \exp_forward}}} {0}
+
+}
+
+
+
+\precattl_exec:n {
+	% test for \check_outer_aux
+	\begingroup
+	\assertequal:on {\romannumeral \check_outer_aux abc} {\cStr{the~letter~a}bc}
+
+	\def\__a {}
+	\assertequal:on {\romannumeral \check_outer_aux \__a bc} {\cStr{macro:->}bc}
+
+	\outer\def\__a {}
+	\expandafter \assertequal:nn \expandafter {\romannumeral \check_outer_aux \__a bc} {1\cStr{\\outer~macro:->}bc}
+
+	\long\outer\def\__a {}
+	\expandafter \assertequal:nn \expandafter {\romannumeral \check_outer_aux \__a bc} {1\cStr{\\long\\outer~macro:->}bc}
+
+	\long\outer\def\cA\x {}
+	\expandafter \assertequal:nn \expandafter {\romannumeral \check_outer_aux \cA\x bc} {1\cStr{\\long\\outer~macro:->}bc}
+	\endgroup
+}
+
+
+\precattl_exec:n {
+	% finally, test for \if_outer
+	\begingroup
+
+	\def \__a { \__dangerous }
+	\def \__b { \__dangerous \__dangerous }
+	\def \__c { \cA\x }
+	\def \__d { \cA\x \__dangerous }
+	\def \__e { safe { safe \__dangerous safe } safe }
+	\outer\def \__dangerous {}
+	\outer\def \cA\x {}
+
+	\if_outer \__a {} {\testfail:}
+	\if_outer \__b {} {\testfail:}
+	\if_outer \__c {} {\testfail:}
+	\if_outer \__d {} {\testfail:}
+	\if_outer \__e {} {\testfail:}
+
+
+	\endgroup
+
+	% these does not contain any outer tokens
+	\def \__a {\outer\cStr{~macro:->}}
+	\if_outer \__a {\testfail:n{1}}{}
+
+	\def \__a {\cStr{\\outer~macro:->}}
+	\if_outer \__a {\testfail:n{2}}{}
+
+	\def \__b {\cStr{}}
+	\def \__a {\__b}
+	\if_outer \__a {\testfail:n{3}}{}
+
+	\def \__b \cStr{\\outer~macro:->} {}  % the "outer macro" string appears in the param text instead of the replacement text
+	\def \__a {\__b}
+	\if_outer \__a {\testfail:n{4}}{}
+
+	% didn't test with the marks however
+}
 
 
 

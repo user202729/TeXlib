@@ -12,7 +12,7 @@ local function getvarsraw(tokenlist)  -- for example if tokenlist='#x 123 #y' re
 	for i=1, #tokenlist-1 do  -- if the last one is mac_param then just assume it's trailing # for match-until-'{'
 		local v=tokenlist[i]
 		if is_paramsign(v) then
-			result[tokenlist[i+1].tok]=true
+			result[tokenlist[i+1].tok]=argtype.normal
 		end
 	end
 	return result
@@ -25,7 +25,7 @@ end
 local function namedef_to_macrodef(paramtext, replacementtext, statement)
 	-- paramtext&replacementtext are tokenlists
 	-- operate in-place.
-	-- return a "param_tag" table which is ([1] → true|Ntypemark, [2] → true|Ntypemark, etc.)
+	-- return a "param_tag" table which is ([1] → argtype.normal|argtype.Ntype, [2] → argtype.normal|argtype.Ntype, etc.)
 	--
 	-- note that it's copied from statement.need, so some fields might be nil
 	-- (e.g. new vars created by matchrm)
@@ -42,7 +42,7 @@ local function namedef_to_macrodef(paramtext, replacementtext, statement)
 			local t=token.create(48+used, 12)
 			assert(not is_paramsign(paramtext[i+1]))
 			tok_to_number_token[paramtext[i+1].tok]=t
-			param_tag[used]=statement.need[paramtext[i+1].tok]  -- might be nil
+			param_tag[used]=statement.need[paramtext[i+1].tok] or argtype.normal
 			paramtext[i+1]=t
 		end
 	end
@@ -235,8 +235,7 @@ local generic_compile_code  -- function, will define later
 local function param_from_need(needsequence)  -- takes tokenfromtok implicitly
 	local t={}
 	for _, kv in ipairs(needsequence) do
-		t[#t+1]=paramsign
-		t[#t+1]=tokenfromtok(kv[1])
+		appendto(t, kv[2].paramtext(tokenfromtok(kv[1])))
 	end
 	return t
 end
@@ -250,11 +249,7 @@ end
 local function standard_nextvalue(next_statement)
 	local nextvalue={}
 	for k, v in pairs(next_statement.need) do
-		if v==Ntypemark then
-			nextvalue[k]={paramsign, tokenfromtok(k)}
-		else
-			nextvalue[k]={bgroup, paramsign, tokenfromtok(k), egroup}
-		end
+		nextvalue[k]=v.get_nextvalue(tokenfromtok(k))
 	end
 	return nextvalue
 end
@@ -324,10 +319,10 @@ local command_handler={
 				replacementtext={expandafter, statements[n].caller}
 
 				for _, kv in ipairs(statements[n].needsequence) do
-					if kv[2]~=Ntypemark then
-						error("expandonce but some parameters (e.g. " .. tokenfromtok(kv[1]).csname .. ") are not single token")
+					if kv[2].get_expandafter_sequence==nil then
+						error("expandonce but some parameters (e.g. " .. tokenfromtok(kv[1]).csname .. ") are not expandafter-able")
 					end
-					appendto(replacementtext, {expandafter, paramsign, tokenfromtok(kv[1])})
+					appendto(replacementtext, kv[2].get_expandafter_sequence(tokenfromtok(kv[1])))
 				end
 				finalize_generate_code(statement, paramtext, replacementtext)
 			end,
@@ -338,11 +333,22 @@ local command_handler={
 		local varname=getvarname(stack)
 		add_statement {
 			debug={faketoken "assertisNtype", varname},
-			need={[varname.tok]=true},
-			produce={[varname.tok]=Ntypemark},
+			need={[varname.tok]=argtype.normal},
+			produce={[varname.tok]=argtype.Ntype},
 			generate_code=context.generate_code_noop,
 		}
 	end,
+
+	assertisExpforwardchain=function(selftoken, lastlinenumber, stack, add_statement, context)
+		local varname=getvarname(stack)
+		add_statement {
+			debug={faketoken "assertisExpforwardchain", varname},
+			need={[varname.tok]=argtype.normal},
+			produce={[varname.tok]=argtype.expforward_chain},
+			generate_code=context.generate_code_noop,
+		}
+	end,
+	
 
 	conditionalgoto=function(selftoken, lastlinenumber, stack, add_statement, context)  -- star = peek
 		local star=get_optional_star(stack)
@@ -399,7 +405,7 @@ local command_handler={
 		add_statement {
 			debug=cati({faketoken "assign", varname}, content),
 			need=getvarsexpr(content),
-			produce={[varname.tok]=true},
+			produce={[varname.tok]=argtype.normal},
 			generate_code=function(statement, statements)
 				local paramtext=standard_paramtext(statement)
 				local nextvalue=standard_nextvalue(statement)
@@ -417,7 +423,7 @@ local command_handler={
 			debug=cati({faketoken "assigno", varname}, content),
 			need=getvarsexpr(content),
 			assigno_tok=varname.tok,
-			produce={[varname.tok]=true},
+			produce={[varname.tok]=argtype.normal},
 			generate_code=function(statement, statements)
 				local paramtext=standard_paramtext(statement)
 				local nextvalue=standard_nextvalue(statement)
@@ -440,7 +446,7 @@ local command_handler={
 			debug=cati({faketoken "assignoo", varname}, content),
 			need=getvarsexpr(content),
 			assigno_tok=varname.tok,
-			produce={[varname.tok]=true},
+			produce={[varname.tok]=argtype.normal},
 			generate_code=function(statement, statements)
 				local paramtext=standard_paramtext(statement)
 				local nextvalue=standard_nextvalue(statement)
@@ -646,6 +652,7 @@ function generic_compile_code(functionname, body, passcontrol, statement_extra)
 		for k, v in pairs(statement_extra) do
 			statement[k]=v
 		end
+		statement.linenumber=lastlinenumber
 		statements[#statements+1]=statement
 	end
 
@@ -719,7 +726,7 @@ function generic_compile_code(functionname, body, passcontrol, statement_extra)
 		assert(v.need[tok])
 		for _, j in pairs(v.comefrom) do
 			if not statements[j].need[tok] and not statements[j].produce[tok] then
-				statements[j].need[tok]=true
+				statements[j].need[tok]=argtype.normal
 				propagate(j, tok)
 			end
 		end
@@ -742,18 +749,27 @@ function generic_compile_code(functionname, body, passcontrol, statement_extra)
 		local v=statements[j]
 		assert(#v.comefrom>0)
 
-		local okay=true
+		local result_type=nil
 		for _, k in pairs(v.comefrom) do
-			if statements[k].produce[tok]~=Ntypemark then
-				okay=false
-				break
+			local other_produced_type=statements[k].produce[tok]
+			if other_produced_type==nil then
+				-- not propagated yet? For now cannot determine what result_type this statement will produce
+				-- will determine later.
+				return
 			end
+
+			if result_type==nil then
+				result_type=other_produced_type
+			else
+				result_type=argtype_either[result_type][other_produced_type]
+			end
+			assert(result_type~=nil)
 		end
 
-		if okay then
-			assert(v.need[tok]==true)
-			v.need[tok]=Ntypemark
-			v.produce[tok]=Ntypemark
+		v.need[tok]=argtype_both[v.need[tok]][result_type]
+		local new_produce_value=argtype_both[v.need[tok]][result_type]
+		if v.produce[tok]~=new_produce_value then
+			v.produce[tok]=new_produce_value
 			propagate(j, tok)
 		end
 	end
@@ -761,7 +777,6 @@ function generic_compile_code(functionname, body, passcontrol, statement_extra)
 	local function propagate(i, tok)
 		-- here i produces tok as single token. Propagate it to j where i goes to j.
 		local v=statements[i]
-		assert(v.produce[tok]==Ntypemark)
 		if v.nextindex~=nil then
 			propagate2(v.nextindex, tok)
 		end
@@ -772,7 +787,7 @@ function generic_compile_code(functionname, body, passcontrol, statement_extra)
 
 	for i=1, #statements-1 do
 		for k, v in pairs(statements[i].produce) do
-			if v==Ntypemark then
+			if v~=argtype.normal then  -- everything is normal already, no need to propagate
 				propagate(i, k)
 			end
 		end
@@ -781,10 +796,10 @@ function generic_compile_code(functionname, body, passcontrol, statement_extra)
 	-- then, convert `need` table to indexed table (fixed order)
 	for _, v in ipairs(statements) do
 		local n={}
-		for var_tok, var_property in pairs(v.need) do
+		for var_tok, var_kind in pairs(v.need) do
 			-- var_tok: .tok value
-			-- var_property: for example Ntypemark
-			n[#n+1]={var_tok, var_property}
+			-- var_kind: for example argtype.Ntype or argtype.normal
+			n[#n+1]={var_tok, var_kind}
 		end
 		v.needsequence=n
 	end
@@ -807,14 +822,14 @@ function generic_compile_code(functionname, body, passcontrol, statement_extra)
 
 			if not okay then
 				local len=#n
-				n[1], n[len+1]={assigno_tok, true}, n[1]
+				n[1], n[len+1]={assigno_tok, argtype.normal}, n[1]
 			end
 
 			assert(#n>=old)
 		end
 	end
 
-	local function debugprintstatements()
+	local function debug_print_statements()
 		prettyprint "========"
 		for i, v in ipairs(statements) do
 
@@ -824,7 +839,7 @@ function generic_compile_code(functionname, body, passcontrol, statement_extra)
 					local k, v=kv[1], kv[2]
 				--for k, v in pairs(v.need) do
 					s=s..tostring(k)
-					if v==Ntypemark then s=s.."^" end
+					if v.is_a[argtype.Ntype] then s=s.."^" end  -- just for debug purpose
 					s=s..","
 				end
 			end
@@ -839,7 +854,7 @@ function generic_compile_code(functionname, body, passcontrol, statement_extra)
 		prettyprint "========"
 	end
 
-	--debugprintstatements()
+	--debug_print_statements()
 
 	-- now, generate code...
 	for i=1, #statements-1 do
@@ -848,9 +863,9 @@ function generic_compile_code(functionname, body, passcontrol, statement_extra)
 				statements[i]:generate_code(statements)
 			end, debug.traceback)
 			if not success then
-				debugprintstatements()
+				debug_print_statements()
 				errorx(
-					"while processing statement "..i..":\n\n\n"
+					"while processing statement "..i..", line "..statements[i].linenumber..":\n\n\n"
 					.. "======== old traceback start ========\n"
 					.. tostring(val)
 					.. "\n======== old traceback end ========\n\n\n")
@@ -931,7 +946,7 @@ local function get_execute_pending_definitions_tl(pending_definitions)
 	return result
 end
 
-function debug_rdef2()
+function print_tlrepr()
 	print("\n\n")
 	print(get_tlreprx(get_execute_pending_definitions_tl(pending_definitions)))
 	print("\n\n")
@@ -1089,7 +1104,7 @@ function optimize_pending_definitions()
 						-- #1, #2 etc.
 						local paramnumber=get_paramnumber(replacementtext[target_replacementtext_pos+2])
 						assert(paramnumber)
-						if Ntypemark==v.param_tag[paramnumber] then
+						if v.param_tag[paramnumber].is_a[argtype.single_token] then
 							-- skip through this token as usual
 							target_replacementtext_pos=target_replacementtext_pos+3
 						else

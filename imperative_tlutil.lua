@@ -170,6 +170,8 @@ end
 F.bgroup=token.create(string.byte "{", 1)
 F.egroup=token.create(string.byte "}", 2)
 F.paramsign=token.create(string.byte "#", 6)
+F.space_token=token.create(string.byte " ", 10)
+F.star_token=token.create(string.byte "*", 12)
 F.expandafter=token.create "expandafter"
 F.iffalseT=token.create "iffalse"
 F.fiT=token.create "fi"
@@ -266,9 +268,137 @@ function F.have_double_arg_use(replacementtext)  -- return whether some arg is u
 	return false
 end
 
-F.Ntypemark={}  -- this is used as a mark in `need` and `produce` table
--- e.g. `need={[a.tok]=true, [b.tok]=Ntypemark}` means the statement
--- needs a and b, and b is guaranteed to be a single token
+-- these are used as the values in the `need` and `produce` table
+
+-- e.g. `need={[a.tok]=argtype.normal, [b.tok]=argtype.Ntype}` means the statement
+-- needs a and b, and b is guaranteed to be N-type (single token, not explicit space)
+
+local function Ntype_get_nextvalue(token)
+	return {paramsign, token}
+end
+
+local function normal_get_nextvalue(token)
+	return {bgroup, paramsign, token, egroup}
+end
+
+local function star_delimited_get_nextvalue(token)
+	return {paramsign, token, star_token}
+end
+
+local function singletoken_get_expandafter_sequence(token)
+	return {expandafter, paramsign, token}
+end
+
+local function standard_arg_paramtext(token)
+	return {paramsign, token}
+end
+
+local function star_delimited_arg_paramtext(token)
+	return {paramsign, token, star_token}
+end
+
+F.argtype={
+	normal={
+		get_nextvalue=normal_get_nextvalue,
+		paramtext=standard_arg_paramtext,
+		specificity=1,  -- larger value → more specific (normal is the most general)
+	},
+	single_token={
+		get_nextvalue=normal_get_nextvalue,
+		get_expandafter_sequence=singletoken_get_expandafter_sequence,
+		paramtext=standard_arg_paramtext,
+		specificity=2,
+	},
+	Ntype={
+		get_nextvalue=Ntype_get_nextvalue,
+		get_expandafter_sequence=singletoken_get_expandafter_sequence,
+		paramtext=standard_arg_paramtext,
+		specificity=3,
+	},
+	-- an argument is expforward_chain if r-expansion of <arg> <tokenlist> = <arg> + r-expansion of <tokenlist>
+	expforward_chain={
+		get_nextvalue=star_delimited_get_nextvalue,
+		get_expandafter_sequence=function(token)
+			return {faketoken "exp:w", paramsign, token, expandafter, faketoken "exp_end:", expandafter, star_token}
+		end,
+		paramtext=star_delimited_arg_paramtext,
+		specificity=4,
+	},
+	number={
+		get_nextvalue=star_delimited_get_nextvalue,
+		get_expandafter_sequence=function(token)
+			return {faketoken "number", paramsign, token, expandafter, star_token}
+		end,
+		paramtext=star_delimited_arg_paramtext,
+		specificity=5,
+	},
+}
+
+--[[
+local function inspect2(...)
+	local args={...}
+	for i=1, select("#", ...) do
+		inspect(args[i])
+	end
+end
+]]
+
+for name, t in pairs(argtype) do
+	t.debugname=name
+	t.is_a={[t]=true}
+end
+
+
+-- Ntype.normal means all Ntype are normal
+-- etc.
+
+local inherit_frozen={}
+local function inherit(a, b)
+	inherit_frozen[b]=true assert(not inherit_frozen[a])  --some simple checking of the order below
+	for c, _ in pairs(b.is_a) do
+		a.is_a[c]=true  -- inheritance is transitive
+	end
+end
+
+
+-- note about the ordering, upper ones must be specified before lower ones.
+-- everything must be subtype of normal.
+inherit(argtype.single_token, argtype.normal)
+inherit(argtype.Ntype, argtype.single_token)  -- for example this line means a N-type arg is a single_token arg
+inherit(argtype.expforward_chain, argtype.normal)
+inherit(argtype.number, argtype.normal)
+
+-- just checking
+assert(argtype.Ntype.is_a[argtype.single_token])
+assert(argtype.Ntype.is_a[argtype.normal])
+
+
+
+-- create this table. Description below
+F.argtype_either={}
+F.argtype_both={}
+for _, a in pairs(argtype) do
+	argtype_either[a]={}
+	argtype_both[a]={}
+	for _, b in pairs(argtype) do
+		local result_either=argtype.normal
+		for _, c in pairs(argtype) do
+			if a.is_a[c] and b.is_a[c] and c.is_a[result_either] then
+				result_either=c
+			end
+		end
+		argtype_either[a][b]=result_either
+		if a.specificity<b.specificity then
+			argtype_both[a][b]=b
+		else
+			argtype_both[a][b]=a
+		end
+	end
+end
+
+assert(argtype_either[argtype.Ntype][argtype.single_token]==argtype.single_token)  -- i.e. if it's either Ntype or single_token, it's guaranteed to be single_token
+
+assert(argtype_both[argtype.Ntype][argtype.single_token]==argtype.Ntype)  -- i.e. if it's both Ntype or single_token, it's guaranteed to be Ntype
 
 
 
@@ -286,7 +416,7 @@ F.Ntypemark={}  -- this is used as a mark in `need` and `produce` table
 --
 -- it's a bit hard to explain. For example:
 --
--- caller_param_tag = {1=true, 2=Ntypemark}
+-- caller_param_tag = {1=argtype.normal, 2=argtype.Ntype}
 -- caller replacement text = tokenlist '{#1}#2abc'
 -- target_paramtext = tokenlist '#1#2'
 --
@@ -325,7 +455,7 @@ function F.try_grab_args(caller_param_tag, target_paramtext, caller_replacementt
 				if not is_paramsign(u) then  -- it might be #1 that expands to something unknown...?
 					local paramnumber=get_paramnumber(u)
 					assert(paramnumber)
-					if Ntypemark~=caller_param_tag[paramnumber] then
+					if not caller_param_tag[paramnumber].is_a[argtype.Ntype] then
 						return nil
 					end
 				end

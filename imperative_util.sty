@@ -1,4 +1,5 @@
 \ProvidesExplPackage{imperative_util}{2022-06-17}{0.0.0}{Utilities for imperative package}
+\RequirePackage{saveenv}
 
 \protected\def \__locallyset@@_aux:N #1 {  % #1: the modified token
 	\tl_build_put_right:Nn \__result {\noexpand#1}
@@ -66,6 +67,7 @@
 
 
 	% use this version if you already have verbatim data.
+	% (#1 are the tokens to be put before the output, #2 is the processed result)
 	\protected\def\addlinemarker:nn #1 #2 {
 		\tl_set:Nn \__body {#2}
 		\tl_replace_all:Nnn \__body {~} {\cO\ }
@@ -79,6 +81,19 @@
 		}
 		\endgroup
 		\exp_args:NnV \use:n {#1} \__result
+	}
+
+	\cs_new_protected:Npn \__finalize_work {
+		\str_replace_all:Nnn \__data {\cO\^^J} {\cO\^^M}
+		\str_put_right:Nn \__data {\cO\^^M}
+		\exp_args:NnV \addlinemarker:nn {} \__data
+	}
+
+	\NewDocumentEnvironment{addlinemarkerenv}{}{
+		\saveenv \__data
+	}{
+		\endsaveenv
+		\aftergroup \__finalize_work
 	}
 
 	% usage: \addlinemarker { <some tokens> } +abc+
