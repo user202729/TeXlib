@@ -42,7 +42,7 @@ This package provides tools to create your own verbatim environments, and works 
 \begin{itemize}
 	\item \pkg{scontents} package is similar; however it does not allow programmer to programmatically retrieve the macro content, only do a limited number of actions with them (execute, typeset as verbatim code, etc.).
 	\item \pkg{fancyvrb} and \pkg{verbatimcopy} provides some internal macro for defining similar environments, however they're internal.
-	\item \pkg{filecontentsdef} and \pkg{newverbs} provides very similar facilities (\env{filecontentsdefmacro} environment and \tn{Collectverbenv} command respectively); however it requires \verb+\endlinechar=13+ and does not support \cs{ExplSyntaxOn} environment.
+	\item \pkg{filecontentsdef} and \pkg{newverbs} provides very similar facilities (\env{filecontentsdefmacro} environment and \tn{Collectverbenv} command respectively); however it requires \verb+\endlinechar=13+ and does not support |\ExplSyntaxOn| environment.
 	\item \pkg{verbatim} provides facilities to define custom verbatim environment that processes the content line-by-line, however the interface is more complicated.
 
 		For comparison, the following code
@@ -80,7 +80,7 @@ This package provides tools to create your own verbatim environments, and works 
 \end{verbatim}
 
 defines an environment that saves the data similar to \env{saveenv} environment described below (with the overhead of |\tl_build_*| functions),
-but inside \cs{ExplSyntaxOn} environment it generates a spurious space at the beginning of the string.
+but inside |\ExplSyntaxOn| environment it generates a spurious space at the beginning of the string.
 \end{itemize}
 
 
@@ -99,7 +99,7 @@ but inside \cs{ExplSyntaxOn} environment it generates a spurious space at the be
 \end{saveenv}
 \end{verbatim}
 
-will save the string \texttt{123\meta{newline}456} globally into \cs{data}.
+will save the string \texttt{123\meta{newline}456} globally into |\data|.
 
 The braces around \verb+{\data}+ is optional; however, in the unlikely case if \cs{endlinechar} has the \enquote{letter} catcode, it might be absorbed and gives unexpected result.
 
@@ -116,7 +116,7 @@ The assignment is global, and done before the macro \cs{endsaveenv} is executed.
 
 The data is represented as an \pkg{expl3}-string, that is, a sequence of tokens with catcode 12 (for non-space characters) or 10 (for space character).
 
-In other words, the token list is equal to its own \cs{detokenize}.
+In other words, the token list is equal to its own |\detokenize|.
 
 \DescribeEnv{saveenvghost}
 Similar to above; however the content inside is still typesetted/executed, and the Sync\TeX\ information is preserved.
@@ -127,7 +127,44 @@ Note that this environment is implemented by reading the whole file from the beg
 Similar to above; however the final newline and the space characters before \texttt{\cs{end}\{\meta{environment name}\}} are preserved.
 
 For example, the example above with \texttt{saveenv} replaced with \texttt{saveenvkeeplast}
-will save the string \texttt{123\meta{newline}456\meta{newline}} into \cs{data} instead.
+will save the string \texttt{123\meta{newline}456\meta{newline}} into |\data| instead.
+
+\section{Reinsert environments}
+
+Sometimes it's desirable to execute something (e.g. do some local assignments) after the group ends.
+
+There are a few options:
+\begin{itemize}
+	\item use |\aftergroup|,
+	\item close the group, execute the code and open a new one (remember to preserve the value of |\@currenvir|),
+	\item use one of the environments below.
+\end{itemize}
+
+\DescribeEnv{saveenvreinsert}
+Environment that takes two arguments, the \meta{str var} to be set and the code to be put after the group end.
+
+Usage example: If the following code is executed
+\begin{verbatim}
+\begin{saveenvreinsert}{\data}{\myfunction {args etc.}}
+123
+456
+\end{saveenvreinsert}
+some other content
+\end{verbatim}
+the effect would be identical to as if |\data| is set to \texttt{123\meta{newline}456},
+then the following code is executed
+\begin{verbatim}
+\myfunction {args etc.}some other content
+\end{verbatim}
+If the second argument is empty, this environment is identical to the \env{saveenv} environment.
+
+Note that in the example above |\myfunction| is executed after the group ends,
+while any code in the second block of the |\NewDocumentEnvironment| definition
+would be executed before the group ends (such as in the example below), thus any local assignment will not persist.
+
+\DescribeEnv{saveenvkeeplastreinsert}
+Same as above, but the trailing whitespaces are preserved.
+
 
 \section{Extending the environments}
 
@@ -148,6 +185,8 @@ For example, the following definition
 \end{verbatim}
 will define an environment \env{custom} that prints out the content inside the environment using |\tl_show:N|.
 
+Note that in this case |\tl_show:N \data| is executed before the group ends.
+
 \section{Limitation}
 
 \begin{itemize}
@@ -161,9 +200,9 @@ will define an environment \env{custom} that prints out the content inside the e
 		
 	\item Currently nested environments with the same name are not supported (unlike \pkg{scontents} package).
 
-	\item Note that there must be nothing after the \texttt{\cs{begin}\{\meta{environment name}\}} or the \texttt{\cs{end}\{\meta{environment name}\}} line.
+	\item Note that there must be nothing after the |\begin|\texttt{\{\meta{environment name}\}} or the |\end|\texttt{\{\meta{environment name}\}} line.
 
-	\item Note that \texttt{\cs{end}\{\meta{environment name}\}} must not be in the middle of any line.
+	\item Note that |\end|\texttt{\{\meta{environment name}\}} must not be in the middle of any line.
 
 	\item The \cs{endlinechar} must not be tokenized in advance (or if it is, its catcode must be 12/other).
 		This might happen when for example your environment looks ahead for optional argument.

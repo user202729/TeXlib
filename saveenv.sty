@@ -53,7 +53,9 @@
 
 
 % #1: target macro
-\NewDocumentEnvironment {saveenvkeeplast} {m} {
+% #2: content to be inserted after the \end
+\NewDocumentEnvironment {saveenvkeeplastreinsert} {mm} {
+	\pretty:n {#1 {#2}}
 	\begingroup
 	\edef \_senv_old_endlinechar {\the\endlinechar}
 	\cctab_select:N \c_other_cctab  % note that this changes the value of \endlinechar as well
@@ -62,7 +64,7 @@
 	} {
 		\exp_last_unbraced:Nf \peek_meaning_remove:NTF { \char_generate:nn{\_senv_old_endlinechar}{12} }    %12 is other
 		{
-			\_senv_start_get_body:N #1
+			\_senv_start_get_body:Nn #1 {#2}
 		}
 		{
 			\msg_error:nn {saveenv} {trailing-content-or-pretokenized}
@@ -71,24 +73,30 @@
 } {
 }
 
+
 % #1: target macro
-\cs_new_protected:Npn \_senv_start_get_body:N #1 {
+% #2: content to be inserted after the \end
+\cs_new_protected:Npn \_senv_start_get_body:Nn #1 #2 {
 	\endlinechar=10~
 	\str_set:NV \_senv_env \@currenvir
 	\tl_replace_all:Nnn \_senv_env {~} {\cO\  }
-	\exp_args:NNVV \_senv_helper #1 \_senv_env \@currenvir
+	\_senv_helper:NVVn #1 \_senv_env \@currenvir {#2}
 }
 
 % #1: target macro
 % #2: value of \@currenvir but with all tokens catcode 12 (other)
 % #3: value of \@currenvir
-\def \_senv_helper #1 #2 #3 {
+% #4 content to be inserted after the \end
+\cs_new_protected:Npn \_senv_helper:Nnnn #1 #2 #3 #4 {
 	\cs_set_protected:cpn {[saveenv]~verbatim~body~scanner~for~#2} ##1 \cO{ \\end\{ } #2 \cO\} {
 		% ##1: the body
 		\peek_meaning_remove:NTF \cO\^^J {
 			\endgroup
 			\str_gset:Nn #1 {##1}
 			\end{#3}
+			\pretty:n{here : #4}
+			#4
+			\pretty:n{here}
 		} {
 			\msg_error:nn {saveenv} {trailing-content-end-line}
 		}
@@ -96,6 +104,49 @@
 
 	\use:c {[saveenv]~verbatim~body~scanner~for~#2}
 }
+\cs_generate_variant:Nn \_senv_helper:Nnnn {NVVn}
+
+\NewDocumentEnvironment {saveenvkeeplast} {m} {
+	\pretty:n {#1} 
+	\saveenvkeeplastreinsert #1 {}
+} {
+	\endsaveenvkeeplastreinsert
+}
+
+\iffalse
+======== future note, maybe I want to write code like this some day ========
+(although what about lualib?)
+
+\cs_new_protected:Npn \__start_get_body:N #1
+\scope! #\store_target {
+	\endlinechar=10~
+
+	\assigno #\env_name {\@currenvir}
+
+	\str_set:Nn \__env_name_other_cat {#\env_name}
+	\tl_replace_all:Nnn \__env_name_other_cat {~} {\cO\  }
+	\assigno #\env_name_other_cat {\__env_name_other_cat}
+
+	\assignc #\body_grabber_cs { [saveenv]~verbatim~body~scanner~for~#\env_name_other_cat }
+
+	\cs_set_protected:Npn #\body_grabber_cs
+		##1 \cO{ \\end\{ } #\env_name_other_cat \cO\}
+	\scope! #\body
+	{
+		\peek_meaning_remove:NTF \cO\^^J {
+			\endgroup
+			\str_gset:Nn #\store_target {#\body}
+			\end{#\env_name}
+		} {
+			\msg_error:nn {saveenv} {trailing-content-end-line}
+		}
+	}
+
+	#\body_grabber_cs
+}
+
+========
+\fi
 
 % set variable #1 to have content of #2, but with last line dropped.
 % lines are separated by \^^J.
@@ -119,12 +170,18 @@
 
 \cs_generate_variant:Nn \saveenv_set_drop_last:Nn {NV}
 
+\NewDocumentEnvironment {saveenvreinsert} {mm} {
+	\saveenvkeeplastreinsert #1 {#2}
+} {
+	\endsaveenvkeeplastreinsert
+	\saveenv_set_drop_last:NV #1 #1
+}
 
 \NewDocumentEnvironment {saveenv} {m} {
-	\saveenvkeeplast \_senv_content
+	\saveenvkeeplast #1
 } {
 	\endsaveenvkeeplast
-	\saveenv_set_drop_last:NV #1 \_senv_content
+	\saveenv_set_drop_last:NV #1 #1
 }
 
 
