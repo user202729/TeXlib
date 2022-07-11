@@ -6,29 +6,55 @@ setmetatable(_ENV, {__index=function(self, field)
 	errorx("attempt to access undefined global variable "..tostring(field).."\n\n"..debug.traceback())
 end})
 
-local function getvarsraw(tokenlist)  -- for example if tokenlist='#x 123 #y' return '{[x.tok]=true, [y.tok]=true}'
+local function getvars_paramtext(paramtext)  -- for example if paramtext='#x 123 #y' return '{[x.tok]=true, [y.tok]=true}'
 	-- where x.tok is the .tok value of the token x
 	local result={}
-	for i=1, #tokenlist-1 do  -- if the last one is mac_param then just assume it's trailing # for match-until-'{'
-		local v=tokenlist[i]
+	for i=1, #paramtext-1 do  -- if the last one is mac_param then just assume it's trailing # for match-until-'{'
+		local v=paramtext[i]
 		if is_paramsign(v) then
-			result[tokenlist[i+1].tok]=argtype.normal
+			local nexttoken=paramtext[i+1]
+			if is_paramsign(nexttoken) then
+				errorx("two consecutive # in the parameter text")
+			end
+			result[nexttoken.tok]=argtype.normal
 		end
 	end
 	return result
 end
 
-local function getvarsexpr(expr)  -- TODO when support operateon, need to exclude internal-only vars
-	return getvarsraw(expr)
+local function getvarsexpr(expr)  -- similar to above, but works on expression (allow two consecutive ##, and does not allow trailing #)
+	local result={}
+	local i, l=1, #expr
+	while i<=l do
+		if is_paramsign(expr[i]) then
+			if i==l then
+				error("unbalanced paramsign?")
+			end
+			if not is_paramsign(expr[i+1]) then
+				result[expr[i+1].tok]=argtype.normal
+			end
+			i=i+2
+		else
+			i=i+1
+		end
+	end
+	return result
 end
 
 local function namedef_to_macrodef(paramtext, replacementtext, statement)
+	-- basically, this converts from "namedef" i.e. parameters are represented by arbitrary tokens/strings
+	-- to "macrodef" i.e. they're indexed by numbers, the way TeX understands
+	--
+	-- e.g. paramtext = '#a #b #' replacementtext = '1 #a 2 #b ##'
+	-- after the call paramtext = '#1 #2 #' replacementtext = '1 #1 2 #2 ##'
+	--
 	-- paramtext&replacementtext are tokenlists
 	-- operate in-place.
 	-- return a "param_tag" table which is ([1] → argtype.normal|argtype.Ntype, [2] → argtype.normal|argtype.Ntype, etc.)
 	--
-	-- note that it's copied from statement.need, so some fields might be nil
-	-- (e.g. new vars created by matchrm)
+	-- it's copied from statement.need, for e.g. new vars created by matchrm it defaults to argtype.normal
+	--
+	-- TODO maybe this duplicate a fair bit of the 2 functions above...?
 	local used=0
 	local tok_to_number_token={}  -- e.g. a.tok → 1, b.tok → 2, etc.
 	local param_tag={}
@@ -37,10 +63,12 @@ local function namedef_to_macrodef(paramtext, replacementtext, statement)
 		if is_paramsign(v) then
 			used=used+1
 			if used>=10 then
-				error("too many parameters")
+				errorx("too many parameters")
 			end
 			local t=token.create(48+used, 12)
-			assert(not is_paramsign(paramtext[i+1]))
+			if is_paramsign(paramtext[i+1]) then
+				error("two consecutive # in the parameter text")
+			end
 			tok_to_number_token[paramtext[i+1].tok]=t
 			param_tag[used]=statement.need[paramtext[i+1].tok] or argtype.normal
 			paramtext[i+1]=t
@@ -113,7 +141,9 @@ local function populatelinenumber(body) -- return new table with _linenumber pro
 				s=s..string.char(body[i].mode)
 				i=i+1
 			end
-			assert(#s>0)
+			if #s==0 then
+				error("line mark not followed by linenumber")
+			end
 			lastlinenumber=tonumber(s)
 		else
 			t=makefaketoken(t)
@@ -131,7 +161,7 @@ local pending_definitions={}  -- list of {paramtext=paramtext, replacementtext=r
 local function finalize_generate_code(statement, paramtext, replacementtext)  -- the macro itself is included in paramtext
 	paramtext=slice(paramtext, 1)
 	replacementtext=slice(replacementtext, 1)
-	--prettyprint("finalize:", paramtext, "→", replacementtext)
+	prettyprint("finalize:", paramtext, "→", replacementtext)
 	local param_tag=namedef_to_macrodef(paramtext, replacementtext, statement)
 	for _, kv in pairs(pending_definitions) do
 		if kv.caller.csname==paramtext[1].csname and kv.caller.active==paramtext[1].active then
@@ -158,7 +188,13 @@ local tokenfromtok_t={} -- actually this could be eliminated, but it's convenien
 
 local function tokenfromtok(tok)
 	local t=tokenfromtok_t[tok]
-	assert(t~=nil)
+	if t==nil then
+		if type(tok)=="number" then
+			errorx(string.format("this cannot happen? tok %d (%x) does not correspond to a token", tok, tok))
+		else
+			errorx("this cannot happen? tok ", tok, " does not correspond to a token")
+		end
+	end
 	return t
 end
 
@@ -287,7 +323,7 @@ local command_handler={
 		for _, v in ipairs(group) do if degree(v)~=0 then errorx "content of matchrm contain braces!" end end
 		add_statement {
 			debug=cati({faketoken "matchrm"}, wrapinbracegroup(group)),
-			produce=getvarsraw(group),
+			produce=getvars_paramtext(group),
 			generate_code=function(statement, statements)
 				local paramtext, replacementtext=generate_code_prepare(statement, statements)
 				paramtext=cat(paramtext, group)
@@ -1129,7 +1165,7 @@ function optimize_pending_definitions()
 			if target_replacementtext_pos~=1 and target and target.csname==nil and not is_paramsign(target) then
 				-- user have macro \expandafter ... <firsttoken> where firsttoken is unexpandable
 				-- actually followed by ## is also a weird case, but ignore it for now.
-				prettyprint("weird? expandafter chain expands to nothing (", v.caller, ")")
+				prettyprint("weird? expandafter chain do nothing (in function ", v.caller, ")")
 			end
 
 			-- remove '\exp:w \expandafter \exp_end:' at appropriate places
@@ -1243,8 +1279,7 @@ do  -- block for withexpand.
 	end
 
 	local function sub_index(sub)
-		local offset=find_subsequence(sub, tokens)
-		if offset<0 then errorx("cannot find", sub, "in", tokens)  end
+		local offset=find_subsequence_checked(sub, tokens)
 		for j=1, #sub do
 			if is_label[offset+j]==true then
 				errorx("index "..(offset+j).." was previously marked as label in ", tokens, "token at index=", tokens[offset+j])
@@ -1255,8 +1290,7 @@ do  -- block for withexpand.
 	end
 
 	local function label_index(label)
-		local offset=find_subsequence(label, tokens)
-		if offset<0 then errorx("cannot find", label, "in", tokens) end
+		local offset=find_subsequence_checked(label, tokens)
 		for j=1, #label do
 			if is_label[offset+j]==false then
 				prettyprint("index "..(offset+j).." was previously marked as non-label in ", tokens, "token at index=", tokens[offset+j])
@@ -1296,8 +1330,10 @@ do  -- block for withexpand.
 		if #commands==0 then
 			commands[1]={}
 		end
+		if len<=0 then errorx("empty part cannot be single token") end
 		local last=commands[#commands]
 		if not last.single_token_marker then last.single_token_marker={} end
+		prettyprint("here first=", first, "len=", len)
 		last.single_token_marker[#last.single_token_marker+1]={first, len}
 	end
 
@@ -1316,6 +1352,10 @@ do  -- block for withexpand.
 			local cmdarg=token.scan_toks()
 			add_command(label_index(label), cmd_index(cmd, cmdarg))
 		end,
+		marklabel=function()  -- this function is not useful by itself, mostly for debugging purpose
+			local label=token.scan_toks()
+			label_index(label)
+		end,
 		after=function()
 			local sub=token.scan_toks()
 			local cmd=token.scan_toks()  -- expandat or expandatlabel
@@ -1330,8 +1370,18 @@ do  -- block for withexpand.
 		end,
 		assertissingletoken=function()
 			local sub=token.scan_toks()
+			prettyprint("sub_index=",sub_index(sub), "#sub=",#sub)
 			add_single_token_marker(sub_index(sub), #sub)
-		end
+		end,
+		assertissingletokenbetweenlabel=function()
+			local a=token.scan_toks()
+			local b=token.scan_toks()
+			local indexa=label_index(a)
+			local indexb=label_index(b)
+			local innerlen=indexb-indexa-#a
+			prettyprint("indexa=",indexa, "indexb=",indexb)
+			add_single_token_marker(indexa+#a, innerlen)
+		end,
 	}
 
 	local function find_index(blocks, index)
@@ -1371,28 +1421,43 @@ do  -- block for withexpand.
 			end
 		end
 
+		if false then --  debug print code
+			prettyprint("======== debug:")
+			for i=1, #blocks do
+				local b=blocks[i]
+				prettyprint(b, "|", b.index, "len=", b.len, "single=", b.single)
+			end
+			prettyprint("======== /end debug")
+		end
+
 		-- then process the single_token_marker
 		if commands[index].single_token_marker then
 			for _, v in ipairs(commands[index].single_token_marker) do
 				local first, len=v[1], v[2]
-				first=find_index(blocks, first)
-				local last
-				if blocks[#blocks].index+blocks[#blocks].len==first+len then
-					last=#blocks
-				else
-					last=find_index(blocks, first+len)-1  -- TODO is this really safe...??
+				local first_block_index=find_index(blocks, first)
+
+				local last_block_index=first_block_index
+				local len_so_far=blocks[first_block_index].len
+				while len_so_far<len do
+					last_block_index=last_block_index+1
+					len_so_far=len_so_far+blocks[last_block_index].len
 				end
 
-				local b=blocks[first]
-				for i=first+1, last do
+				if len_so_far>len then
+					errorx("something is wrong? Maybe there's a label between a single token section, or overlapping single token marker...?")
+				end
+
+				local b=blocks[first_block_index]
+				for i=first_block_index+1, last_block_index do
 					appendto(b, blocks[i])
 					b.len=b.len+blocks[i].len
 				end
 				b.single=true
 
-				blocks=cati(slice(blocks, 1, first), slice(blocks, last+1))
+				blocks=cati(slice(blocks, 1, first_block_index), slice(blocks, last_block_index+1))
 			end
 		end
+
 
 		-- pass to next level
 		blocks=process(index+1, blocks)
@@ -1438,6 +1503,7 @@ do  -- block for withexpand.
 		tex.runtoks(function()
 			token.put_next(cati({bgroup, token.create("withexpandinit")}, commands_, {egroup}))
 		end)
+		-- TODO for some reason this does not trap
 
 		local blocks={}
 		for i, v in ipairs(tokens) do

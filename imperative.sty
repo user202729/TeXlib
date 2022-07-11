@@ -7,11 +7,13 @@
 
 \tl_set:Nn\withexpandinit {
 	\def\assertissingletoken #1{\directlua{withexpand_cmds.assertissingletoken()}{#1}}
+	\def\assertissingletokenbetweenlabel #1 #2 {\directlua{withexpand_cmds.assertissingletokenbetweenlabel()}{#1}{#2}}
 	\def\expandat     #1{\directlua{withexpand_cmds.expandat()}{#1}}
 	\def\expandatlabel#1{\directlua{withexpand_cmds.expandatlabel()}{#1}}
 	\def\onlabel      #1 #2 #3{\directlua{withexpand_cmds.onlabel()}{#1}{#2}{#3}}
 	\def\after        #1 #2 #3{\directlua{withexpand_cmds.after()}  {#1}{#2}{#3}}
 	\def\before       #1 #2 #3{\directlua{withexpand_cmds.before()} {#1}{#2}{#3}}
+	\def\marklabel      #1 {\directlua{withexpand_cmds.marklabel()}{#1}}
 }
 
 \def\debug_putnextwithexpand #1 #2 {

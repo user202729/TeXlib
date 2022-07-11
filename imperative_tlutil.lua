@@ -237,6 +237,13 @@ function F.find_subsequence(sub, s)  -- return the only offset (0-indexed even t
 	return result  -- might be 0
 end
 
+function F.find_subsequence_checked(sub, s)
+	local result=find_subsequence(sub, s)
+	if result==-1 then errorx("cannot find ", sub, " in ", s)  end
+	if result==-2 then errorx("cannot uniquely find ", sub, " in ", s)  end
+	return result
+end
+
 function F.simple_args(paramtext)  -- return whether paramtext has the form \f #1 #2 ...
 	assert(paramtext[1].csname)
 	if #paramtext%2==0 then return false end
