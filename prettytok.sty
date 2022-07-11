@@ -143,8 +143,12 @@
 	}
 }
 
-\cs_new_protected:Npn \pretty:w #1 \prettystop {
-	\pretty:n {#1} #1 \prettystop
+\cs_new_protected:Npn \pretty:w { \pretty_aux:w \relax }
+\cs_new_protected:Npn \pretty_aux:w #1 \prettystop {
+	\pretty:o {
+		\use_none:n % gobble the \relax here
+		#1
+	} #1 \prettystop
 }
 
 \cs_new:Npn \prettystop {}
