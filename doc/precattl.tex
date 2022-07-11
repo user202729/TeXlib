@@ -111,7 +111,7 @@ More details: the token list following one of the |\c|\meta{character} token mig
 For example:
 
 \begin{itemize}
-	\item |\cL{12~34}| in |\ExplSyntaxOn| mode results in the 5 tokens with catcode letter and char code 1, 2, \meta{space}, 3, 4 respectively.
+	\item |\cL{12~34}| in \verb+\ExplSyntaxOn+ mode results in the 5 tokens with catcode letter and char code 1, 2, \meta{space}, 3, 4 respectively.
 	\item |\cO\abc| results in 3 tokens |abc| with catcode other.
 	\item |\cO{\ab\cd\ef}| results in 6 tokens |abcdef|. Note that this is different from the |\detokenized| value (that is, the spaces are removed) even when |\escapechar=-1|.
 	\item |\cC{\ab\cd\ef}| results in the control sequence |\abcdef|.
@@ -123,6 +123,14 @@ Remark: don't put explicit space token right after a |\cO| or similar. (neverthe
 
 Warning: a  \verb*|\ | at the end of a line will be interpreted as an escape sequence containing the |\endlinechar|.
 
+\DescribeEnv{precattlenv}
+Same as above, but the content is put inside an environment. Use it like this.
+\begin{verbatim}
+\begin{precattlenv}
+\def\spacegobbler\cS\ {}
+\end{precattlenv}
+\end{verbatim}
+It's guaranteed to execute the content outside a group; that is, any local assignment made inside the environment persist outside it as well.
 
 \begin{function}{\precattlExec}
 \LaTeX2-style synonym for the function above.

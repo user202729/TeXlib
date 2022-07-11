@@ -139,6 +139,19 @@
 	\str_if_eq:nnF {\cFrozenRelax} {\relax} {\testfail:}
 }
 
+\begin{precattlenv}
+\def\a{123}
+\end{precattlenv}
+\assertequal:Vn \a {123}
+
+
+\ExplSyntaxOff
+
+\begin{precattlenv}
+\def\a{456}
+\end{precattlenv}
+\ExplSyntaxOn
+\assertequal:Vn \a {456}
 \ExplSyntaxOff
 
 \end{document}

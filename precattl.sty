@@ -155,39 +155,39 @@
 \cs_generate_variant:Nn \execinside_set:Nn {NV}
 	
 
-\def \_precattlappend_space #1 {
+\def \_prctl_append_space #1 {
 	\begingroup
 	\lccode `\ =#1
 	\lowercase{
 		\endgroup \EI_append:n {~}
 	}
 }
-\def \_precattlappend_begin #1 {
+\def \_prctl_append_begin #1 {
 	\begingroup
 	\lccode `\{=#1
 	\lowercase{\endgroup \EI_append_raw:n { \iftrue { \else } \fi }}
 }
-\def \_precattlappend_end #1 {
+\def \_prctl_append_end #1 {
 	\begingroup
 	\lccode `\}=#1
 	\lowercase{\endgroup \EI_append_raw:n { \iffalse { \else } \fi }}
 }
 	
-%\def \_precattldo_special_cC #1 { \exp_args:Nc \EI_append:n {#1} }
-\def \_precattldo_special_cC #1 { \EI_append_raw:n {\exp_not:c {#1}} }  % do this to handle \outer tokens. but in the x-expansion step below need to wrap in a group level to avoid defining control sequences as \relax.
+%\def \_prctl_do_special_cC #1 { \exp_args:Nc \EI_append:n {#1} }
+\def \_prctl_do_special_cC #1 { \EI_append_raw:n {\exp_not:c {#1}} }  % do this to handle \outer tokens. but in the x-expansion step below need to wrap in a group level to avoid defining control sequences as \relax.
 
-\def \_precattldo_special_cB #1 { \str_map_inline:nn {#1} { \_precattlappend_begin {`##1} } }
-\def \_precattldo_special_cE #1 { \str_map_inline:nn {#1} { \_precattlappend_end {`##1} } }
-\def \_precattldo_special_cM #1 { \str_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {`##1} {3}} } }
-\def \_precattldo_special_cT #1 { \str_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {`##1} {4}} } }
-\def \_precattldo_special_cP #1 { \str_map_inline:nn {#1} { \exp_args:No \EI_append:o {\char_generate:nn {`##1} {6}} } }
-\def \_precattldo_special_cU #1 { \str_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {`##1} {7}} } }
-\def \_precattldo_special_cD #1 { \str_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {`##1} {8}} } }
-\def \_precattldo_special_cS #1 { \str_map_inline:nn {#1} { \_precattlappend_space {`##1} } }
-\def \_precattldo_special_cL #1 { \str_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {`##1} {11}} } }
-\def \_precattldo_special_cO #1 { \str_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {`##1} {12}} } }
-\def \_precattldo_special_cStr #1 { \EI_append:n {#1} }
-\def \_precattldo_special_cA #1 { \str_map_inline:nn {#1} {
+\def \_prctl_do_special_cB #1 { \str_map_inline:nn {#1} { \_prctl_append_begin {`##1} } }
+\def \_prctl_do_special_cE #1 { \str_map_inline:nn {#1} { \_prctl_append_end {`##1} } }
+\def \_prctl_do_special_cM #1 { \str_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {`##1} {3}} } }
+\def \_prctl_do_special_cT #1 { \str_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {`##1} {4}} } }
+\def \_prctl_do_special_cP #1 { \str_map_inline:nn {#1} { \exp_args:No \EI_append:o {\char_generate:nn {`##1} {6}} } }
+\def \_prctl_do_special_cU #1 { \str_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {`##1} {7}} } }
+\def \_prctl_do_special_cD #1 { \str_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {`##1} {8}} } }
+\def \_prctl_do_special_cS #1 { \str_map_inline:nn {#1} { \_prctl_append_space {`##1} } }
+\def \_prctl_do_special_cL #1 { \str_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {`##1} {11}} } }
+\def \_prctl_do_special_cO #1 { \str_map_inline:nn {#1} { \EI_append:x {\char_generate:nn {`##1} {12}} } }
+\def \_prctl_do_special_cStr #1 { \EI_append:n {#1} }
+\def \_prctl_do_special_cA #1 { \str_map_inline:nn {#1} {
 	%\exp_args:No \EI_append:o {\char_generate:nn {`##1} {13}}
 	\EI_append_raw:n {\expandafter \expandafter \expandafter \noexpand \char_generate:nn {`##1} {13}}  % handle outer token
 } }
@@ -195,44 +195,44 @@
 
 
 
-\def \_precattldo_special #1 #2 {
+\def \_prctl_do_special #1 #2 {
 	% given #1 e.g. \cO, #2 e.g. {abc}, append <abc> in detokenized catcode to EI.
 	\begingroup
 		\escapechar=-1
 
-		% let \_precattltmp be the concatenation of \string of all tokens within #2.
-		\def \_precattltmp {}
+		% let \_prctl_tmp be the concatenation of \string of all tokens within #2.
+		\def \_prctl_tmp {}
 		\tl_analysis_map_inline:nn {#2} {
-			\tl_put_right:Nx \_precattltmp {\expandafter \string ##1}
+			\tl_put_right:Nx \_prctl_tmp {\expandafter \string ##1}
 		}
 
 		% then pass it to the specific handler.
 		\exp_args:NNV
 	\endgroup
-	#1 \_precattltmp
+	#1 \_prctl_tmp
 }
 
 
-\def \_precattldo_special_cC_outer { \_precattldo_special\_precattldo_special_cC }
-\def \_precattldo_special_cB_outer { \_precattldo_special\_precattldo_special_cB }
-\def \_precattldo_special_cE_outer { \_precattldo_special\_precattldo_special_cE }
-\def \_precattldo_special_cM_outer { \_precattldo_special\_precattldo_special_cM }
-\def \_precattldo_special_cT_outer { \_precattldo_special\_precattldo_special_cT }
-\def \_precattldo_special_cP_outer { \_precattldo_special\_precattldo_special_cP }
-\def \_precattldo_special_cU_outer { \_precattldo_special\_precattldo_special_cU }
-\def \_precattldo_special_cD_outer { \_precattldo_special\_precattldo_special_cD }
-\def \_precattldo_special_cS_outer { \_precattldo_special\_precattldo_special_cS }
-\def \_precattldo_special_cL_outer { \_precattldo_special\_precattldo_special_cL }
-\def \_precattldo_special_cO_outer { \_precattldo_special\_precattldo_special_cO }
-\def \_precattldo_special_cStr_outer { \_precattldo_special\_precattldo_special_cStr }
-\def \_precattldo_special_cA_outer { \_precattldo_special\_precattldo_special_cA }
+\def \_prctl_do_special_cC_outer { \_prctl_do_special\_prctl_do_special_cC }
+\def \_prctl_do_special_cB_outer { \_prctl_do_special\_prctl_do_special_cB }
+\def \_prctl_do_special_cE_outer { \_prctl_do_special\_prctl_do_special_cE }
+\def \_prctl_do_special_cM_outer { \_prctl_do_special\_prctl_do_special_cM }
+\def \_prctl_do_special_cT_outer { \_prctl_do_special\_prctl_do_special_cT }
+\def \_prctl_do_special_cP_outer { \_prctl_do_special\_prctl_do_special_cP }
+\def \_prctl_do_special_cU_outer { \_prctl_do_special\_prctl_do_special_cU }
+\def \_prctl_do_special_cD_outer { \_prctl_do_special\_prctl_do_special_cD }
+\def \_prctl_do_special_cS_outer { \_prctl_do_special\_prctl_do_special_cS }
+\def \_prctl_do_special_cL_outer { \_prctl_do_special\_prctl_do_special_cL }
+\def \_prctl_do_special_cO_outer { \_prctl_do_special\_prctl_do_special_cO }
+\def \_prctl_do_special_cStr_outer { \_prctl_do_special\_prctl_do_special_cStr }
+\def \_prctl_do_special_cA_outer { \_prctl_do_special\_prctl_do_special_cA }
 
-\def \_precattl_tmp_help #1 {
-	\def \_precattl_do_frozen_relax { \EI_append:n {#1} }
+\def \_prctl_tmp_help #1 {
+	\def \_prctl_do_frozen_relax { \EI_append:n {#1} }
 	% #1 here will be substituted by the frozen relax
 }
-\expandafter \_precattl_tmp_help \ifnum0=0\fi
-\let \_precattl_tmp_help \undefined
+\expandafter \_prctl_tmp_help \ifnum0=0\fi
+\let \_prctl_tmp_help \undefined
 
 
 
@@ -240,33 +240,35 @@
 	\begingroup
 		\let \EIhandler_EIexpand \undefined
 		\let \EIhandler_EIexecute \undefined
-		\def \EIhandler_cC { \EI_collect_arg:Nn \_precattldo_special_cC_outer 1 }
-		\def \EIhandler_cB { \EI_collect_arg:Nn \_precattldo_special_cB_outer 1 }
-		\def \EIhandler_cE { \EI_collect_arg:Nn \_precattldo_special_cE_outer 1 }
-		\def \EIhandler_cM { \EI_collect_arg:Nn \_precattldo_special_cM_outer 1 }
-		\def \EIhandler_cT { \EI_collect_arg:Nn \_precattldo_special_cT_outer 1 }
-		\def \EIhandler_cP { \EI_collect_arg:Nn \_precattldo_special_cP_outer 1 }
-		\def \EIhandler_cU { \EI_collect_arg:Nn \_precattldo_special_cU_outer 1 }
-		\def \EIhandler_cD { \EI_collect_arg:Nn \_precattldo_special_cD_outer 1 }
-		\def \EIhandler_cS { \EI_collect_arg:Nn \_precattldo_special_cS_outer 1 }
-		\def \EIhandler_cL { \EI_collect_arg:Nn \_precattldo_special_cL_outer 1 }
-		\def \EIhandler_cO { \EI_collect_arg:Nn \_precattldo_special_cO_outer 1 }
-		\def \EIhandler_cStr { \EI_collect_arg:Nn \_precattldo_special_cStr_outer 1 }
-		\def \EIhandler_cA { \EI_collect_arg:Nn \_precattldo_special_cA_outer 1 }
-		\let \EIhandler_cFrozenRelax \_precattl_do_frozen_relax
-		\execinside_gset:Nn \_precattlvalueg {#1}
+		\def \EIhandler_cC { \EI_collect_arg:Nn \_prctl_do_special_cC_outer 1 }
+		\def \EIhandler_cB { \EI_collect_arg:Nn \_prctl_do_special_cB_outer 1 }
+		\def \EIhandler_cE { \EI_collect_arg:Nn \_prctl_do_special_cE_outer 1 }
+		\def \EIhandler_cM { \EI_collect_arg:Nn \_prctl_do_special_cM_outer 1 }
+		\def \EIhandler_cT { \EI_collect_arg:Nn \_prctl_do_special_cT_outer 1 }
+		\def \EIhandler_cP { \EI_collect_arg:Nn \_prctl_do_special_cP_outer 1 }
+		\def \EIhandler_cU { \EI_collect_arg:Nn \_prctl_do_special_cU_outer 1 }
+		\def \EIhandler_cD { \EI_collect_arg:Nn \_prctl_do_special_cD_outer 1 }
+		\def \EIhandler_cS { \EI_collect_arg:Nn \_prctl_do_special_cS_outer 1 }
+		\def \EIhandler_cL { \EI_collect_arg:Nn \_prctl_do_special_cL_outer 1 }
+		\def \EIhandler_cO { \EI_collect_arg:Nn \_prctl_do_special_cO_outer 1 }
+		\def \EIhandler_cStr { \EI_collect_arg:Nn \_prctl_do_special_cStr_outer 1 }
+		\def \EIhandler_cA { \EI_collect_arg:Nn \_prctl_do_special_cA_outer 1 }
+		\let \EIhandler_cFrozenRelax \_prctl_do_frozen_relax
+		\execinside_gset:Nn \_prctl_valueg {#1}
 	\endgroup
 }
 
 \def \precattl_set:Nn #1 #2 {
 	\precattl_prepare:n {#2}
-	\tl_set_eq:NN #1 \_precattlvalueg
+	\tl_set_eq:NN #1 \_prctl_valueg
 }
 
 
 
 
 
+
+\use_none:n{{{ % ======== unused code, will do something with it once peek_analysis_map_inline:n bug is fixed
 
 \cs_new_protected:Npn \__resume_peek: {
 	\peek_analysis_map_inline:n {
@@ -275,7 +277,7 @@
 }
 
 \def \__help:NN #1 #2 {
-	\def #1 { \peek_analysis_map_break:n { \_precattldo_special #2 } }
+	\def #1 { \peek_analysis_map_break:n { \_prctl_do_special #2 } }
 }
 \cs_generate_variant:Nn \__help:NN {cc}
 \str_map_inline:nn {CBEMTPUDSLOA} {
@@ -381,12 +383,12 @@
 
 
 
-\def \_precattl_tmp_help #1 {
-	\def \_precattl_do_frozen_relax { \EI_append:n {#1} }
+\def \_prctl_tmp_help #1 {
+	\def \_prctl_do_frozen_relax { \EI_append:n {#1} }
 	% #1 here will be substituted by the frozen relax
 }
-\expandafter \_precattl_tmp_help \ifnum0=0\fi
-\let \_precattl_tmp_help \undefined
+\expandafter \_prctl_tmp_help \ifnum0=0\fi
+\let \_prctl_tmp_help \undefined
 
 
 \def \precattl_setx:Nn #1 #2 {
@@ -403,12 +405,24 @@
 	#2
 	\__stop
 }
+
+}}}
+
+
 \let\precattlSet\precattl_set:Nn
 
 \def \precattl_exec:n #1 {
 	\precattl_prepare:n {#1}
-	\_precattlvalueg
-	%\precattl_set:Nn \__tmp {#1}
-	%\__tmp
+	\_prctl_valueg
 }
 \let\precattlExec\precattl_exec:n
+
+
+\NewDocumentEnvironment{precattlenv}{b}{
+	\_prctl_env_helper:n {#1}
+}{}
+
+\cs_new_protected:Npn \_prctl_env_helper:n #1 \end #2 {
+	\end {#2} \precattl_exec:n {#1}
+}
+
