@@ -86,13 +86,15 @@ function prettyprintw()
 	check_file_opened()
 	local extra=token.scan_toks()
 	local s={}
+	local last_token
 	while true do
-		local n=token.get_next()
-		s[#s+1]=n
-		if n.csname=="prettystop" then break end
+		local last_token=token.get_next()
+		if last_token.csname=="prettystop" then break end
+		s[#s+1]=last_token
 	end
 
-	prettyprint(extra, s)
+	prettyprint(extra, s)  -- exclude the \prettystop token
+	s[#s+1]=last_token
 	token.put_next(s)
 end
 end
