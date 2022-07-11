@@ -48,6 +48,18 @@ done
 	78 9
 \end{rescansyncSaveenvPacked}
 
+\ExplSyntaxOn
+\begin{rescansyncRewriteenv}{
+	\str_replace_all:Nnn #1 {1} {A}
+}
+\ExplSyntaxOff
+	12 3
+
+	41 6
+
+	78 1
+\end{rescansyncRewriteenv}
+
 \rescansyncPacked\aa
 
 \ExplSyntaxOn
