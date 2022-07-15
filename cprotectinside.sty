@@ -18,12 +18,12 @@
 \NewDocumentCommand \cprotectinsideDisableSyncInner {} { \global\let \cprotectinsideSyncInner:TF \use_ii:nn }
 \cprotectinsideDisableSyncInner
 
-\NewDocumentCommand \cprotectinsideEnableSync {} { \global\let \cprotectinsideSync:TF \use_i:nn }
-\NewDocumentCommand \cprotectinsideDisableSync {} { \global\let \cprotectinsideSync:TF \use_ii:nn }
+\NewDocumentCommand \cprotectinsideEnableSyncOuter {} { \global\let \cprotectinsideSyncOuter:TF \use_i:nn }
+\NewDocumentCommand \cprotectinsideDisableSyncOuter {} { \global\let \cprotectinsideSyncOuter:TF \use_ii:nn }
 \sys_if_engine_luatex:TF {
-	\cprotectinsideEnableSync
+	\cprotectinsideEnableSyncOuter
 } {
-	\cprotectinsideDisableSync
+	\cprotectinsideDisableSyncOuter
 }
 
 \seq_new:N \_cpi_entries
@@ -32,21 +32,21 @@
 
 \precattl_exec:n {
 
-% #1: single character for the delimiter e.g. '+'
+% #1: the delimiter e.g. '+'
 % #2: the body
 \NewDocumentCommand\cprotectinside{v +v}{
-
-	%\seq_set_split_keep_spaces:Nnn \_cpi_entries {#1} {#2}
-	% cannot do this in old version
-
 	
 	\seq_set_split:Nnn \_cpi_local_lines { \cO\^^M } {#2}
 	\int_set:Nn \_cpi_lineoffset {\inputlineno - \seq_count:N \_cpi_local_lines}
 	\edef \_cpi_linebase {\int_use:N \_cpi_lineoffset}
 
+	%\seq_set_split_keep_spaces:Nnn \_cpi_entries {#1} {#2}
+	% cannot do this in old version
+	\tl_set:Nn \_cpi_delimiter {#1}
 	\tl_set:Nn \_cpi_entries {#2}
-	\tl_replace_all:Nnx \_cpi_entries {~} { \char_generate:nn {`\ } {12} }  % replace space <space> with other <space>
-	\seq_set_split:NnV \_cpi_entries {#1} \_cpi_entries  % so that they're not lost here. Support older versions without \seq_set_split_keep_spaces
+	\tl_replace_all:Nnn \_cpi_delimiter {~} {\cO\ }
+	\tl_replace_all:Nnn \_cpi_entries {~} {\cO\ }
+	\seq_set_split:NVV \_cpi_entries \_cpi_delimiter \_cpi_entries  % so that they're not lost here. Support older versions without \seq_set_split_keep_spaces
 
 	\int_if_even:nT {\seq_count:N \_cpi_entries} {
 		\msg_error:nn {cprotectinside} {delimiter-not-match}
@@ -84,7 +84,7 @@
 	\tl_build_gend:N \_cpi_result
 
 
-	\cprotectinsideSync:TF {
+	\cprotectinsideSyncOuter:TF {
 		\tl_replace_all:Nnn \_cpi_result {\cO\^^M} {\cO\^^J}
 		\rescansync:VV \_cpi_result \_cpi_linebase
 	} {
@@ -120,5 +120,6 @@
 }
 
 \cs_generate_variant:Nn \tl_gset_rescan:Nnn {NnV}
+\cs_generate_variant:Nn \seq_set_split:Nnn {NVV}
 
 }

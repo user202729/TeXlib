@@ -6,9 +6,15 @@
 \RecordChanges
 \usepackage{hyperref}
 \usepackage{csquotes}
-%\MakeOuterQuote{"}
+\fvset{gobble=0,tabsize=4,frame=single,numbers=left,numbersep=3pt}
+
+\AtBeginDocument{\DeleteShortVerb\"}  % https://tex.stackexchange.com/a/650966/250119
+\MakeOuterQuote{"}
+
 \begin{document}
 \GetFileInfo{\jobname.tex}
+
+\MakeShortVerb{`}
 
 \title{\textsf{cprotectinside} --- Use cprotect arbitrarily deeply nested
 \thanks{This file describes version \fileversion, last revised \filedate.}
@@ -22,13 +28,10 @@
 
 \changes{v0.0.0}{2022/05/18}{First public release}
 
-\let\backtick=`
-\MakeShortVerb{`}
 
 \begin{abstract}
-	Extends on `cprotect` package to allow users to use verbatim-like commands inside arbitrary
-	parameters.
-	
+Extends on `cprotect` package to allow users to use verbatim-like commands inside arbitrary
+parameters.
 \end{abstract}
 
 \section{Usage}
@@ -40,6 +43,7 @@
 	  \cs{cprotectinside} \meta{delimiter} \meta{content} \\
   \end{syntax}
   Execute \meta{content} that possibly contains verbatim content.
+\end{function}
 
   This is a bit hard to explain. To give an example:
 
@@ -58,41 +62,39 @@
 
 The resulting code would be:
 
-		\begin{verbatim}
-		\cprotectinside{!}{\textbf{\using !\verb|-i|! as}}}
-		\end{verbatim}
+\begin{verbatim}
+\cprotectinside{!}{\textbf{\using !\verb|-i|! as}}}
+\end{verbatim}
 
 The first argument `!` is the delimiter, it can be changed as long as it's changed correspondingly in the \meta{content} part.
+
+The delimiter can also be a multi-character sequence.
 
 In this simple case, it's possible to simply use `cprotect`. Nevertheless this package is useful in some cases, for example...
 
 \begin{itemize}
 	\item Value of keyval argument:
 
-		\begin{verbatim}
-		\cprotectinside{*}{
-		\begin{lstlisting}[language=Perl,
-			caption={text *\verb+myverb+* some more text}]
-		code code
-		code code
-		\end{lstlisting}
-		}
-		\end{verbatim}
+\begin{verbatim}
+\cprotectinside{*}{
+\begin{lstlisting}[language=Perl,
+	caption={text *\verb+myverb+* some more text}]
+code code
+code code
+\end{lstlisting}
+}
+\end{verbatim}
 
 	\item  Pseudo-environments (contrived example):
 
-		\begin{verbatim}
-		\cprotectinside{*}{
-			\begin{align}
-				1 &= 2+\text{text *\verb+text+* text}
-			\end{align}
-		}
-		\end{verbatim}
+\begin{verbatim}
+\cprotectinside{*}{
+	\begin{align}
+		1 &= 2+\text{text *\verb+text+* text}
+	\end{align}
+}
+\end{verbatim}
 \end{itemize}
-
-
-
-\end{function}
 
 
 \subsection{Common issues}
@@ -100,10 +102,10 @@ In this simple case, it's possible to simply use `cprotect`. Nevertheless this p
 \begin{itemize}
 
 	\item If you get the error message
-
 		\begin{quote}
-			LaTeX cmd Error: Verbatim-like command \backtick `\cprotectinside`' illegal in argument.
+			\LaTeX\ cmd Error: Verbatim-like command "\textbackslash cprotectinside" illegal in argument.
 		\end{quote}
+		and you're indeed not using |\cprotectinside| inside a command argument:
 
 		You can't use a literal TAB character inside \meta{content}
 		because of a known bug: \url{https://tex.stackexchange.com/q/508001}
@@ -111,26 +113,37 @@ In this simple case, it's possible to simply use `cprotect`. Nevertheless this p
 		(when the tab character is at the begin of a line -- which is the most common case, it will give no error message but they will be removed from the code. Which might matter for `verbatim` environments, for example.)
 
 	\item Note that the following code will not work as desired
-		\begin{verbatim}
-		\cprotectinside{!}{
-			some content
-			%}
-			some other content
-		}
-		\end{verbatim}
-		because of the unbalanced brace in the comment. It's possible to use characters different from braces to delimit the second argument
-		\begin{verbatim}
-		\cprotectinside{!}|
-			some content
-			%}
-			some other content
-		|
-		\end{verbatim}
-		or use the workarounds described in the documentation of \texttt{cprotect} package.
+\begin{verbatim}
+\cprotectinside{!}{
+	some content
+	%}
+	some other content
+}
+\end{verbatim}
+because of the unbalanced brace in the comment. It's possible to use characters different from braces to delimit the second argument
+\begin{verbatim}
+\cprotectinside{!}|
+	some content
+	%}
+	some other content
+|
+\end{verbatim}
+or use the workarounds described in the documentation of \texttt{cprotect} package.
 
-	\item Contents that is intended to be passed as
-		\enquote{text}
-		to the outer command must not be `cprotect`ed.
+
+	\item Contents that is intended to be passed as "string" to the outer command must not be `cprotect`ed.
+
+		For example
+\begin{verbatim}
+\cprotectinside{*}{
+\begin{lstlisting}[*language=Perl,
+	caption={text \verb+myverb+ some more text}*]
+code code
+code code
+\end{lstlisting}
+}
+\end{verbatim}
+The code above is wrong, as \pkg{lstlisting} need to read |language| and |Perl| etc. as "string" to process them, instead of as "text to be typesetted".
 
 		As a general rule of thumb, if the content inside can be replaced with a `\includegraphics` with no compilation error,
 		it can be `cprotect`ed.
@@ -138,7 +151,74 @@ In this simple case, it's possible to simply use `cprotect`. Nevertheless this p
 
 \end{itemize}
 
-\subsection{Implementation note}
+\subsection{Configuration}
+
+There is some support to preserve Sync\TeX\ information using the \pkg{rescansync} package
+(subject to some limitations, refer to the package documentation for more details).
+
+Given the following example code
+\begin{verbatim}
+\cprotectinside{**}|
+line 1
+
+line 2
+
+\texttt{
+**\verb+line 3+
+
+\verb+line 4+**
+}
+
+\texttt{
+**\verb+line 5+
+
+\verb+line 6+**
+}
+|
+\end{verbatim}
+\begin{itemize}
+	\item If sync-outer is enabled, then "line 1" and "line 2" will have correct sync information.
+	\item If sync-inner is enabled in addition, "line 3" and "line 4" will have correct sync information.
+		Otherwise, they will point to the line after the whole command (i.e. the end of |\texttt| command).
+	\item If sync-outer is disabled but sync-inner is enabled, "line 1" and "line 2" will not have sync information
+		(points to the end of the whole |\cprotectinside| block), but "line 3" and "line 4" etc. will have correct sync information.
+\end{itemize}
+Note that enabling the feature might create a lot of small temporary files, use with care.
+
+\begin{function}{\cprotectinsideEnableSyncOuter,\cprotectinsideDisableSyncOuter}
+	\begin{syntax}
+		\tn{cprotectinsideDisableSyncOuter}
+		\tn{cprotectinsideEnableSyncOuter}
+	\end{syntax}
+	Call this function to enable/disable sync-outer.
+\end{function}
+
+\begin{function}{\cprotectinsideEnableSyncInner,\cprotectinsideDisableSyncInner}
+	\begin{syntax}
+		\tn{cprotectinsideDisableSyncInner}
+		\tn{cprotectinsideEnableSyncInner}
+	\end{syntax}
+	Call this function to enable/disable sync-inner.
+\end{function}
+
+For advanced users, these functions allow the user to check whether the feature is currently enabled:
+\begin{function}[EXP]{\cprotectinsideSyncOuter:TF}
+	\begin{syntax}
+		|\cprotectinsideSyncOuter:TF| \Arg{true code} \Arg{false code}
+	\end{syntax}
+
+	Check if sync-outer is enabled.
+\end{function}
+
+\begin{function}[EXP]{\cprotectinsideSyncInner:TF}
+	\begin{syntax}
+		|\cprotectinsideSyncInner:TF| \Arg{true code} \Arg{false code}
+	\end{syntax}
+
+	Check if sync-inner is enabled.
+\end{function}
+
+\section{Implementation note}
 
 The working of the code is similar to how \texttt{cprotect} package works. Described in more details
 in \url{https://tex.stackexchange.com/q/622512} (post by the package author).
@@ -153,11 +233,9 @@ Where `\cpiContentAi/` is defined to be something similar to `\input{inner.tex}`
 
 The string to be appended inside each inner chunk defaults to `\empty`, used to remove the space generated at the
 end of each file (similar in purpose to `^^E^^L` used by `cprotect` package), but it can be configured:
-
 \begin{variable}{\cprotectinsideAppend}
 	The content to be appended to every inner macro. Should already be detokenized. Defaults to the detokenized string \texttt{\textbackslash empty}.
 \end{variable}
-
 
 \StopEventually{%
   \PrintChanges

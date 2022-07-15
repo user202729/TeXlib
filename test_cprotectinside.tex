@@ -29,24 +29,27 @@ using \verb|-i| as\relax
 %	\textbf{using \SETE\expandafter\expandafter\expandafter\RESETE\input{tmp.tex}as}  % this one has newline, bad
 %}
 
+\cprotectinside{protect this}{
+	\texttt{start protect this \verb+123+ protect this stop}
+}
 
-\cprotectinside{!}{
+\cprotectinside{**}{
 	start
 
 	123
 
-	!
+	**
 	1234\par
 	1234\par
 	1234\par
-	!
+	**
 
 	A123\par
 	B123\par
 	C123\par
 	D123\par
 
-	!
+	**
 	A1234\par
 	B1234\par
 	C1234\par
@@ -54,15 +57,15 @@ using \verb|-i| as\relax
 	E1234\par
 
 	1234
-	!
+	**
 
 	123
 
-	!
+	**
 	1234
 
 	1234
-	!
+	**
 
 	end
 }
@@ -75,26 +78,27 @@ using \verb|-i| as\relax
 	E1234\par
 
 
-\begin{tabular}{cc}
-raw TeX command: & {\bf using \verb|-i| as} ... \\
+	\setlength{\tabcolsep}{0pt}
+\begin{tabular}{c|l|}
+raw \TeX\ command: &{\bf using \verb|-i| as} ...\\
 
 %{
 %	\cprotect\textbf{using \verb|-i| as}
 %}
 
-input: & \textbf{\input{tmpz.tex}} ... \\
-scantokens: & \textbf{\scantokens{using \verb|-i| as\relax}} ... \\
+input: & \textbf{\input{tmpz.tex}} ...\\
+scantokens: & \textbf{\scantokens{using \verb|-i| as\relax}} ...\\
 cprotectinside: &
-{
-\cprotectinside{*}{
-	\textbf{*using \verb|-i| as*} ...}} \\
+{%
+\cprotectinside{*}{%
+	\textbf{*using \verb|-i| as*} ...}}\\
 
 input (small): & \textbf{using \input{tmp.tex} as} ... \\
-scantokens (small): & \textbf{using \scantokens{\verb|-i|\relax} as} ... \\
+scantokens (small): & \textbf{using \scantokens{\verb|-i|\relax} as} ...\\
 cprotectinside (small): &
-{
-\cprotectinside{!}{
-	\textbf{using !\verb|-i|! as} ...}} \\
+{%
+\cprotectinside{!}{%
+	\textbf{using !\verb|-i|! as} ...}}\\
 
 \end{tabular}
 
