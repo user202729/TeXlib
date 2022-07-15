@@ -1,0 +1,125 @@
+\ProvidesExplPackage{tlserialize}{2022/07/11}{0.0.0}{Serialize token list}
+\RequirePackage{precattl}
+\RequirePackage{saveenv}
+\RequirePackage{currfile}
+\RequirePackage{rescansync}
+%\GenerateVariantsFile:n{tlserialize.sty}
+%\GenerateVariantsFileLog:n{tlserialize.sty}
+\pretty:n{weird}
+
+\cs_generate_variant:Nn \tl_build_put_right:Nn {NV}
+\cs_generate_variant:Nn \tl_if_eq:nnTF {onTF}
+\cs_generate_variant:Nn \tl_if_eq:nnF {onF}
+\cs_generate_variant:Nn \str_map_inline:nn {xn}
+\cs_generate_variant:Nn \tl_build_put_right:Nn {Nx}
+\cs_generate_variant:Nn \tldeserialize:Nn {NV}
+\cs_generate_variant:Nn \str_if_eq:nnTF {xVTF}
+\cs_generate_variant:Nn \str_count:n {V}
+\cs_generate_variant:Nn \exp_args:Nn {Nx}
+
+\begin{rescansyncRewriteenv}{ \str_replace_all:Nnn #1 {__} {_tlser_} }
+
+\msg_new:nnn {tlserialize} {cannot-serialize}
+	{Token~list~cannot~be~serialized}
+\msg_new:nnn {tlserialize} {cannot-deserialize}
+	{Token~list~cannot~be~deserialized}
+
+\NewDocumentCommand\__set_str{mv}{
+	\tl_set:Nn #1{#2}
+}
+\NewDocumentCommand\__append_str{mv}{
+	\tl_put_right:Nn #1{#2}
+}
+\__set_str   \__preamble |{|
+\__append_str\__preamble |\edef\F{\ifnum0=0\fi}|  % F for frozen relax
+\__append_str\__preamble |\expandafter\let\expandafter\GGG\csname char_generate:nn\endcsname|  % (auxiliary)
+\__append_str\__preamble |\escapechar=-1\edef\-{\string\ }|  % - for space
+\__append_str\__preamble |\def\C#1.#2{\GGG{#1}{"#2}}|  % C for char
+\__append_str\__preamble |\def\P#1.{##\GGG{#1}6}|      % P for param
+\__append_str\__preamble |\def\O#1.{\GGG{#1}{12}}|      % O for other
+\__append_str\__preamble |\def\A#1.{\expandafter\expandafter\expandafter\noexpand\GGG{#1}{13}}|  % A for active character
+\__append_str\__preamble |\def\S#1{\expandafter\noexpand\csname #1\endcsname}|  % S for control sequence
+\__append_str\__preamble |\edef\T{|
+
+\__set_str   \__finale   |}\expandafter}\T%|
+
+\__set_str   \__alt_finale |}\expandafter}\csname __result:n\expandafter\endcsname\expandafter{\T}%|
+
+
+\begin{precattlenv}
+\cs_new_protected:Npn \tlserialize_unchecked:Nn #1 #2{
+	\tl_build_begin:N #1
+	\tl_build_put_right:NV #1 \__preamble
+	\tl_analysis_map_inline:nn {#2} {
+		% by documentation of \tl_analysis_map_inline:nn: #1=token, #2=char code, #3=catcode
+		\int_compare:nNnTF {##2} = {-1} {
+			% token is control sequence
+			\tl_if_eq:onTF {##1} {\cFrozenRelax} {
+				\tl_build_put_right:Nn #1 {\cStr{ \\F }}
+			} {
+				\tl_build_put_right:Nn #1 {\cStr{ \\S\{ }}
+				\tl_if_eq:onF {##1} { \cC{} } {
+					\str_map_inline:xn {\exp_after:wN \cs_to_str:N ##1} {  % side note, must use str here to preserve spaces
+						\tl_build_put_right:Nx #1 { \cO{\\O} \number`####1 .}
+					}
+				}
+				\tl_build_put_right:Nn #1 { \cStr{ \} }}
+			}
+		} {
+			% token is not control sequence
+			\tl_build_put_right:Nx #1 {
+				\int_case:nnF {"##3} {
+					{6}{ \cStr{\\P} ##2. }
+					{10}{ \int_compare:nNnTF {##2}={32} {\cStr{\\-}} {\cStr{\\C} ##2.A} }
+					{12}{ \cStr{\\O} ##2. }
+					{13}{ \cStr{\\A} ##2. }
+				}{
+					\cStr{\\C} ##2.##3
+				}
+			}
+		}
+	}
+	\tl_build_put_right:NV #1 \__finale
+	\tl_build_end:N #1
+}
+
+%\prg_new_protected_conditional:Npn
+\cs_new_protected:Npn \tlserialize:NnTF #1 #2 {
+	\tlserialize_unchecked:Nn #1 {#2}
+	\tldeserialize:NV \__tmp #1
+
+
+	\tl_if_eq:NnTF \__tmp {#2} % dangling
+}
+
+\cs_new_protected:Npn \tlserialize:NnF #1 #2 {
+	\tlserialize:NnTF #1 {#2} {} % dangling
+}
+
+\cs_new_protected:Npn \tlserialize:NnT #1 #2 #3 { \tlserialize:NnTF #1 {#2} {#3} {} }
+
+\cs_new_protected:Npn \tlserialize:Nn #1 #2{
+	\tlserialize:NnF #1 {#2} {
+		\msg_error:nn {tlserialize} {cannot-serialize}
+	}
+}
+
+\cs_new_protected:Npn \tldeserialize:Nn #1 #2{
+	\str_if_eq:xVTF {\str_range:nnn {#2} {-\str_count:V \__finale} {-1}} \__finale {
+		\cs_set_protected:Npn \__result:n ##1{
+			\tl_set:Nn #1 {##1}
+		}
+		%\pretty:x  {going to rescan →
+		%	\str_range:nnn {#2} {1} {-1-\str_count:V \__finale} \__alt_finale
+		%}
+		\exp_args:Nx \scantokens {
+			\str_range:nnn {#2} {1} {-1-\str_count:V \__finale} \__alt_finale
+		}
+	} {
+		\msg_error:nn {tlserialize} {cannot-deserialize}
+	}
+}
+\end{precattlenv}
+
+\end{rescansyncRewriteenv}
+

@@ -1,0 +1,51 @@
+%! TEX program = lualatex
+\errorcontextlines=100
+\documentclass{article}
+\usepackage{prettytok}
+\prettyinit
+\usepackage{saveenv}
+\usepackage{tlserialize}
+\usepackage{minitest}
+\usepackage{genvar}
+
+\ExplSyntaxOn
+\GenerateVariantsFile:n{test_tlserialize.tex}
+\precattl_exec:n{
+\tl_map_inline:nn {
+	{\relax}
+	{\cFrozenRelax}
+	{\tenrm}
+	{~A\cL\:\cO\:\cB\x\cS\ \cS\w\cE\y12#^$^_${}\cA\x\cA\& &\test\\\-\>\S\C\T\?}
+} {
+	\pretty:n{processing~token~list→#1}
+	\tlserialize:NnTF \__tmp {#1} {} {
+		\testfail:n{direct serialize fail}
+	}
+
+	
+	\tlserialize:NnTF \__tmp {\edef \__tmpa {\unexpanded{#1}}} {} {\testfail:n{indirect serialize fail}}
+
+
+	\let \__tmpa \empty
+	\scantokens\expandafter{\__tmp}
+	\tl_if_eq:NnTF \__tmpa {#1} {} {\testfail:n {reconstruct fail}}
+
+
+	\tl_map_variable:nNn {{\ExplSyntaxOn\makeatletter} {\ExplSyntaxOff\makeatletter} {\ExplSyntaxOn\makeatother} {\ExplSyntaxOff\makeatother}} \__setup_cat {
+		\let \__tmpa \empty
+		\tlserialize:Nn \__tmp {\edef \__tmpa {\unexpanded{#1}}}
+		\tl_rescan:nV {\__setup_cat} \__tmp
+		\testname:n{reconstruct special catcode}
+		\assertequal:Vn \__tmpa {#1}
+	}
+}
+}
+
+\exp_args:NNo \tlserialize:NnTF \__tmp {\the\font} {\testfail:n{the font should not be serializable!}} {}
+
+\prettystop
+
+\ExplSyntaxOff
+
+\begin{document}
+\end{document}
