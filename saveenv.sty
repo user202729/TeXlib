@@ -55,7 +55,6 @@
 % #1: target macro
 % #2: content to be inserted after the \end
 \NewDocumentEnvironment {saveenvkeeplastreinsert} {mm} {
-	\pretty:n {#1 {#2}}
 	\begingroup
 	\edef \_senv_old_endlinechar {\the\endlinechar}
 	\cctab_select:N \c_other_cctab  % note that this changes the value of \endlinechar as well
@@ -94,9 +93,7 @@
 			\endgroup
 			\str_gset:Nn #1 {##1}
 			\end{#3}
-			\pretty:n{here : #4}
 			#4
-			\pretty:n{here}
 		} {
 			\msg_error:nn {saveenv} {trailing-content-end-line}
 		}
@@ -107,7 +104,6 @@
 \cs_generate_variant:Nn \_senv_helper:Nnnn {NVVn}
 
 \NewDocumentEnvironment {saveenvkeeplast} {m} {
-	\pretty:n {#1} 
 	\saveenvkeeplastreinsert #1 {}
 } {
 	\endsaveenvkeeplastreinsert
