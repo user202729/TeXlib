@@ -1,0 +1,348 @@
+\ProvidesFile{luamacrohelper.tex}[2022/07/16 0.0.0 Tools to help with writing \TeX\ macros in Lua]
+\documentclass{l3doc}
+\usepackage{fvextra}
+\EnableCrossrefs
+\CodelineIndex
+\fvset{breaklines=true,gobble=0,tabsize=4,frame=single,numbers=left,numbersep=3pt}
+
+\AtBeginDocument{\DeleteShortVerb\"}  % https://tex.stackexchange.com/a/650966/250119
+\MakeOuterQuote{"}
+
+\NewDocumentEnvironment{luafn}{}{\function}{\endfunction}  % for semantic difference only, currently there's no functional difference
+
+\newcommand\reg{régime}
+
+\begin{document}
+\GetFileInfo{\jobname.tex}
+
+\title{\pkg{\jobname} --- \fileinfo
+\thanks{This file describes version \fileversion, last revised \filedate.}
+}
+\author{user202729}
+\date{Released \filedate}
+
+\maketitle
+
+\begin{abstract}
+Tools to help with writing \TeX\ macros in Lua.
+\end{abstract}
+
+\section{Motivation}
+Currently, \LuaTeX\ embeds a Lua interpreter in \TeX\ which allows
+efficient interleaving of Lua code and \TeX\ code;
+however if you want to write \TeX\ macros from Lua,
+the code is not very pretty because the primitives \LuaTeX\ provides
+has some quirks that need workarounds in common cases.
+
+This package provides
+\begin{itemize}
+	\item common library functions for creating \TeX\ macros in Lua
+	\item convenient syntactic sugar
+	\item some additional debug traceback capacities.
+\end{itemize}
+
+Unless specifically noted, any case where Lua traceback is not printed if the error happens while some Lua code is running is considered a bug in the package.
+
+\section{Loading the package}
+
+Execute |\usepackage{luamacrohelper}| as usual.
+
+Then the API is provided by, executing from Lua, |local L = require "luamacrohelper"|.
+In the following documentation |L| will be used to denote the library table.
+
+Strictly speaking, the |\usepackage| line is not necessary;
+however the package does some initialization on first load.
+
+\section{Convention}
+
+Throughout this document:
+\begin{itemize}
+	\item \meta{token object} is used to represent a Lua built-in token object.
+	\item \meta{token list} is used to represent a Lua integer-indexed table of \meta{token object}s.
+	\item \meta{function} is used to represent a Lua function object.
+\end{itemize}
+
+\section{API documentation}
+
+\begin{luafn}{L.luadef}
+	\begin{syntax}
+		L.luadef(\meta{function name}, \meta{function}, \meta{optional prefix})
+	\end{syntax}
+	Define a \TeX\ macro similar to |\def|. In \LuaTeX, this will expand in one step to its result.
+
+	Explicitly providing argument is not supported; instead, get the arguments inside the function.
+
+	The third argument is optional, it's a table such as |{protected=1, long=1}| -- the table keys are used as prefixes for the new control sequence.
+\end{luafn}
+
+\begin{luafn}{L.protected_luadef,L.protected_long_luadef}
+	\begin{syntax}
+		L.protected_luadef(\meta{function name}, \meta{function})
+		L.protected_long_luadef(\meta{function name}, \meta{function})
+	\end{syntax}
+	Simple wrapper for the above.
+\end{luafn}
+
+
+\begin{luafn}{L.get_argument}
+	\begin{syntax}
+		L.get_argument() -> \meta{token list}
+	\end{syntax}
+	Get an argument in the input stream.
+\end{luafn}
+
+\begin{luafn}{tex.sprint,tex.print}
+	\begin{syntax}
+		tex.sprint(\meta{arguments})
+		tex.print(\meta{arguments})
+	\end{syntax}
+	This \LuaTeX\ built-in can be used to print \TeX\ code. Refer to \LuaTeX\ documentation for details which arguments are supported.
+\end{luafn}
+
+These functions can be used to replace \TeX\ primitive |\def| statements as following:
+
+\begin{verbatim}
+L.def("mymacro", function()
+	local a=L.get_argument()
+	local b=L.get_argument()
+	tex.sprint("(")
+	tex.sprint(a)
+	tex.sprint(",")
+	tex.sprint(b)
+	tex.sprint(")")
+end)
+% \def\mymacro#1#2{(#1,#2)}
+\end{verbatim}
+
+\begin{luafn}{L.tl_equal}
+	\begin{syntax}
+		L.tl_equal(\meta{token list}, \meta{token list}) -> bool
+	\end{syntax}
+	Check if two token lists are equal.
+\end{luafn}
+
+\begin{luafn}{L.T}
+Create a token. See example for details how to use it. (remember that |T "{"| is Lua shorthand for function call |T("{")|)
+\begin{verbatim}
+local T=L.T
+T "{"      -- create the begin-group character token  (using current catcode of {)
+T("{", 1)  -- same as above, explicitly provide the catcode
+T(string.byte "{", 1)  -- same as above, provide the character code as an integer. Note that string.byte is not UTF8-aware
+T.expandafter     -- create the control sequence token \expandafter
+T["expandafter"]  -- same as above
+\end{verbatim}
+Unlike |token.create()|, this supports creating the null control sequence |T[""]|,
+as well as control sequences that is not in the hash table (in which case they will be added to the hash table).
+\end{luafn}
+
+\begin{luafn}{L.bgroupT, L.egroupT, L.mathT, L.alignmentT, L.paramT, L.superscriptT, L.subscriptT, L.spaceT, L.letterT, L.otherT, L.activeT}
+	\begin{syntax}
+L.bgroupT(...)
+L.egroupT(...)
+L.mathT(...)
+L.alignmentT(...)
+L.paramT(...)
+L.superscriptT(...)
+L.subscriptT(...)
+L.spaceT(...)
+L.letterT(...)
+L.otherT(...)
+L.activeT(...)
+\end{syntax}
+For convenience, those functions are also provided for creating character tokens with given catcode.
+The argument is either a string or a character code, similar to first argument of |T|.
+\end{luafn}
+
+\begin{luafn}{L.begin_groupT, L.end_groupT, L.math_toggleT, L.math_superscriptT, L.math_subscriptT}
+	\begin{syntax}
+L.begin_groupT(...)
+L.end_groupT(...)
+L.math_toggleT(...)
+L.math_superscriptT(...)
+L.math_subscriptT(...)
+\end{syntax}
+Verbose (\pkg{expl3}-naming style) aliases for the functions above.
+\end{luafn}
+
+\begin{luafn}{L.E3}
+	\begin{syntax}
+L.E3.\meta{name}.\meta{argspec}
+L.E3.\meta{name}()
+L.E3.\meta{name}(\meta{argspec})
+L.E3(\meta{name}).\meta{argspec}
+L.E3(\meta{name})(\meta{argspec})
+L.E3(\meta{name}, \meta{argspec})
+\end{syntax}
+Convenience function to create an \pkg{expl3}-style control sequence.
+For example
+\begin{itemize}
+	\item |E3.use.n| creates the control sequence |\use:n|,
+	\item |E3.tl_map_break()| creates the control sequence |\tl_map_break:|.
+\end{itemize}
+The syntax is flexible, either indexing or calling is supported (although if you pass a string in, it might be more convenient to simply evaluate |T["use:n"]|)
+\end{luafn}
+
+\begin{luafn}{L.runlocal}
+	\begin{syntax}
+		L.runlocal(\meta{token list})
+		L.runlocal(\meta{function})
+	\end{syntax}
+	Execute a token list, it should not look forward in the input stream, and should not leave any tokens in the input stream.
+
+	Wrapper over |tex.runtoks()|.
+
+	Alternatively a function that prints out a token list can be passed in. Any return value of the function will be returned by |runlocal|.
+
+	For example
+\begin{verbatim}
+L.runlocal {T.def, T.mymacro, bgroup, egroup}
+\end{verbatim}
+
+	This function will print a Lua traceback if the \TeX\ code inside gives an error while executing, as well as diagnosing some simple cases of the executing token list is nonlocal
+	(although the diagnosis might not always be correct).
+\end{luafn}
+
+\begin{luafn}{L.runpeek}
+	\begin{syntax}
+		L.runpeek(\meta{token list})
+		L.runpeek(\meta{function})
+	\end{syntax}
+	Execute a token list. It's allowed to look forward in the input stream, or leave tokens in the input stream.
+
+	After done executing, a token |\endlocalcontrol| must be executed.
+
+	For example, after the following is executed
+\begin{verbatim}
+L.runpeek {T["exp_args:Nx"], T.endlocalcontrol, bgroup, T.sometoken, egroup}
+\end{verbatim}
+the tokens |{|\meta{\texttt{x}-expansion of \texttt{\textbackslash sometoken}}|}| is left ahead in the input stream.
+\end{luafn}
+
+\begin{luafn}{L.token_of}
+	\begin{syntax}
+		L.token_of(\meta{function}, \meta{optional prefix})
+	\end{syntax}
+	Return a token has is |luadef|-ed to the provided function.
+\end{luafn}
+
+\begin{luafn}{L.get_next}
+	\begin{syntax}
+		L.get_next() -> \meta{token object}
+	\end{syntax}
+	Wrapper for token.get_next() but handles never seen control sequence correctly (i.e. return the control sequence, add to hash table)
+\end{luafn}
+
+\begin{luafn}{L.get_nexte}
+	\begin{syntax}
+		L.get_nexte() -> \meta{token object}, bool
+	\end{syntax}
+	Same as above.
+
+	There's a second result value, whether the obtained token is a notexpanded token. Does not always detect successfully.
+\end{luafn}
+
+\begin{luafn}{L.futureletafter}
+	\begin{syntax}
+		L.futureletafter(\meta{token object})
+	\end{syntax}
+	Assign \meta{token object} to the meaning of the next-next token in the input stream. Uses the "|\afterassignment|+|\futurelet|" trick, details in \url{https://tex.stackexchange.com/a/19769/250119}.
+\end{luafn}
+
+\begin{luafn}{L.exp_o}
+	\begin{syntax}
+		L.exp_o(\meta{token list}) -> \meta{token list}
+	\end{syntax}
+	Return the |o|-expansion of \meta{token list}.
+
+	The provided token list does not need to be balanced, only the result need to.
+\end{luafn}
+
+\begin{luafn}{L.exp_x}
+	\begin{syntax}
+		L.exp_x(\meta{token list}) -> \meta{token list}
+	\end{syntax}
+	Return the |x|-expansion of \meta{token list}.
+\end{luafn}
+
+\begin{luafn}{L.to_str}
+	\begin{syntax}
+		L.to_str(\meta{token list}) -> string
+	\end{syntax}
+	Convert a token list consist of detokenized characters to Lua string.
+\end{luafn}
+
+\begin{luafn}{L.detokenize}
+	\begin{syntax}
+		L.detokenize(\meta{token list}) -> \meta{token list}
+	\end{syntax}
+	Return the result of applying the \TeX\ primitive |\detokenize| on the token list.
+\end{luafn}
+
+\begin{luafn}{L.detokenize_str}
+	\begin{syntax}
+		L.detokenize_str(\meta{token list}) -> string
+	\end{syntax}
+	Return the result of applying the \TeX\ primitive |\detokenize| on the token list, as a Lua string.
+
+	Identical to \texttt{L.to_str(L.detokenize(\meta{token list}))}.
+\end{luafn}
+
+\begin{luafn}{L.meaning,L.meaning_str}
+	\begin{syntax}
+		L.meaning(\meta{token object}) -> \meta{token list}
+		L.meaning_str(\meta{token object}) -> string
+	\end{syntax}
+	Return the result of applying the \TeX\ primitive |\meaning| on the token object.
+\end{luafn}
+
+\begin{luafn}{L.stringify,L.stringify_str}
+	\begin{syntax}
+		L.stringify(\meta{token object}) -> \meta{token list}
+		L.stringify_str(\meta{token object}) -> string
+	\end{syntax}
+	Return the result of applying the \TeX\ primitive |\string| on the token object.
+\end{luafn}
+
+\begin{luafn}{L.is_token}
+	\begin{syntax}
+		L.is_token(\meta{object}) -> bool
+	\end{syntax}
+	Check if the provided object is a \meta{token object}.
+\end{luafn}
+
+\begin{luafn}{L.is_tl}
+	\begin{syntax}
+		L.is_tl(\meta{object}) -> bool
+	\end{syntax}
+	Check if the provided object is a \meta{token list}.
+\end{luafn}
+
+\begin{luafn}{L.get_macro}
+	\begin{syntax}
+		L.get_macro(\meta{token object}) -> \meta{token list}
+	\end{syntax}
+	Get the content of a \pkg{expl3} \meta{tl var}.
+
+	For example after |\tl_set:Nn \__a {123}|, |L.get_macro(T.__a)| returns the \meta{token list} "123".
+
+	It's not supported to pass a non-\meta{tl var} in.
+\end{luafn}
+
+\begin{luafn}{L.set_macro}
+	\begin{syntax}
+		L.set_macro(\meta{token object}, \meta{token list})
+	\end{syntax}
+	Set the content of a \pkg{expl3} \meta{tl var}.
+\end{luafn}
+
+
+\begin{luafn}{L.tokenize}
+	\begin{syntax}
+		L.tokenize(string) -> \meta{token list}
+	\end{syntax}
+	Tokenize some \TeX\ code under the current catcode \reg.
+\end{luafn}
+
+
+\PrintIndex
+\end{document}

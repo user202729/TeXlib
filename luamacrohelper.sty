@@ -1,0 +1,4 @@
+\ProvidesExplPackage{luamacrohelper}{2022/07/07}{0.0.0}{?}
+\def\__luamacrohelper_mark_endlocalcontrol_executed{}  % temporary definition until overridden
+\protected\outer\def\__luamacrohelper_endlocalcontrol{\__luamacrohelper_mark_endlocalcontrol_executed\endlocalcontrol}
+\directlua{require"luamacrohelper"}

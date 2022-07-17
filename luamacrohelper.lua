@@ -1,4 +1,3 @@
--- global variable
 if luamacrohelper then
 	error("luamacrohelper global variable is already defined!")
 end
@@ -56,16 +55,16 @@ function L.tl_equal(a, b)
 end
 
 
--- ========================================================
+--------------------------------------------------------------------------------------------
 
 
 local in_runlocal=false
-local executing_runtoks=false   -- debug variable, 2 purposes
+local executing_TeX_in_Lua=false   -- debug variable, 2 purposes
 -- * avoid forgotten \endlocalcontrol
 -- * print Lua traceback on error
 luatexbase.add_to_callback("show_error_message", function()
 	luatexbase.remove_from_callback("show_error_message", "luamacrohelper show error callback")
-	if executing_runtoks then
+	if executing_TeX_in_Lua then
 		io.write("\n" .. debug.traceback() .. "\n")
 	end
 	if in_runlocal and status.lasterrorstring:find "Forbidden control sequence found" then
@@ -74,58 +73,156 @@ luatexbase.add_to_callback("show_error_message", function()
 	io.write("\n" .. status.lasterrorstring)
 end, "luamacrohelper show error callback")
 
---[[
-luatexbase.add_to_callback("show_error_context", function()
-	luatexbase.remove_from_callback("show_error_context", "luamacrohelper show error callback")
-
-	local context=status.lasterrorcontext
-	if context:sub(-1)=="\n" then
-		context=context:sub(1, -2)
-	end
-	if context:sub(1, 1)=="\n" then
-		context=context:sub(2)
-	end
-
-	io.write(".\n" .. context)
-	io.write(debug.traceback())
-end, "luamacrohelper show error callback")
-]]
 
 --luatexbase.remove_from_callback("show_error_hook", "luamacrohelper show error callback")
 
--- value is either a token list or a function (that prints out a token list)
--- value must include an endlocalcontrol token.
--- function can optionally return something which will be returned by the outer function
-function L.runpeek(value)
-	assert(not executing_runtoks)
-	executing_runtoks=true
+local function token_create_force(s)
+	assert(type(s)=="string")
+	local result=token.create(s)
+	assert(result.csname==s)
+	return result
+end
+
+local endlocalcontrol_executed
+
+function L.runlocal(value)  -- some error-checking functionalities are missing.
+	--print("======== before\n", debug.traceback(), "\n\n")
+	assert(not executing_TeX_in_Lua)
+	assert(not in_runlocal)
+	executing_TeX_in_Lua=true
+	in_runlocal=true
 	local result
+	endlocalcontrol_executed=false
+	token.put_next(token_create_force "__luamacrohelper_endlocalcontrol")
 	tex.runtoks(function()
 		local t=token.get_next()
 		assert(t.cmdname=="extension", "internal error")  -- the "internal \endlocalcontrol token"
-		if type(value)=="table" then
+
+		if type(value)=="table" or type(value)=="string" then
 			tex.sprint(value)
 		else
 			result=value()
 		end
 	end)
-	executing_runtoks=false
+	assert(endlocalcontrol_executed)
+	executing_TeX_in_Lua=false
+	--print("======== after")
+	in_runlocal=false
 	return result
 end
 
 
-L.runpeek{
-	token.create("begingroup"),
-	token.create("expandafter"),
-	token.create("endgroup"),
-	token.create("expandafter"),
-	token.create("endlocalcontrol"),
-	token.create("csname"),
-	token.create("endcsname"),
-}
-L.nullcs=token.get_next()
+local first_unseen_index=123456
+local function_table=lua.get_functions_table()
+
+local function unused_function_index()  -- idempotent as long as the environment does not change
+	while function_table[first_unseen_index] do
+		first_unseen_index=first_unseen_index+1
+	end
+	return first_unseen_index
+end
+
+
+function L.luadef(name, f, prefix)
+	if type(name)~="string" and name.csname then name=name.csname end
+	assert(type(name)=="string")
+
+	local prefix_tl={}
+	if prefix~=nil then
+		for t, _ in pairs(prefix) do
+			if not ({protected=1, long=1, outer=1})[t] then
+				error("invalid prefix "..tostring(t))
+			end
+			prefix_tl[#prefix_tl+1]=token_create_force(t)
+		end
+	end
+
+	local index=unused_function_index()
+	function_table[index]=f
+	L.runlocal(function()
+		tex.sprint(L.cati(prefix_tl, {token_create_force "expandafter", token_create_force "luadef", token_create_force "csname"}))
+		tex.sprint(-2, name)
+		tex.sprint {token_create_force "endcsname"}
+		tex.sprint(-2, index.." ")
+	end)
+
+	return token_create_force(name)
+end
+
+L.luadef("__luamacrohelper_mark_endlocalcontrol_executed", function()
+	assert(not endlocalcontrol_executed)
+	endlocalcontrol_executed=true
+end)
+
+function L.token_of(f, prefix)
+	local t="__" .. unused_function_index() .. "_luamacrohelper_token"
+	L.luadef(t, f, prefix)
+	return t
+end
+
+function L.protected_luadef(name, f)
+	L.luadef(name, f, {protected=1})
+end
+
+function L.protected_long_luadef(name, f)
+	L.luadef(name, f, {protected=1, long=1})
+end
+
+local function scan_toks(definer, expand)
+	executing_TeX_in_Lua=true
+	local result=token.scan_toks(definer, expand)
+	executing_TeX_in_Lua=false
+	return result
+end
+
+-- commonly used tokens
+local bgroup=token.create(string.byte "{", 1)
+L.bgroup=bgroup
+local egroup=token.create(string.byte "}", 2)
+L.egroup=egroup
+
+function L.expandonce() -- https://tex.stackexchange.com/a/649627/250119
+	--L.runlocal{L.expandafter}  -- abuse internal implementation details here ... (see below)
+
+	--alternatively:
+	token.put_next{bgroup, token_create_force "expandafter", egroup}
+	scan_toks(false, true)
+end
+
+function L.futurelet(token_obj)
+	assert(L.is_token(token_obj))
+
+	--L.runpeek{T.futurelet, token_obj, T.endlocalcontrol}
+
+	token.put_next{bgroup, token_create_force "immediateassignment", token_create_force "futurelet", token_obj, egroup}
+	scan_toks(false, true)
+end
+
+
+
+
+
+tex.runtoks(function()
+	local content=([[
+	\begingroup
+		\def\F{
+			\directlua{luamacrohelper.nullcs=token.get_next()}
+		}
+		\expandafter\F\csname\endcsname
+	\endgroup
+	]]):gsub("%s", "")  -- be careful, gsub returns 2 values
+	tex.sprint(content)
+end)
 assert(L.nullcs.tok==0x20000000)
 
+----[==[
+
+local next_token
+L.luadef("__luamacrohelper_raw_get_next_token", function()
+	next_token=token.get_next()
+end)
+local raw_get_next_token=token_create_force "__luamacrohelper_raw_get_next_token"
+assert(raw_get_next_token.csname=="__luamacrohelper_raw_get_next_token")
 
 -- token.create safe wrapper
 -- usage: T.expandafter, T["expandafter"], T("{"), T("{", 1),
@@ -137,19 +234,20 @@ local T=setmetatable({}, {
 		local t=token.create(csname)
 		if t.csname=="" then
 			-- impossible control sequence
-			L.runpeek(function()
+			L.runlocal(function()
 				tex.sprint{
 					token.create("begingroup"),
 					token.create("expandafter"),
-					token.create("endgroup"),
-					token.create("expandafter"),
-					token.create("endlocalcontrol"),
+					raw_get_next_token,
 					token.create("csname"),
 				}
 				tex.sprint(-2, csname)
-				tex.sprint{ token.create("endcsname") }
+				tex.sprint{
+					token.create("endcsname"),
+					token.create("endgroup"),
+				}
 			end)
-			t=token.get_next()
+			t=next_token
 			assert(t.cmdname=="undefined_cs")  -- we don't accidentally define it as \relax
 		end
 		assert(t.csname==csname)
@@ -165,7 +263,31 @@ local T=setmetatable({}, {
 })
 L.T=T
 
+
+
+-- value is either a token list or a function (that prints out a token list)
+-- value must include an endlocalcontrol token.
+-- function can optionally return something which will be returned by the outer function
+function L.runpeek(value)
+	assert(not executing_TeX_in_Lua)
+	executing_TeX_in_Lua=true
+	local result
+	tex.runtoks(function()
+		local t=token.get_next()
+		assert(t.cmdname=="extension", "internal error")  -- the "internal \endlocalcontrol token"
+		if type(value)=="table" or type(value)=="string" then
+			tex.sprint(value)
+		else
+			result=value()
+		end
+	end)
+	executing_TeX_in_Lua=false
+	L.do_nothing_with_next()
+	return result
+end
+
 local function E3_onelevel(E3, name)
+	assert(type(name)=="string")
 	local function f(_, argspec)
 		if argspec==nil then argspec="" end
 		return T[name..":"..argspec]
@@ -176,7 +298,7 @@ end
 local E3=setmetatable({}, {
 	__index=E3_onelevel,
 	__call=function(E3, name, argspec)
-		if argspec==nil then return E3_onelevel(name) end
+		if argspec==nil then return E3_onelevel(E3, name) end
 		return T[name..":"..argspec]
 	end,
 })
@@ -203,132 +325,54 @@ L.math_toggleT     =L.mathT
 L.math_superscriptT=L.superscriptT
 L.math_subscriptT  =L.subscriptT
 
--- commonly used tokens
-local bgroup=L.bgroupT "{"
-L.bgroup=bgroup
-local egroup=L.egroupT "}"
-L.egroup=egroup
 
 
-local runlocal_delimiter=T.__luamacrohelper_runlocal_delimiter
-L.runpeek{
-	T.outer, T.def, runlocal_delimiter, bgroup, T.endlocalcontrol, egroup, T.endlocalcontrol,
-}
 
--- run something (tl or function) that executes locally
--- function can optionally return something which will be returned by the outer function
-function L.runlocal(value)
-	local result
-	assert(not in_runlocal)
-	in_runlocal=true
-	L.runpeek(function()
-		if type(value)=="table" then
-			tex.sprint(L.cat(value, {runlocal_delimiter}))
-		else
-			result=value()
-			tex.sprint({runlocal_delimiter})
-		end
-	end)
-	in_runlocal=false
-	return result
 
-	--[[
-	if type(value)=="table" then
-		executing_runtoks=true
-		tex.runtoks(function() tex.sprint(value) end)
-		executing_runtoks=false
-	else
-		local result
-		executing_runtoks=true
-		tex.runtoks(function()
-			result=value()
-		end)
-		executing_runtoks=false
-		return result
-	end
-	]]
+
+
+
+
+function L.futureletafter(token_obj)
+	L.runpeek{T.afterassignment, T.endlocalcontrol, T.futurelet, token_obj}
 end
 
+local internal_token=T.__luamacrohelper_internal_token
 
-local first_unseen_index=123456
-local function_table=lua.get_functions_table()
-
-local function unused_function_index()  -- idempotent as long as the environment does not change
-	while function_table[first_unseen_index] do
-		first_unseen_index=first_unseen_index+1
-	end
-	return first_unseen_index
-end
-
-function L.def(name, f, prefix)
-	if type(name)=="string" then name=T[name] end
-	local prefix_tl={}
-	if prefix~=nil then
-		for t, _ in pairs(prefix) do
-			if not ({protected=1, long=1, outer=1})[t] then
-				error("invalid prefix "..tostring(t))
-			end
-			prefix_tl[#prefix_tl+1]=T[t]
-		end
-	end
-
-	local index=unused_function_index()
-	function_table[index]=f
-	L.runlocal(function()
-		tex.sprint(L.cati(prefix_tl, {T.luadef, name}))
-		tex.sprint(-2, index.." ")
-	end)
-end
-
-function L.deftoken(f)
-	local t=T["__" .. unused_function_index() .. "_luamacrohelper_token"]
-	L.def(t, f)
-	return t
-end
-
-function L.protected_def(name, f)
-	L.def(name, f, {protected=1})
-end
-
-function L.protected_long_def(name, f)
-	L.def(name, f, {protected=1, long=1})
-end
-
-function L.expandonce() -- https://tex.stackexchange.com/a/649627/250119
-	--L.runlocal{L.expandafter}  -- abuse internal implementation details here ... (see below)
-
-	--alternatively:
-	token.put_next{bgroup, T.expandafter, egroup}
-	token.scan_toks(false, true)
-end
-
-function L.futurelet(token_obj)  -- futurelet token_obj to the next token in the input stream.
-	L.runlocal{T.futurelet, token_obj}  -- abuse internal implementation details here that there's exactly one internal \endlocalcontrol token after these tokens
-end
-
-function L.get_next() -- wrapper for token.get_next() but handles never seen control sequence correctly (i.e. return the control sequence, add to hash table)
-	L.futurelet(T.__luamacrohelper_internal_token)
+function L.get_next()
+	L.futurelet(internal_token)
 	return token.get_next()
 end
 
-function L.get_nexte() -- second result value is whether the obtained token is a notexpanded token. Does not always detect successfully
+function L.get_nexte()
 	local result=L.get_next()
-	return result, T.__luamacrohelper_internal_token.cmdname~=result.cmdname
+	return result, internal_token.cmdname~=result.cmdname
+end
+
+function L.do_nothing_with_next()
+	-- the sole purpose of this function is to workaround https://tex.stackexchange.com/q/640922/250119
+	-- in some case this might change the notexpanded-ness of the following token, unfortunately
+	L.futurelet(internal_token)
+	local cmdname1=internal_token.cmdname
+	L.futurelet(internal_token)
+	if cmdname1~=internal_token.cmdname then
+		token.put_next(T.noexpand)
+		L.expandonce()
+	end
 end
 
 -- importantly this function allows the argument to be initially unbalanced as long as the result is balanced
 function L.exp_o(...)  -- args should be some token lists
 	token.put_next(cati(cati({T.expandafter, bgroup}, ...), {egroup}))
 	L.expandonce()
-	return token.scan_toks()
+	return scan_toks()
 end
 
 function L.exp_x(...)
 	L.runpeek(cati(cati({T["exp_args:Nx"], T.endlocalcontrol, bgroup}, ...), {egroup}))
-	return token.scan_toks()
+	return scan_toks()
 end
 
--- convert a token list consist of detokenized characters to Lua string
 function L.to_str(tl)
 	for i, v in ipairs(tl) do
 		assert(v.csname==nil)
@@ -349,6 +393,7 @@ function L.is_token(token_obj)
 end
 
 function L.is_tl(tl)
+	if type(tl)~="table" then return false end
 	for i, v in pairs(tl) do
 		if type(i)~="number" or not L.is_token(v) then
 			return false
@@ -411,13 +456,24 @@ function L.tokenize(str)
 		tex.sprint(str)
 		tex.sprint{egroup, egroup, T.__luamacrohelper_tokenize_unbalanced_delimiter}
 	end)
-	local result=token.scan_toks()
+	local result=scan_toks()
 	local t=token.get_next()
 	assert(t.csname=="__luamacrohelper_tokenize_unbalanced_delimiter",
 		"unbalanced token list provided in str")
 	return result
 end
 
+local brace_argument_token=T.__luamacrohelper_brace_argument
+L.runlocal{T.def, brace_argument_token, L.paramT "#", L.otherT "1", bgroup, bgroup, L.paramT "#", L.otherT "1", egroup, egroup}
+
+function L.get_argument()
+	token.put_next(brace_argument_token)
+	L.expandonce()
+	return scan_toks()
+end
+
+
+--]==]
 
 
 end
