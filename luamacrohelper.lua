@@ -62,8 +62,12 @@ local in_runlocal=false
 local executing_TeX_in_Lua=false   -- debug variable, 2 purposes
 -- * avoid forgotten \endlocalcontrol
 -- * print Lua traceback on error
+
+
+-- callback to print Lua traceback when error happens in inner TeX loop.
+local callback_name="luamacrohelper show error callback"
 luatexbase.add_to_callback("show_error_message", function()
-	luatexbase.remove_from_callback("show_error_message", "luamacrohelper show error callback")
+	luatexbase.remove_from_callback("show_error_message", callback_name)
 	if executing_TeX_in_Lua then
 		io.write("\n" .. debug.traceback() .. "\n")
 	end
@@ -71,10 +75,8 @@ luatexbase.add_to_callback("show_error_message", function()
 		io.write("\n[luamacrohelper predicted error] Content inside runlocal are not local.\n")
 	end
 	io.write("\n" .. status.lasterrorstring)
-end, "luamacrohelper show error callback")
+end, callback_name)
 
-
---luatexbase.remove_from_callback("show_error_hook", "luamacrohelper show error callback")
 
 local function token_create_force(s)
 	assert(type(s)=="string")
@@ -104,7 +106,7 @@ function L.runlocal(value)  -- some error-checking functionalities are missing.
 			result=value()
 		end
 	end)
-	assert(endlocalcontrol_executed)
+	assert(endlocalcontrol_executed, "local code executed endlocalcontrol early!")
 	executing_TeX_in_Lua=false
 	--print("======== after")
 	in_runlocal=false
@@ -168,12 +170,18 @@ function L.protected_long_luadef(name, f)
 	L.luadef(name, f, {protected=1, long=1})
 end
 
-local function scan_toks(definer, expand)
+function L.unwind_input_stack()  -- https://tex.stackexchange.com/a/640959/250119
+	L.runlocal {}
+end
+
+function L.scan_toks(definer, expand)
 	executing_TeX_in_Lua=true
 	local result=token.scan_toks(definer, expand)
 	executing_TeX_in_Lua=false
+	L.unwind_input_stack()
 	return result
 end
+
 
 -- commonly used tokens
 local bgroup=token.create(string.byte "{", 1)
@@ -186,7 +194,7 @@ function L.expandonce() -- https://tex.stackexchange.com/a/649627/250119
 
 	--alternatively:
 	token.put_next{bgroup, token_create_force "expandafter", egroup}
-	scan_toks(false, true)
+	L.scan_toks(false, true)
 end
 
 function L.futurelet(token_obj)
@@ -195,7 +203,7 @@ function L.futurelet(token_obj)
 	--L.runpeek{T.futurelet, token_obj, T.endlocalcontrol}
 
 	token.put_next{bgroup, token_create_force "immediateassignment", token_create_force "futurelet", token_obj, egroup}
-	scan_toks(false, true)
+	L.scan_toks(false, true)
 end
 
 
@@ -275,14 +283,14 @@ function L.runpeek(value)
 	tex.runtoks(function()
 		local t=token.get_next()
 		assert(t.cmdname=="extension", "internal error")  -- the "internal \endlocalcontrol token"
-		if type(value)=="table" or type(value)=="string" then
-			tex.sprint(value)
+		if type(value)=="table" then
+			token.put_next(value)
 		else
 			result=value()
 		end
 	end)
 	executing_TeX_in_Lua=false
-	L.do_nothing_with_next()
+	L.unwind_input_stack()
 	return result
 end
 
@@ -349,9 +357,13 @@ function L.get_nexte()
 	return result, internal_token.cmdname~=result.cmdname
 end
 
+--[[
 function L.do_nothing_with_next()
 	-- the sole purpose of this function is to workaround https://tex.stackexchange.com/q/640922/250119
 	-- in some case this might change the notexpanded-ness of the following token, unfortunately
+
+	-- replaced with L.unwind_input_stack()
+
 	L.futurelet(internal_token)
 	local cmdname1=internal_token.cmdname
 	L.futurelet(internal_token)
@@ -360,20 +372,36 @@ function L.do_nothing_with_next()
 		L.expandonce()
 	end
 end
+--]]
 
 -- importantly this function allows the argument to be initially unbalanced as long as the result is balanced
 function L.exp_o(...)  -- args should be some token lists
 	token.put_next(cati(cati({T.expandafter, bgroup}, ...), {egroup}))
 	L.expandonce()
-	return scan_toks()
+	return L.scan_toks()
 end
+
+function L.exp_oo(...)
+	token.put_next(cati(cati({T.expandafter, T.expandafter, T.expandafter, bgroup}, ...), {egroup}))
+	L.expandonce()
+	L.expandonce()
+	return L.scan_toks()
+end
+
 
 function L.exp_x(...)
 	L.runpeek(cati(cati({T["exp_args:Nx"], T.endlocalcontrol, bgroup}, ...), {egroup}))
-	return scan_toks()
+	return L.scan_toks()
 end
 
-function L.to_str(tl)
+function L.exp_e(...)
+	token.put_next(cati(cati({T.expanded, bgroup, bgroup}, ...), {egroup, egroup}))
+	L.expandonce()
+	return L.scan_toks()
+end
+
+
+function L.tl_to_str(tl)
 	for i, v in ipairs(tl) do
 		assert(v.csname==nil)
 		if v.cmdname=="spacer" then
@@ -386,6 +414,20 @@ function L.to_str(tl)
 		end
 	end
 	return table.concat(tl)
+end
+
+local space_token=spaceT' '
+
+function L.str_to_tl(s)
+	result=""
+	for _, c in utf8.codes(s) do
+		if c==32 then
+			s=space_token
+		else
+			s=L.otherT(c)
+		end
+	end
+	return result
 end
 
 function L.is_token(token_obj)
@@ -408,7 +450,7 @@ function L.detokenize(tl)  -- return a token list of detokenized characters
 end
 function L.detokenize_str(tl)  -- return a Lua string
 	assertf(L.is_tl(tl), "%s is not a tl", tl)
-	return L.to_str(L.detokenize(tl))
+	return L.tl_to_str(L.detokenize(tl))
 end
 
 function L.meaning(token_obj)  -- return a token list of detokenized characters
@@ -417,7 +459,7 @@ function L.meaning(token_obj)  -- return a token list of detokenized characters
 end
 function L.meaning_str(token_obj)  -- return a Lua string
 	assert(L.is_token(token_obj))
-	return L.to_str(L.meaning(token_obj))
+	return L.tl_to_str(L.meaning(token_obj))
 end
 
 function L.stringify(token_obj)  -- return a token list of detokenized characters
@@ -426,7 +468,7 @@ function L.stringify(token_obj)  -- return a token list of detokenized character
 end
 function L.stringify_str(token_obj)  -- return a Lua string
 	assert(L.is_token(token_obj))
-	return L.to_str(L.stringify(token_obj))
+	return L.tl_to_str(L.stringify(token_obj))
 end
 
 
@@ -456,7 +498,7 @@ function L.tokenize(str)
 		tex.sprint(str)
 		tex.sprint{egroup, egroup, T.__luamacrohelper_tokenize_unbalanced_delimiter}
 	end)
-	local result=scan_toks()
+	local result=L.scan_toks()
 	local t=token.get_next()
 	assert(t.csname=="__luamacrohelper_tokenize_unbalanced_delimiter",
 		"unbalanced token list provided in str")
@@ -469,7 +511,7 @@ L.runlocal{T.def, brace_argument_token, L.paramT "#", L.otherT "1", bgroup, bgro
 function L.get_argument()
 	token.put_next(brace_argument_token)
 	L.expandonce()
-	return scan_toks()
+	return L.scan_toks()
 end
 
 

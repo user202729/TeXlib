@@ -22,7 +22,7 @@ local E3=L.E3
 
 
 
--- test for runlocal and runpeek to not have the bug https://tex.stackexchange.com/q/640922/250119
+-- need to repeat 6000 times to test https://tex.stackexchange.com/q/640922/250119
 
 -- simple case, if it peeks forward then bug does not happen
 token.put_next {bgroup, T.relax, egroup}
@@ -35,7 +35,7 @@ assert(L.tl_equal(token.scan_toks(), {T.relax}))
 for i=1, 6000 do
 	L.runpeek {T.endlocalcontrol, T.weird}
 	local t=token.get_next()
-	L.do_nothing_with_next()
+	L.unwind_input_stack()
 	assert(t.csname=="weird")
 end
 
@@ -44,12 +44,18 @@ for i=1, 6000 do
 	L.runpeek {T.def, T.__test, bgroup, egroup, T.endlocalcontrol}
 end
 
+-- test runlocal
 for i=1, 6000 do
 	L.runlocal({T.def, T.__test, bgroup, egroup})
 end
 
+-- test T
+for i=1, 6000 do
+	ignore(T["neverseen-" .. i])
+end
 
 
+-- test L.get_next()
 L.luadef("fff", function()
 	assert(token.get_next().csname=="")
 	assert(token.get_next().csname=="")  -- which will not actually get the token
@@ -60,7 +66,9 @@ end)
 
 
 L.set_macro(T.abc, {T.x, T.y})
-assert(L.detokenize_str{T.abc, T.def} == [[\abc \def ]])
+for i=1, 6000 do
+	assert(L.detokenize_str{T.abc, T.def} == [[\abc \def ]])
+end
 assert(L.detokenize_str{T.abc} == [[\abc ]])
 assert(L.stringify_str (T.abc) == [[\abc]])
 assert(L.tl_equal(L.get_macro(T.abc), {T.x, T.y}))
@@ -77,7 +85,11 @@ L.runlocal{
 }
 
 L.runlocal {T["use:n"]}
+
+L.runlocal {T.endlocalcontrol}
+
 --]]
+
 
 local E3=L.E3
 assert(E3.use.n              .csname=="use:n")

@@ -1,6 +1,6 @@
-\ProvidesFile{luamacrohelper.tex}[2022/07/16 0.0.0 Tools to help with writing \TeX\ macros in Lua]
+\ProvidesFile{luamacrohelper.tex}[2022/07/16 0.0.0 Tools to help with writing TeX macros in Lua]
+\RequirePackage{fvextra}
 \documentclass{l3doc}
-\usepackage{fvextra}
 \EnableCrossrefs
 \CodelineIndex
 \fvset{breaklines=true,gobble=0,tabsize=4,frame=single,numbers=left,numbersep=3pt}
@@ -15,7 +15,7 @@
 \begin{document}
 \GetFileInfo{\jobname.tex}
 
-\title{\pkg{\jobname} --- \fileinfo
+\title{\pkg{\jobname} --- Tools to help with writing \TeX\ macros in Lua
 \thanks{This file describes version \fileversion, last revised \filedate.}
 }
 \author{user202729}
@@ -62,6 +62,33 @@ Throughout this document:
 	\item \meta{function} is used to represent a Lua function object.
 \end{itemize}
 
+\section{\label{sec:possibleissues} Possible issues}
+
+If you encounter the messages \\
+|TeX capacity exceeded, sorry [text input levels=15].| \\
+or \\
+|TeX capacity exceeded, sorry [input stack size=5000].| \\
+you may consider the following:
+\begin{itemize}
+	\item Use the wrapper of this package (|L.runlocal|, |L.runpeek|, |L.scan_toks|, |L.get_argument| etc.)
+		instead of the \LuaTeX\ primitives (|token.runtoks|, |token.scan_toks| etc.)
+	\item See also the documentation of |L.unwind_input_stack|.
+\end{itemize}
+
+
+Refer to \url{https://tex.stackexchange.com/q/640922/250119} for more details.
+
+\section{Performance note}
+
+Because of the additional error-check requirement, the package is unfortunately not very fast.
+
+Suggestions for improving the performance while not sacrificing error-checking capabilities are welcome.
+
+\section{Documentation note}
+
+The index doesn't really work as expected, as this documentation was written with \pkg{l3doc} which is intended
+to document \pkg{expl3}-style macros...
+
 \section{API documentation}
 
 \begin{luafn}{L.luadef}
@@ -97,6 +124,10 @@ Throughout this document:
 		tex.print(\meta{arguments})
 	\end{syntax}
 	This \LuaTeX\ built-in can be used to print \TeX\ code. Refer to \LuaTeX\ documentation for details which arguments are supported.
+
+	Note that this is not fully supported and may cause some issues! Use with care.
+
+	Currently only |L.runlocal| fully support this.
 \end{luafn}
 
 These functions can be used to replace \TeX\ primitive |\def| statements as following:
@@ -216,6 +247,8 @@ L.runlocal {T.def, T.mymacro, bgroup, egroup}
 L.runpeek {T["exp_args:Nx"], T.endlocalcontrol, bgroup, T.sometoken, egroup}
 \end{verbatim}
 the tokens |{|\meta{\texttt{x}-expansion of \texttt{\textbackslash sometoken}}|}| is left ahead in the input stream.
+
+	Note that the \meta{function} should preferably not use |tex.sprint|, as it might cause some issue.
 \end{luafn}
 
 \begin{luafn}{L.token_of}
@@ -241,6 +274,15 @@ the tokens |{|\meta{\texttt{x}-expansion of \texttt{\textbackslash sometoken}}|}
 	There's a second result value, whether the obtained token is a notexpanded token. Does not always detect successfully.
 \end{luafn}
 
+\begin{luafn}{L.futurelet}
+	\begin{syntax}
+		L.futurelet(\meta{token object})
+	\end{syntax}
+	Assign \meta{token object} to the meaning of the next token in the input stream, like the primitive |\futurelet|.
+
+	Note that this function as well as the function below might remove the notexpanded status of the next token.
+\end{luafn}
+
 \begin{luafn}{L.futureletafter}
 	\begin{syntax}
 		L.futureletafter(\meta{token object})
@@ -248,13 +290,18 @@ the tokens |{|\meta{\texttt{x}-expansion of \texttt{\textbackslash sometoken}}|}
 	Assign \meta{token object} to the meaning of the next-next token in the input stream. Uses the "|\afterassignment|+|\futurelet|" trick, details in \url{https://tex.stackexchange.com/a/19769/250119}.
 \end{luafn}
 
-\begin{luafn}{L.exp_o}
+
+\begin{luafn}{L.exp_o,L.exp_oo}
 	\begin{syntax}
 		L.exp_o(\meta{token list}) -> \meta{token list}
+		L.exp_oo(\meta{token list}) -> \meta{token list}
 	\end{syntax}
-	Return the |o|-expansion of \meta{token list}.
+	Return the |o|-expansion of \meta{token list} and the twice-expansion, respectively.
 
 	The provided token list does not need to be balanced, only the result need to.
+
+	Note that in certain cases (such as with notexpanded token) the |exp_oo| result might not be equal to
+	|exp_o| applied twice; also, the intermediate result of |exp_oo| does not need to be balanced either.
 \end{luafn}
 
 \begin{luafn}{L.exp_x}
@@ -264,11 +311,30 @@ the tokens |{|\meta{\texttt{x}-expansion of \texttt{\textbackslash sometoken}}|}
 	Return the |x|-expansion of \meta{token list}.
 \end{luafn}
 
-\begin{luafn}{L.to_str}
+\begin{luafn}{L.exp_e}
 	\begin{syntax}
-		L.to_str(\meta{token list}) -> string
+		L.exp_e(\meta{token list}) -> \meta{token list}
 	\end{syntax}
-	Convert a token list consist of detokenized characters to Lua string.
+	Return the |e|-expansion of \meta{token list}. This always use the |\expanded| primitive.
+\end{luafn}
+
+
+\begin{luafn}{L.tl_to_str}
+	\begin{syntax}
+		L.tl_to_str(\meta{token list}) -> string
+	\end{syntax}
+	Convert a token list consist of detokenized characters to Lua (UTF-8) string.
+
+	If the token list is not guaranteed to contain only detokenized characters, see |L.detokenize_str| instead.
+\end{luafn}
+
+\begin{luafn}{L.str_to_tl}
+	\begin{syntax}
+		L.str_to_tl(string) -> \meta{token list}
+	\end{syntax}
+	Convert a (UTF-8) string to a token list consist of detokenized characters.
+
+	See also: |L.tokenize|.
 \end{luafn}
 
 \begin{luafn}{L.detokenize}
@@ -284,7 +350,7 @@ the tokens |{|\meta{\texttt{x}-expansion of \texttt{\textbackslash sometoken}}|}
 	\end{syntax}
 	Return the result of applying the \TeX\ primitive |\detokenize| on the token list, as a Lua string.
 
-	Identical to \texttt{L.to_str(L.detokenize(\meta{token list}))}.
+	Identical to \texttt{L.tl_to_str(L.detokenize(\meta{token list}))}.
 \end{luafn}
 
 \begin{luafn}{L.meaning,L.meaning_str}
@@ -335,14 +401,25 @@ the tokens |{|\meta{\texttt{x}-expansion of \texttt{\textbackslash sometoken}}|}
 	Set the content of a \pkg{expl3} \meta{tl var}.
 \end{luafn}
 
-
 \begin{luafn}{L.tokenize}
 	\begin{syntax}
 		L.tokenize(string) -> \meta{token list}
 	\end{syntax}
-	Tokenize some \TeX\ code under the current catcode \reg.
+	Tokenize some \TeX\ code under the current catcode \reg. The result must be a balanced token list.
 \end{luafn}
 
+\begin{luafn}{L.unwind_input_stack}
+	\begin{syntax}
+		L.unwind_input_stack()
+	\end{syntax}
+	\textbf{This is an internal function.}
+	If you find yourself need to use this function and does not use \LuaTeX\ primitives such as |tex.sprint| yourself,
+	report a bug to this package.
+
+	Unwinds the input stack. Refer to Section~\ref{sec:possibleissues} for more information.
+
+	This only works for token-list-type input stack, not buffer-type input stack such as those created with |tex.sprint|.
+\end{luafn}
 
 \PrintIndex
 \end{document}
