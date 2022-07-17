@@ -1,0 +1,17 @@
+%! TEX program = lualatex
+\documentclass{article}
+\usepackage{prettytok}
+\usepackage{luacode}
+\begin{document}
+
+\ExplSyntaxOn
+\use_none:n{\x\endlocalcontrol}
+\ExplSyntaxOff
+
+\directlua{dofile "test_luamacrohelper.lua"}a
+
+
+\fff\anotherneverseen\anotherneverseen\anotherneverseen\anotherneverseen\def
+
+
+\end{document}
