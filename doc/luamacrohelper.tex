@@ -118,6 +118,22 @@ to document \pkg{expl3}-style macros...
 	Get an argument in the input stream.
 \end{luafn}
 
+\begin{luafn}{L.get_argumente}
+	\begin{syntax}
+		L.get_argumente() -> \meta{token list}, bool
+	\end{syntax}
+	Same as above. The second argument determines whether the argument is braced.
+\end{luafn}
+
+\begin{luafn}{L.get_argument_braced,L.get_argument_unbraced}
+	\begin{syntax}
+		L.get_argument_braced() -> \meta{token list}
+		L.get_argument_unbraced() -> \meta{token list}
+	\end{syntax}
+	Same as above, enforce the argument to be braced/unbraced.
+\end{luafn}
+
+
 \begin{luafn}{tex.sprint,tex.print}
 	\begin{syntax}
 		tex.sprint(\meta{arguments})
@@ -152,6 +168,14 @@ end)
 	Check if two token lists are equal.
 \end{luafn}
 
+\begin{luafn}{L.token_equal}
+	\begin{syntax}
+		L.token_equal(\meta{token object}, \meta{token object}) -> bool
+	\end{syntax}
+	Check if two token objects are equal. (internally this function compares their |.tok| value)
+\end{luafn}
+
+
 \begin{luafn}{L.T}
 Create a token. See example for details how to use it. (remember that |T "{"| is Lua shorthand for function call |T("{")|)
 \begin{verbatim}
@@ -184,16 +208,57 @@ For convenience, those functions are also provided for creating character tokens
 The argument is either a string or a character code, similar to first argument of |T|.
 \end{luafn}
 
-\begin{luafn}{L.begin_groupT, L.end_groupT, L.math_toggleT, L.math_superscriptT, L.math_subscriptT}
+\begin{luafn}{L.begin_groupT, L.end_groupT, L.math_toggleT, L.parameterT, L.math_superscriptT, L.math_subscriptT}
 	\begin{syntax}
 L.begin_groupT(...)
 L.end_groupT(...)
 L.math_toggleT(...)
+L.parameterT(...)
 L.math_superscriptT(...)
 L.math_subscriptT(...)
 \end{syntax}
 Verbose (\pkg{expl3}-naming style) aliases for the functions above.
 \end{luafn}
+
+\begin{luafn}{L.is_explicit_character}
+	\begin{syntax}
+L.is_explicit_character(\meta{token object}) -> bool
+\end{syntax}
+Check if a token object is an explicit character. Might fail for some special internal tokens such as the internal |\endlocalcontrol|.
+\end{luafn}
+
+\begin{luafn}{L.get_catcode}
+	\begin{syntax}
+L.get_catcode(\meta{token object}) -> int
+\end{syntax}
+Get the catcode. \meta{token object} must be an explicit character token.
+\end{luafn}
+
+\begin{luafn}{L.get_charcode}
+	\begin{syntax}
+L.get_charcode(\meta{token object}) -> int
+\end{syntax}
+Get the charcode. \meta{token object} must be an explicit character token.
+\end{luafn}
+
+
+\begin{luafn}{L.is_bgroup, L.is_egroup, L.is_math, L.is_alignment, L.is_param, L.is_superscript, L.is_subscript, L.is_space, L.is_letter, L.is_other, L.is_active}
+	\begin{syntax}
+L.is_bgroup(\meta{token object})       -> bool
+L.is_egroup(\meta{token object})       -> bool
+L.is_math(\meta{token object})         -> bool
+L.is_alignment(\meta{token object})    -> bool
+L.is_param(\meta{token object})        -> bool
+L.is_superscript(\meta{token object})  -> bool
+L.is_subscript(\meta{token object})    -> bool
+L.is_space(\meta{token object})        -> bool
+L.is_letter(\meta{token object})       -> bool
+L.is_other(\meta{token object})        -> bool
+L.is_active(\meta{token object})       -> bool
+\end{syntax}
+Check if a token object is an explicit character of specified catcode.
+\end{luafn}
+
 
 \begin{luafn}{L.E3}
 	\begin{syntax}

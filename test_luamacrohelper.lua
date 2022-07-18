@@ -104,6 +104,16 @@ assert(E3("tl_map_break", "").csname=="tl_map_break:")
 --token.put_next{T "1"}
 --print(L.detokenize_str(L.get_argument()))
 
+prettyprint(L.expl_tokenize_unbalanced_braces [[123\ab\cd  \ef_g:h \\ \? \__ab
+
+ab~cd {group{{ #$@!^_&*():<>\
+x]])
+
+prettyprint(L.doc_tokenize_unbalanced_braces [[123
+
+4 5  6]])
+
+
 --]==]
 
 -- TODO token.scan_toks(false, true)  overrunning will not print Lua traceback.
