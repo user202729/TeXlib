@@ -5,7 +5,30 @@
 \RequirePackage{rescansync}
 %\GenerateVariantsFile:n{tlserialize.sty}
 %\GenerateVariantsFileLog:n{tlserialize.sty}
-\pretty:n{weird}
+
+\msg_new:nnn {tlserialize} {cannot-serialize}
+	{Token~list~cannot~be~serialized}
+\msg_new:nnn {tlserialize} {cannot-deserialize}
+	{Token~list~cannot~be~deserialized}
+
+\cs_new_protected:Npn \tlserialize:NnF #1 #2 {
+	\tlserialize:NnTF #1 {#2} {} % dangling
+}
+
+\cs_new_protected:Npn \tlserialize:NnT #1 #2 #3 { \tlserialize:NnTF #1 {#2} {#3} {} }
+
+\cs_new_protected:Npn \tlserialize:Nn #1 #2{
+	\tlserialize:NnF #1 {#2} {
+		\msg_error:nn {tlserialize} {cannot-serialize}
+	}
+}
+
+
+\sys_if_engine_luatex:T {
+	\RequirePackage{luamacrohelper}
+	\directlua{require"tlserialize.lua"}
+	\endinput
+}
 
 \cs_generate_variant:Nn \tl_build_put_right:Nn {NV}
 \cs_generate_variant:Nn \tl_if_eq:nnTF {onTF}
@@ -19,10 +42,6 @@
 
 \begin{rescansyncRewriteenv}{ \str_replace_all:Nnn #1 {__} {_tlser_} }
 
-\msg_new:nnn {tlserialize} {cannot-serialize}
-	{Token~list~cannot~be~serialized}
-\msg_new:nnn {tlserialize} {cannot-deserialize}
-	{Token~list~cannot~be~deserialized}
 
 \NewDocumentCommand\__set_str{mv}{
 	\tl_set:Nn #1{#2}
@@ -90,18 +109,6 @@
 
 
 	\tl_if_eq:NnTF \__tmp {#2} % dangling
-}
-
-\cs_new_protected:Npn \tlserialize:NnF #1 #2 {
-	\tlserialize:NnTF #1 {#2} {} % dangling
-}
-
-\cs_new_protected:Npn \tlserialize:NnT #1 #2 #3 { \tlserialize:NnTF #1 {#2} {#3} {} }
-
-\cs_new_protected:Npn \tlserialize:Nn #1 #2{
-	\tlserialize:NnF #1 {#2} {
-		\msg_error:nn {tlserialize} {cannot-serialize}
-	}
 }
 
 \cs_new_protected:Npn \tldeserialize:Nn #1 #2{
