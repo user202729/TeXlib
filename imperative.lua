@@ -161,7 +161,6 @@ local pending_definitions={}  -- list of {paramtext=paramtext, replacementtext=r
 local function finalize_generate_code(statement, paramtext, replacementtext)  -- the macro itself is included in paramtext
 	paramtext=slice(paramtext, 1)
 	replacementtext=slice(replacementtext, 1)
-	prettyprint("finalize:", paramtext, "→", replacementtext)
 	local param_tag=namedef_to_macrodef(paramtext, replacementtext, statement)
 	for _, kv in pairs(pending_definitions) do
 		if kv.caller.csname==paramtext[1].csname and kv.caller.active==paramtext[1].active then
@@ -631,6 +630,11 @@ local command_handler={
 		pushtostackfront(stack, {faketoken "putnext",
 			bgroup, faketoken "exp:w"}, tokens, {egroup,
 			faketoken "expandonce"})
+	end,
+
+	ocall=function(selftoken, lastlinenumber, stack, add_statement, context)
+		local tokens=getbracegroup(stack)
+		pushtostackfront(stack, {faketoken "putnext"}, tokens, {faketoken "expandonce"})
 	end,
 
 	pretty=function(selftoken, lastlinenumber, stack, add_statement, context)
@@ -1165,7 +1169,7 @@ function optimize_pending_definitions()
 			if target_replacementtext_pos~=1 and target and target.csname==nil and not is_paramsign(target) then
 				-- user have macro \expandafter ... <firsttoken> where firsttoken is unexpandable
 				-- actually followed by ## is also a weird case, but ignore it for now.
-				prettyprint("weird? expandafter chain do nothing (in function ", v.caller, ")")
+				errorx("weird? expandafter chain do nothing (in function ", v.caller, ")")
 			end
 
 			-- remove '\exp:w \expandafter \exp_end:' at appropriate places
@@ -1315,12 +1319,10 @@ do  -- block for withexpand.
 
 	local function add_command(index1, index2)
 		if index1>index2 then
-			prettyprint("expansion argument must be after expansion source")
-			error()
+			errorx("expansion argument must be after expansion source")
 		end
 		if index1<last_index1 then
-			prettyprint("commands must be listed in increasing left endpoint order")
-			error()
+			errorx("commands must be listed in increasing left endpoint order")
 		end
 		last_index1=index1
 		commands[#commands+1]={index1, index2}
@@ -1333,7 +1335,6 @@ do  -- block for withexpand.
 		if len<=0 then errorx("empty part cannot be single token") end
 		local last=commands[#commands]
 		if not last.single_token_marker then last.single_token_marker={} end
-		prettyprint("here first=", first, "len=", len)
 		last.single_token_marker[#last.single_token_marker+1]={first, len}
 	end
 
@@ -1370,7 +1371,6 @@ do  -- block for withexpand.
 		end,
 		assertissingletoken=function()
 			local sub=token.scan_toks()
-			prettyprint("sub_index=",sub_index(sub), "#sub=",#sub)
 			add_single_token_marker(sub_index(sub), #sub)
 		end,
 		assertissingletokenbetweenlabel=function()
@@ -1379,7 +1379,6 @@ do  -- block for withexpand.
 			local indexa=label_index(a)
 			local indexb=label_index(b)
 			local innerlen=indexb-indexa-#a
-			prettyprint("indexa=",indexa, "indexb=",indexb)
 			add_single_token_marker(indexa+#a, innerlen)
 		end,
 	}
