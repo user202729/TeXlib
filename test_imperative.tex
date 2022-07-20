@@ -528,7 +528,23 @@
 	}
 }
 
-% return the string representation of the first bgroup character.
+\begin{addlinemarkerenv}
+
+\precattl_exec:n {
+\rdef \firstcomponentOtherSpace #x {
+	\conditional{\ifspace {#x}} {
+		\return {\cO\ }
+	} {
+		\backquote{
+			\return {,r{\firstarg {#x}}}
+		}
+	}
+}
+}
+
+\end{addlinemarkerenv}
+
+% return the other-space representation of the first bgroup character.
 \rdeflinenumbered \firstbgroup #x {}!
 	\while {}{ \ifnotempty {#x} } {
 		\conditional {\ifbrace {#x}} {
@@ -541,7 +557,7 @@
 
 			% now if #x = {{ab}cd}, then #y = {{'{'ab}cd}
 			\backquote{
-				\return {,r{\firstcomponent {,r{\firstarg {#y}}}}}
+				\return {,r{\firstcomponentOtherSpace {,r{\firstarg {#y}}}}}
 			}
 		} {
 			\conditional {\ifspace {#x}} {
@@ -608,7 +624,7 @@
 			}
 
 			% finally done
-			\assignr #x{\firstcomponent{#x}}
+			\assignr #x{\firstcomponentOtherSpace{#x}}
 			\return{#x}
 
 		} {
@@ -622,6 +638,118 @@
 	\return {}
 !
 
+\begin{addlinemarkerenv}
+
+
+% handler for serializer.
+% principle:
+% a token X is serialized to two N-type tokens AB such that r-expansion of AB results in X, and A ≠ \relax
+% actual encoding:
+
+% begin-group character X is encoded to \bgroup_handler ⟨X in catcode other⟩,
+\rdef \bgroup_handler #x {
+	\putnext {\char_generate:nn {`#x} {1}}
+	\expandonce
+	\expandonce
+}
+
+% end-group character X is encoded to \egroup_handler ⟨X in catcode other⟩,
+\rdef \egroup_handler #x {
+	\putnext {\char_generate:nn {`#x} {2}}
+	\expandonce
+	\expandonce
+}
+
+% blank space is encoded to \space_handler ⟨any N-type token⟩
+\rdef \space_handler #x {
+	\putnext {~}
+}
+
+% anything else is encoded to \exp_end: ⟨that token⟩
+
+% usage: r-expansion of \serialize {⟨balanced token list⟩} results in its serialized form...
+\rdef \serialize #x {
+	\conditional{\ifempty{#x}}
+	{
+		\return {}
+	}{}
+
+	\conditional{\ifbrace{#x}}
+	{
+		\backquote{
+			\return{
+				\bgroup_handler ,r{\firstbgroup{#x}}
+				,r{\serialize{,r{\firstarg{#x}}}}
+				\egroup_handler ,r{\firstegroup{#x}}
+				,r{\serialize{,r{\dropfirst{#x}}}}
+			}
+		}
+	}{}
+
+	\conditional{\ifspace{#x}}
+	{
+		\backquote{
+			\return{
+				\space_handler \relax
+			   	,r{\serialize{  ,O{#x}{\matchrm{~}}  }}
+			}
+		}
+	}{}
+
+	\backquote{
+		\return{
+			\exp_end: ,r{\firstarg{#x}}
+			,r{\serialize{ ,r{\dropfirst{#x}} }}
+		}
+	}
+}
+
+% usage: r-expansion of '\deserialize ⟨serialized form of a token list⟩ \relax' results in the token list being put forward in the input stream.
+% The resulting deserialized token list does not need to be balanced
+\rdef \deserialize {
+	\matchrm{#\firsttoken}
+	\assertisNtype #\firsttoken
+	\texconditional{\ifx#\firsttoken\relax}
+	{
+		%okay done
+	}
+	{
+		%not done
+		\matchrm{#\secondtoken}
+		\assertisNtype #\secondtoken
+
+		% deserialize the rest
+		\rcall{\deserialize}
+
+		% deserialize this token
+		\rcall{#\firsttoken #\secondtoken}
+	}
+}
+
+\rdef \weirdfirstarg #1 {
+	\putnext{\Iremovebgroup{#1}}
+	\expandonce  % to remove the bgroup
+	% now input stream has the form: '⟨head⟩ ⟨tail⟩ }'
+	\matchrm{#\head}
+
+	\assignr #\headS {\serialize{{#\head}}}  % head is the serialized form of '{⟨head⟩}' (⟨head⟩ with another brace group)
+	\rcall {\deserialize 
+		#\headS 
+		\bgroup_handler a  % this is the serialized form of '{' (with charcode = a)
+		\relax }  % the arg of deserialize is serialized form of '{⟨head⟩}{'
+	% now input stream has the form: '{⟨head⟩} { ⟨tail⟩ }'
+
+	\matchrm{#\head #\tail}
+	\return{#\head}
+}
+
+\end{addlinemarkerenv}
+
+
+				
+
+
+
 
 % ========
 
@@ -633,6 +761,16 @@
 \let\removenextegroup\removeuntilegroup  % no error checking.
 
 
+\precattl_exec:n{
+	\tl_set:No \__serialized { \romannumeral \serialize {123\cS{\ \ q} # & \\ \relax {456} \cB\x \cS\  \cB\y 456 \cE\z \cE\t } }
+	\pretty:nV {serialized:} \__serialized
+	\pretty:no {deserialized:} { \romannumeral \expandafter \deserialize \__serialized \relax }
+}
+
+\precattl_exec:n{
+	\pretty:on {\romannumeral \weirdfirstarg { {12{3}\fi\else\if} 456 }} {=12{3}\fi\else\if}
+	\pretty:on {\romannumeral \weirdfirstarg { 123 456 }} {=1}
+}
 
 \precattl_exec:n {
 	\pretty:o { \romannumeral \firstbgroup {{1}2} }
