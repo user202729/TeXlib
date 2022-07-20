@@ -51,6 +51,7 @@ local function namedef_to_macrodef(paramtext, replacementtext, statement)
 	-- paramtext&replacementtext are tokenlists
 	-- operate in-place.
 	-- return a "param_tag" table which is ([1] → argtype.normal|argtype.Ntype, [2] → argtype.normal|argtype.Ntype, etc.)
+	-- also return "name_seq" such as {[1] → ⟨token a⟩, [2] → ⟨token b⟩} for the example above
 	--
 	-- it's copied from statement.need, for e.g. new vars created by matchrm it defaults to argtype.normal
 	--
@@ -58,6 +59,7 @@ local function namedef_to_macrodef(paramtext, replacementtext, statement)
 	local used=0
 	local tok_to_number_token={}  -- e.g. a.tok → 1, b.tok → 2, etc.
 	local param_tag={}
+	local name_seq={}
 	for i=1, #paramtext-1 do
 		local v=paramtext[i]
 		if is_paramsign(v) then
@@ -71,6 +73,7 @@ local function namedef_to_macrodef(paramtext, replacementtext, statement)
 			end
 			tok_to_number_token[paramtext[i+1].tok]=t
 			param_tag[used]=statement.need[paramtext[i+1].tok] or argtype.normal
+			name_seq[used]=paramtext[i+1]
 			paramtext[i+1]=t
 		end
 	end
@@ -99,7 +102,7 @@ local function namedef_to_macrodef(paramtext, replacementtext, statement)
 			i=i+1
 		end
 	end
-	return param_tag
+	return param_tag, name_seq
 end
 
 local used_st={}  -- _linenumber → last used
@@ -653,7 +656,6 @@ local command_handler={
 -- functionname: single token, body: tokenlist (possibly with _linenumber info added)
 -- passcontrol: tokenlist consist of tokens that will be prepended when this function returns
 function generic_compile_code(functionname, body, passcontrol, statement_extra)
-
 	for _, t in ipairs(body) do tokenfromtok_t[t.tok]=t end
 
 
@@ -915,6 +917,88 @@ function generic_compile_code(functionname, body, passcontrol, statement_extra)
 	assert(#statements>0)
 	assert(#statements[#statements].needsequence==0)
 	finalize_generate_code(statements[#statements], {statements[#statements].caller}, passcontrol)
+end
+
+--[[
+`scope` is a table like this...
+
+{ layer=0, prefix=# }  -- topmost layer (layer 0 is special, don't need # doubling)
+{ layer=1, a.tok=#1, b.tok=#2, prefix=## }  -- inside \scope #a #b 
+{ layer=2, a.tok=#1, b.tok=#2, c.tok=##1, prefix=#### }  -- inside \scope #a #b → \scope #c
+
+]]
+
+
+local compile_outer_handler={
+	rblock=function(stack, body, scope, lastlinenumber)
+		local param=getuntilbrace(stack)
+		local inner=getbracegroupinside(stack)
+		--appendto(body, 
+	end,
+	zblock=function(stack, body, scope, lastlinenumber)
+	end,
+	rfunction=function(stack, body, scope, lastlinenumber)
+	end,
+	zfunction=function(stack, body, scope, lastlinenumber)
+	end,
+
+	scope=function(stack, body, scope, lastlinenumber)
+		local paramtext=getuntilbrace(stack)
+		if #paramtext%2~=0 then errorx("scope paramtext wrong format") end
+		for i=1, #paramtext, 2 do
+			if not is_paramsign(paramtext[i]) then
+				errorx("scope paramtext=", paramtext, ",token "..i.." is ", paramtext[i], " not a paramsign")
+			end
+		end
+
+		local newscope={}
+		for k, v in pairs(scope) do newscope[k]=v end
+
+		for i=2, #paramtext, 2 do
+			
+		end
+	end,
+
+	---------------- macro-like
+
+	scopevar=function(stack, body, scope, lastlinenumber)  -- \scopevar #a, #b {  →  #1, #2 \scope #a #b {
+		local paramtext=getuntilbrace(stack)
+
+		-- abuse the function a bit
+		-- assume currently paramtext = '#a, #b'
+		local param_tag, name_seq=namedef_to_macrodef(paramtext, {}, {need={}})
+
+		local name_seq_as_args={}
+		for _, v in name_seq do appendto(name_seq_as_args, {paramsign, v}) end
+
+		pushtostackfront(stack,
+				paramtext,  -- such as '#1, #2'
+				faketoken "scope", name_seq_as_args  -- such as \scope #a #b
+				)
+	end,
+}
+
+
+--body: tokenlist
+--scope: {tok value → argtype, ...}
+function compile_outer(body, scope)
+	for _, t in ipairs(body) do tokenfromtok_t[t.tok]=t end
+
+	body=populatelinenumber(body)
+	local stack=reverse(body)
+	body={}
+
+	local lastlinenumber=-1
+	while #stack>0 do
+		local token=popstack(stack)
+		lastlinenumber=token.linenumber
+		local handler=compile_outer_handler[token.csname]
+		if handler~=nil then
+			handler(stack, body, lastlinenumber)
+		else
+			body[#body+1]=token
+		end
+	end
 end
 
 -- statement_extra: extra properties to be appended to the statement object

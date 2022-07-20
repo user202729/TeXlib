@@ -55,6 +55,19 @@ function F.getbracegroupinside(stack)  -- same as above, but only return the con
 	return slice(result, 2, #result-1)
 end
 
+function F.getuntilbrace(stack)
+	local collected={}
+	while #stack>0 do
+		local t=stack[#stack]
+		local d=degree(t)
+		if d<0 then error "getuntilbrace hits a }" end
+		if d>0 then return collected end
+		stack[#stack]=nil
+		collected[#collected+1]=t
+	end
+	error "getuntilbrace cannot find a {"
+end
+
 function F.is_space(token)
 	return token.csname==nil and token.cmdname=="spacer" and token.mode==0x20
 end
@@ -339,6 +352,9 @@ F.argtype={
 		paramtext=star_delimited_arg_paramtext,
 		specificity=5,
 	},
+	deleted={  -- "bottom type"
+		specificity=6,
+	},
 }
 
 --[[
@@ -374,6 +390,16 @@ inherit(argtype.single_token, argtype.normal)
 inherit(argtype.Ntype, argtype.single_token)  -- for example this line means a N-type arg is a single_token arg
 inherit(argtype.expforward_chain, argtype.normal)
 inherit(argtype.number, argtype.normal)
+
+inherit(argtype.deleted, argtype.number)
+inherit(argtype.deleted, argtype.expforward_chain)
+inherit(argtype.deleted, argtype.Ntype)
+inherit(argtype.deleted, argtype.single_token)
+inherit(argtype.deleted, argtype.normal)
+
+-- essentially inherit(A, B) means "the set of possible values of A is a subset of possible values of B"
+-- and "normal" is the "everything" set (must be balanced however), "deleted" is the empty set.
+
 
 -- just checking
 assert(argtype.Ntype.is_a[argtype.single_token])
