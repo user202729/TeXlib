@@ -101,6 +101,8 @@ input[type=button]{
 }
 
 /*
+   hack to make it display as ␣ but copy-paste (or search) as space
+*/
 .space_charcode{
   font-size: 0pt;
 }
@@ -109,7 +111,6 @@ input[type=button]{
   font-size: medium;
   content: "␣";
 }
-*/
 </style>
 </head>
 <body>
@@ -121,17 +122,22 @@ input[type=button]{
 	</div>
 	<script>
 "use strict"
-function show_html(s){
-	return s.replace(/ /g, "␣")
+
+function show_html_except_space(s){
+	return s
 		.replace(/\r|\n/g, "↵")
 		.replace(/\t/g, "⇥")
+}
+
+function show_html(s){
+	return show_html_except_space(s).replace(/ /g, "␣")
 }
 
 output.innerHTML=""
 
 function print_tl(...tokens){
 	const tl_div=document.createElement("div")
-	tl_div.className="tokenlist"
+	tl_div.classList.add("tokenlist")
 	for(let token of tokens){
 		tl_div.appendChild(token)
 		if({13: true, 10: true}[token.data_charcode]){
@@ -146,10 +152,13 @@ function print_tl(...tokens){
 function token(charcode /* int */, catcode /* single character string in hex */){
 	const token_span=document.createElement("span")
 	const ch=String.fromCodePoint(charcode)
-	token_span.innerText=show_html(ch)
+	token_span.innerText=show_html_except_space(ch)
 	token_span.data_charcode=charcode
+  if(charcode==32){  // special handle space here
+    token_span.classList.add("space_charcode")
+  }
 	if(catcode==='D'){
-		token_span.className="active_char"
+		token_span.classList.add("active_char")
 		token_span.title=`active ${ch} # ${charcode}`
 	}else{
 		const cls={
@@ -164,7 +173,7 @@ function token(charcode /* int */, catcode /* single character string in hex */)
 			B: 'cmd__letter_cmd',
 			C: 'cmd__other_char_cmd',
 		}[catcode]
-		token_span.className="token "+cls
+		token_span.classList.add("token", cls)
 		token_span.title=`${cls} ${ch} # ${charcode}`
 	}
 	return token_span
@@ -176,9 +185,28 @@ function cs(...codepoints){
 	const control_sequence_name=String.fromCodePoint(...codepoints)
 	//const meaning_str=readstr()
 
+  /*
 	token_span.innerText='\\' + show_html(control_sequence_name) + ' '
-	//token_span.title=`cs '${control_sequence_name}' → ${meaning_str}`
-	token_span.className="cs"
+  */
+
+  var items=control_sequence_name.split(' ')
+  items[0]="\\"+items[0]
+  items[items.length-1]+=' '
+  for(var i=0; i<items.length; i++){
+    if(i!=0){  // append a '␣' span that copy-paste as a space
+      var space_span=document.createElement("span")
+      space_span.innerText=' '
+      space_span.classList.add("space_charcode")
+      token_span.appendChild(space_span)
+    }
+
+    // append the text itself
+    if(items[i]!="")
+      token_span.appendChild(new Text(show_html_except_space(items[i])))
+  }
+
+  //token_span.title=`cs '${control_sequence_name}' → ${meaning_str}`
+	token_span.classList.add("cs")
 
 	return token_span
 }
@@ -187,7 +215,7 @@ function csfrozenrelax(){
 	const token_span=document.createElement("span")
 	token_span.innerText="\\relax"
 	token_span.title="frozen relax"
-	token_span.className="cs frozenrelax"
+	token_span.classList.add("cs", "frozenrelax")
 	return token_span
 }
 
