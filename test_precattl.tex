@@ -1,7 +1,7 @@
 %! TEX program = lualatex
 \documentclass[12pt]{article}
 \usepackage{prettytok}
-\prettyinit
+\prettyinitterm
 
 
 \errorstopmode
@@ -22,9 +22,16 @@
 \ExplSyntaxOn
 
 
+\precattl_exec:n {
+	\pretty:n { 123 \cO\^^M 456 \cO\^^J 789 \cO\^^I 00~0 }
+	\pretty:n { \cC{\^^M\^^J\^^I~} }
+	\prettye:n { 123 \cO\^^M 456 \cO\^^J 789 \cO\^^I 00~0 }
+	\prettye:n { \cC{\^^M\^^J\^^I~} }
+}
 
 
 \testname:n {general check}
+
 
 \tl_set:Nn \__content {
 	\cFrozenRelax
@@ -62,6 +69,7 @@
 
 
 \pretty:V \__tmp
+\prettye:V \__tmp
 
 \tl_build_begin:N \__tmpa
 \tl_analysis_map_inline:Nn \__tmp {
@@ -95,16 +103,37 @@
 \begingroup
 \precattl_exec:n {
 	\outer\def \__a{}
-	\outer\def \cA{x}{}
-
 
 	% double check that they're outer.
 	\cs_new_protected:Npn \assertouterin:n #1 {
 		\str_if_in:nnF {#1} {outer} {\testfail:n {"outer"~not~found~in~#1!}}
 	}
 
-	\expandafter \assertouterin:n \expandafter { \meaning\cA{x} }
 	\expandafter \assertouterin:n \expandafter { \meaning\__a }
+
+	\assertequal:nn {\par} {\cC{par}}
+	\assertequal:nn {\par} {\cC{\par}}
+	\use_none:n {
+		\cC{\par}
+		\cB{\par}
+		\cE{\par}
+		\cM{\par}
+		\cT{\par}
+		\cP{\par}
+		\cU{\par}
+		\cD{\par}
+		\cS{\par}
+		\cL{\par}
+		\cO{\par}
+		\cA{\par}
+	}
+}
+
+\sys_if_engine_pdftex:F {  % pdftex \char_generate:nn seems to not handle outer token  ?? TODO
+	\precattl_exec:n {
+		\outer\def \cA{x}{}
+		\expandafter \assertouterin:n \expandafter { \meaning\cA{x} }
+	}
 }
 
 % generate them here.
@@ -153,5 +182,7 @@
 \ExplSyntaxOn
 \assertequal:Vn \a {456}
 \ExplSyntaxOff
+
+0
 
 \end{document}
