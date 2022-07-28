@@ -293,7 +293,7 @@ end
 -- e.g. `need={[a.tok]=argtype.normal, [b.tok]=argtype.Ntype}` means the statement
 -- needs a and b, and b is guaranteed to be N-type (single token, not explicit space)
 
-local function Ntype_get_nextvalue(token)
+local function Ntype_get_nextvalue(token)  -- TODO issue here. if initial of matchrm sequence is delimiter which happens to be equal to the token itself there would be a problem
 	return {paramsign, token}
 end
 
@@ -330,7 +330,8 @@ F.argtype={
 		specificity=2,
 	},
 	Ntype={
-		get_nextvalue=Ntype_get_nextvalue,
+		--get_nextvalue=Ntype_get_nextvalue,
+		get_nextvalue=normal_get_nextvalue,
 		get_expandafter_sequence=singletoken_get_expandafter_sequence,
 		paramtext=standard_arg_paramtext,
 		specificity=3,

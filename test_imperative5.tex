@@ -1,0 +1,158 @@
+%! TEX program = lualatex
+\documentclass{article}
+\usepackage{prettytok}
+\prettyinitterm
+\errorcontextlines=3
+\usepackage{imperative}
+\usepackage{genvar}
+\AutoGenerateVariants
+\begin{document}
+
+\ExplSyntaxOn
+
+\directlua{imperative_debug=true}
+
+\begin{imperativerun}
+	\zblock{
+		\ucalllocal{
+			\pretty:n {hash=##}
+			\int_step_inline:nn {3} \scope #i {
+				\pretty:n {i=#i, hash=##}
+			}
+		}
+	}
+
+%\end{ imperativerun}
+%\end{document}
+%
+%\begin{imperativerun}
+
+	\int_step_inline:nn {3} \scope #i {
+		\pretty:n {i=#i, hash=##}
+		\int_step_inline:nn {3} \scope #j {
+			\pretty:n {i=#i, j=#j, hash=##}
+		}
+	}
+
+	\int_step_inline:nn {3} \scope #i {
+		%\int_step_inline:nn {3} \scope #i {}  % must error, variable shadowing
+	}
+
+
+	\zblock{
+		\assign #a {hello}
+		\assign #a {hello}
+		\ucalllocal{
+			%#a
+			\zblock{\pretty{#a}}  % but zblock cannot receive from outside [produce]?
+		}
+	}
+
+	\def\f\scopevar #a{
+		\zblock{\return{#a}}  % zblock can receive from outside \scope
+	}
+
+	\pretty:n {should show single: #a}
+
+	\cs_new_protected:Npn \__functiona \scopevar #a {
+		\cs_new_protected:Npn \__functiona \scopevar #b {
+
+			#a #b  % this expr compiles to '#1 ##1'
+
+			\zblock { \pretty {#a #b} }  % this zblock compiles to \something {#1} {##1}
+			% idea: 
+			% * first compile \zblock alone, giving it the information that #a and #b are outer var (to detect possible reassignment/shadowing error)
+			% * then it results in \something {#a} {#b}
+			% * then {#a} {#b} is compiled to {#1} {##1}
+
+
+			\zblock {
+				\assign #c {123}
+				\ucalllocal{
+					\zblock{\pretty{#a #b #c}}
+					% let's see if the same idea works...
+					% * first compile zblock alone results in \something {#a} {#b} {#c}
+					% then the outer zblock compiles the ucall, not knowing what #a and #b corresponds to, only that it's outer
+					% thus results in an ucall to  \something {#a} {#b} {#1} for example
+					% final result should be something like \zblockcaller {#a} {#b}
+				}
+			}
+
+			\zblock{
+				\assign #c {123}
+				\ucalllocal{
+					\cs_new_protected:Npn \__functionb \scopevar #d {
+						#c #d
+					}
+					% scope inside ucall. Let's see how it should compile.
+					% first, the innermost scopevar compiles '#c #d' to '#c ##1'.
+					% then we have \ucall { ... #c ##1 }, which will be translated to the correct value.
+					% note that #d must NOT be included in the need list.
+					%
+					% ah, problem here.
+					% Compiling the inner block requires knowing what's the need value of that statement.
+					% But knowing what's the need value of any statement requires compiling the inner block
+					% (to know which variables are needed by that statement)...
+					%
+					% well, knowing the produce value should not need...
+					% but the intention here is to only prevent misleading re-assignment instead of all of them...
+					%
+					% let's see... how complicated.
+					% worst case just tell the user to explicitly delete variables.
+					%
+					% plan: 
+					% * first keep the expr values uncompiled...
+					% * then determine what's the produce values, propagate things etc.
+					% * then compile the inner expr, given the information which values are outervar.
+					% * finally, from that, determine the need values and propagate it.
+				}
+			}
+			
+		}
+	}
+
+
+	%TODO implement zfunction later
+	\zblock {
+		\assign #a {123##}
+		\ucalllocal{ \pretty:n {should show single: ##a, a = #a} }
+		\pretty {should show single: ##a, a = #a}
+	}% \pretty:no {DEBUG} { \cC{stzz101}{#1} }
+
+	\cs_new_protected:Npn \__function \scopevar #a #b #c # {
+		\pretty:n {should show single: ##a}
+		\pretty:n {vars: #a #b #c }
+		\zblock {
+			\pretty{vars: #a  ##}  % check closure passing/capturing of #a from scope to zblock
+			%\assign #c {456}    % must error, assign variable from outer function
+			\ucalllocal{
+				\cs_gset_protected:Npn \__inner \scopevar #d {
+					\pretty:n {d=#d, single hash=##a}
+				}
+				\__inner {dd#a}
+
+				\zblock{
+					\pretty {c=#c, single hash=##a}  % capture #c from outside. check capturing from zblock to inner zblock
+				}
+
+				\cs_gset_protected:Npn \__innerb ##1{
+					\pretty:n {d=##1, single hash=####a}
+				}
+				\__innerb {dd#a}
+			}
+		}
+		\zblock {
+			%\assign #c {456}  % must error, assign variable from outer function
+		}
+		\cs_gset_protected:Npn \__inner \scopevar #d {
+			\pretty:n {d=#d, single hash=##a}
+		}
+		\__inner {dd#a}
+	}
+
+	\__function {valuea\par} {valueb} valuec {}
+\end{imperativerun}
+
+\ExplSyntaxOff
+
+\end{document}

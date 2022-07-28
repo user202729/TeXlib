@@ -1,3 +1,8 @@
+if not imperative_debug then
+	imperative_debug=false
+end
+
+
 for k, v in pairs(require "imperative_tlutil") do
 	_ENV[k]=v
 end
@@ -6,7 +11,7 @@ setmetatable(_ENV, {__index=function(self, field)
 	errorx("attempt to access undefined global variable "..tostring(field).."\n\n"..debug.traceback())
 end})
 
-local function getvars_paramtext(paramtext)  -- for example if paramtext='#x 123 #y' return '{[x.tok]=true, [y.tok]=true}'
+local function getvars_paramtext(paramtext)  -- for example if paramtext='#x 123 #y' return '{[x.tok]=argtype.normal, [y.tok]=argtype.normal}'
 	-- where x.tok is the .tok value of the token x
 	local result={}
 	for i=1, #paramtext-1 do  -- if the last one is mac_param then just assume it's trailing # for match-until-'{'
@@ -150,7 +155,11 @@ local function populatelinenumber(body) -- return new table with _linenumber pro
 			lastlinenumber=tonumber(s)
 		else
 			t=makefaketoken(t)
-			t._linenumber=lastlinenumber
+			if t._linenumber and t._linenumber>0 then  -- special case, nested compilation, so _linenumber already populated
+				lastlinenumber=t._linenumber
+			else
+				t._linenumber=lastlinenumber
+			end
 			result[#result+1]=t
 		end
 		i=i+1
@@ -269,6 +278,7 @@ local preprocessor_functions={
 }
 
 local generic_compile_code  -- function, will define later
+-- signature: function generic_compile_code(functionname, body, passcontrol, statement_extra, outervar)
 
 local function param_from_need(needsequence)  -- takes tokenfromtok implicitly
 	local t={}
@@ -284,6 +294,11 @@ local function standard_paramtext(statement)
 	return t
 end
 
+--
+--nextvalue: format
+--tok → tokenlist
+--the tokenlist has the form e.g. '{#a}'
+--it must be in namedef format.
 local function standard_nextvalue(next_statement)
 	local nextvalue={}
 	for k, v in pairs(next_statement.need) do
@@ -316,6 +331,12 @@ local function generate_code_noop(statement, statements)  -- well...
 	finalize_generate_code(statement, generate_code_prepare(statement, statements))
 end
 
+local function check_var_not_outer(varname, context)
+	if context.outerscope[varname.tok] then
+		errorx("cannot assign to ", paramsign, varname, " already in outerscope")
+	end
+end
+
 local command_handler={
 	----------------------------------------------------------------------------
 	-- the "primitives"
@@ -338,10 +359,10 @@ local command_handler={
 		local group=getbracegroupinside(stack)
 		add_statement {
 			debug=cati({faketoken "putnext"}, wrapinbracegroup(group)),
-			need=getvarsexpr(group),
-			generate_code=function(statement, statements)
+			innerexpr=group,
+			generate_code=function(statement, statements, innerexpr_compiled)
 				local paramtext, replacementtext=generate_code_prepare(statement, statements)
-				replacementtext=cat(replacementtext, group)
+				replacementtext=cat(replacementtext, innerexpr_compiled)
 				finalize_generate_code(statement, paramtext, replacementtext)
 			end,
 		}
@@ -367,26 +388,20 @@ local command_handler={
 		}
 	end,
 
-	assertisNtype=function(selftoken, lastlinenumber, stack, add_statement, context)
-		local varname=getvarname(stack)
-		add_statement {
-			debug={faketoken "assertisNtype", varname},
-			need={[varname.tok]=argtype.normal},
-			produce={[varname.tok]=argtype.Ntype},
-			generate_code=context.generate_code_noop,
-		}
-	end,
+	assertis=function(selftoken, lastlinenumber, stack, add_statement, context)
+		local t=popstack(stack)
+		assert(t.csname~=nil, "assertis must be followed with control sequence")
+		local u=argtype[t.csname]
+		assert(u~=nil, "argtype "..t.csname.." not found")
 
-	assertisExpforwardchain=function(selftoken, lastlinenumber, stack, add_statement, context)
 		local varname=getvarname(stack)
 		add_statement {
-			debug={faketoken "assertisExpforwardchain", varname},
+			debug={faketoken "assertis", t, varname},
 			need={[varname.tok]=argtype.normal},
-			produce={[varname.tok]=argtype.expforward_chain},
+			produce={[varname.tok]=u},
 			generate_code=context.generate_code_noop,
 		}
 	end,
-	
 
 	conditionalgoto=function(selftoken, lastlinenumber, stack, add_statement, context)  -- star = peek
 		local star=get_optional_star(stack)
@@ -395,21 +410,21 @@ local command_handler={
 		add_statement {
 			debug=cati({faketoken "conditionalgoto"}, wrapinbracegroup(conditional), {targetiftrue}),
 			conditionalgoto=targetiftrue,
-			need=getvarsexpr(conditional),
-			generate_code=function(statement, statements)
+			innerexpr=conditional,
+			generate_code=function(statement, statements, innerexpr_compiled)
 				local paramtext=standard_paramtext(statement)
 				local replacementtext=standard_replacementtext(statements[statement.nextindex], standard_nextvalue(statements[statement.nextindex]))
 				local replacementtext2=standard_replacementtext(statements[statement.conditionalgoto], standard_nextvalue(statements[statement.conditionalgoto]))
 				if star then  -- conditional might peek, don't eliminate common suffix
 					finalize_generate_code(statement, paramtext, cat(
-						conditional,
+						innerexpr_compiled,
 						optionalwrapinbracegroup(replacementtext2),
 						optionalwrapinbracegroup(replacementtext)
 					))
 				else
 					local l=commontokenlistbalancedsuffixlen(replacementtext, replacementtext2)
 					finalize_generate_code(statement, paramtext, cat(
-						conditional,
+						innerexpr_compiled,
 						optionalwrapinbracegroup(slice(replacementtext2, 1, #replacementtext2-l)),
 						optionalwrapinbracegroup(slice(replacementtext, 1, #replacementtext-l)),
 						slice(replacementtext, #replacementtext-l+1, #replacementtext)
@@ -439,15 +454,16 @@ local command_handler={
 
 	assign=function(selftoken, lastlinenumber, stack, add_statement, context)
 		local varname=getvarname(stack)
+		check_var_not_outer(varname, context)
 		local content=getbracegroup(stack)
 		add_statement {
 			debug=cati({faketoken "assign", varname}, content),
-			need=getvarsexpr(content),
+			innerexpr=content,	
 			produce={[varname.tok]=argtype.normal},
-			generate_code=function(statement, statements)
+			generate_code=function(statement, statements, innerexpr_compiled)
 				local paramtext=standard_paramtext(statement)
 				local nextvalue=standard_nextvalue(statement)
-				nextvalue[varname.tok]=content
+				nextvalue[varname.tok]=innerexpr_compiled
 				local replacementtext=standard_replacementtext(statements[statement.nextindex], nextvalue)
 				finalize_generate_code(statement, paramtext, replacementtext)
 			end,
@@ -456,18 +472,19 @@ local command_handler={
 
 	assigno=function(selftoken, lastlinenumber, stack, add_statement)  -- assigno #x {123}
 		local varname=getvarname(stack)
+		check_var_not_outer(varname, context)
 		local content=getbracegroup(stack)
 		add_statement {
 			debug=cati({faketoken "assigno", varname}, content),
-			need=getvarsexpr(content),
+			innerexpr=content,
 			assigno_tok=varname.tok,
 			produce={[varname.tok]=argtype.normal},
-			generate_code=function(statement, statements)
+			generate_code=function(statement, statements, innerexpr_compiled)
 				local paramtext=standard_paramtext(statement)
 				local nextvalue=standard_nextvalue(statement)
 				local next_statement=statements[statement.nextindex]
 				assert(next_statement.needsequence[1][1]==varname.tok)
-				nextvalue[varname.tok]=content
+				nextvalue[varname.tok]=innerexpr_compiled
 				local replacementtext=standard_replacementtext(next_statement, nextvalue)
 				finalize_generate_code(statement, paramtext, cati(
 					{expandafter, replacementtext[1], expandafter},
@@ -479,18 +496,19 @@ local command_handler={
 
 	assignoo=function(selftoken, lastlinenumber, stack, add_statement)
 		local varname=getvarname(stack)
+		check_var_not_outer(varname, context)
 		local content=getbracegroup(stack)
 		add_statement {
 			debug=cati({faketoken "assignoo", varname}, content),
-			need=getvarsexpr(content),
+			innerexpr=content,
 			assigno_tok=varname.tok,
 			produce={[varname.tok]=argtype.normal},
-			generate_code=function(statement, statements)
+			generate_code=function(statement, statements, innerexpr_compiled)
 				local paramtext=standard_paramtext(statement)
 				local nextvalue=standard_nextvalue(statement)
 				local next_statement=statements[statement.nextindex]
 				assert(next_statement.needsequence[1][1]==varname.tok)
-				nextvalue[varname.tok]=content
+				nextvalue[varname.tok]=innerexpr_compiled
 				local replacementtext=standard_replacementtext(next_statement, nextvalue)
 				finalize_generate_code(statement, paramtext, cati(
 					{expandafter, expandafter, expandafter, replacementtext[1], expandafter, expandafter, expandafter},
@@ -504,17 +522,22 @@ local command_handler={
 		local content=getbracegroupinside(stack)
 		add_statement {
 			debug=cati({faketoken "expcall"}, content),
-			need=getvarsexpr(content),
-			generate_code=function(statement, statements)
+			innerexpr=content,
+			generate_code=function(statement, statements, innerexpr_compiled)
 				local paramtext=standard_paramtext(statement)
 				local replacementtext=standard_replacementtext(statements[statement.nextindex], standard_nextvalue(statements[statement.nextindex]))
-				finalize_generate_code(statement, paramtext, cat(content, replacementtext))
+				finalize_generate_code(statement, paramtext, cat(innerexpr_compiled, replacementtext))
 			end,
 		}
 	end,
 
 	----------------------------------------------------------------------------
 	-- macro-like (transform the code itself)
+
+	-- TODO hack (does not check for expandability. will fix later)
+	ucalllocal=function(selftoken, lastlinenumber, stack, add_statement, context)
+		stack[#stack+1]=faketoken "expcall"
+	end,
 
 	["return"]=function(selftoken, lastlinenumber, stack, add_statement, context)
 		local group=getbracegroup(stack)
@@ -537,7 +560,7 @@ local command_handler={
 		local content=getbracegroupinside(stack)
 		pushtostackfront(stack, 
 			{faketoken "assigno", paramsign, varname, bgroup, faketoken "csname"}, content, {faketoken "endcsname", egroup,
-				faketoken "assertisNtype", paramsign, varname
+				faketoken "assertis", faketoken "Ntype", paramsign, varname
 			}
 		)
 	end,
@@ -565,7 +588,7 @@ local command_handler={
 		local operations=getbracegroupinside(stack)
 
 		local localfn=next_st(lastlinenumber)
-		generic_compile_code(localfn, operations, {faketoken "exp_end:"}, {r_optimizable=true, is_internal=true})
+		generic_compile_code(localfn, operations, {faketoken "exp_end:"}, {r_optimizable=true, is_internal=true}, {})
 
 		pushtostackfront(stack, 
 			{faketoken "assigno", paramsign, varname, bgroup, faketoken "exp:w", localfn}, 
@@ -655,22 +678,46 @@ local command_handler={
 
 -- functionname: single token, body: tokenlist (possibly with _linenumber info added)
 -- passcontrol: tokenlist consist of tokens that will be prepended when this function returns
-function generic_compile_code(functionname, body, passcontrol, statement_extra)
+-- return the .needsequence of the function itself
+function generic_compile_code(functionname, body, passcontrol, statement_extra, outervar)
+	assert(type(outervar)=="table")
+
+	if statement_extra.is_internal then
+		prettyprint("see", functionname, "as internal")
+	end
+
 	for _, t in ipairs(body) do tokenfromtok_t[t.tok]=t end
+
+
+	--zblock etc. should not propagate the original variable value to inside
+	local tmp=outervar
+	outervar=nil
+	outerscope={
+		layer=1,
+		prefix={paramsign, paramsign},
+	}
+	for k, v in pairs(tmp) do
+		if k~="prefix" and k~="layer" then  -- yes it's going to bite...
+			outerscope[k]={paramsign, tokenfromtok(k)}
+		end
+	end
 
 
 	local labelfunctionend=randomlabel()
 	body=cati(body, {faketoken "label", labelfunctionend})
 
 	------ very special preprocessor (TODO keep linenumbers)
-
 	local stack=reverse(body)
 	body={}
 	while #stack>0 do
 		local t=popstack(stack)
 		local handler=preprocessor_functions[t.csname]
 		if handler then
-			handler(t, body, stack)
+			--if imperative_debug then
+			--	load("preprocessor_functions." .. t.csname .. "(...)")(t, body, stack)
+			--else
+				handler(t, body, stack)
+			--end
 		else
 			body[#body+1]=t
 		end
@@ -679,18 +726,27 @@ function generic_compile_code(functionname, body, passcontrol, statement_extra)
 	------ resume to normal processing
 	stack=reverse(body)
 
-	local statements={}
-
+	local statements={
+		{
+			debug={faketoken "start"},
+			caller=functionname,
+			generate_code=generate_code_noop,
+			nextindex=2,
+			linenumber=-1,
+		}  -- this is problematic, need to manually copy statement_extra as well...
+	}
 
 	local lastlinenumber=0
 
 	local function add_statement(statement)
+		
 		if #statements==0 then
 			statement.caller=functionname
 		else
 			statement.caller=next_st(lastlinenumber)
 			statement.is_internal=true  -- i.e. it's possible to eliminate/rename this function, "not public API"
 		end
+
 		for k, v in pairs(statement_extra) do
 			statement[k]=v
 		end
@@ -702,6 +758,7 @@ function generic_compile_code(functionname, body, passcontrol, statement_extra)
 	local context={
 		labelfunctionend=labelfunctionend,
 		generate_code_noop=generate_code_noop,
+		outerscope=outerscope,
 	}
 
 	while #stack>0 do
@@ -726,7 +783,6 @@ function generic_compile_code(functionname, body, passcontrol, statement_extra)
 
 	for i, v in ipairs(statements) do
 		v.comefrom={}
-		if v.need==nil then v.need={} end
 		if v.produce==nil then v.produce={} end
 	end
 
@@ -753,42 +809,33 @@ function generic_compile_code(functionname, body, passcontrol, statement_extra)
 	.nextindex = some index
 	.conditionalgoto = some index (in labelpos), if it's a conditionalgoto
 
-	.need: set of var tok needed by that statement
+	.need: set of var tok needed by that statement  (might be omitted. If omitted deduced from compiling innerexpr, or if innerexpr not available, is empty)
 	.produce: ↑ set of var tok produced by that statement
 
 	.caller: some random token generated for this line of code...
 
 	other primitive-specific things
-
-	next step: propagate the `need` values
 	]]
 
-	local function propagate(i, tok)
-		local v=statements[i]
-		assert(v.need[tok])
-		for _, j in pairs(v.comefrom) do
-			if not statements[j].need[tok] and not statements[j].produce[tok] then
-				statements[j].need[tok]=argtype.normal
-				propagate(j, tok)
-			end
-		end
-	end
-	for i=1, #statements-1 do
-		for k, _ in pairs(statements[i].need) do
-			propagate(i, k)
-		end
-	end
+	-- propagate the `produce` values
 
-	-- then, propagate the `produce` values
+	--for tok, _ in pairs(outerscope) do
+	--if tok~="layer" and tok~="prefix" then
+	--	statements[1].produce[tok]=argtype.normal
+	--	end
+	--end
+
+	local propagate
+
 	local function propagate2(j, tok)
-		-- here some statement before j produces tok as single token.
-		-- check if j also produces tok as single token.
-		if statements[j].produce[tok]~=nil or statements[j].need[tok]==nil then
+		-- here some statement before v produces tok as single token.
+		-- check if v also produces tok as single token.
+		local v=statements[j]
+
+		if v.produce[tok]~=nil then
 			return
 		end
 
-
-		local v=statements[j]
 		assert(#v.comefrom>0)
 
 		local result_type=nil
@@ -808,15 +855,13 @@ function generic_compile_code(functionname, body, passcontrol, statement_extra)
 			assert(result_type~=nil)
 		end
 
-		v.need[tok]=argtype_both[v.need[tok]][result_type]
-		local new_produce_value=argtype_both[v.need[tok]][result_type]
-		if v.produce[tok]~=new_produce_value then
-			v.produce[tok]=new_produce_value
+		if v.produce[tok]~=result_type then
+			v.produce[tok]=result_type
 			propagate(j, tok)
 		end
 	end
 
-	local function propagate(i, tok)
+	propagate=function(i, tok)
 		-- here i produces tok as single token. Propagate it to j where i goes to j.
 		local v=statements[i]
 		if v.nextindex~=nil then
@@ -829,9 +874,48 @@ function generic_compile_code(functionname, body, passcontrol, statement_extra)
 
 	for i=1, #statements-1 do
 		for k, v in pairs(statements[i].produce) do
-			if v~=argtype.normal then  -- everything is normal already, no need to propagate
-				propagate(i, k)
+			propagate(i, k)
+		end
+	end
+
+	-- before processing need value, need to compile all the innerexpr
+	for i, v in ipairs(statements) do
+		if v.innerexpr then
+			assert(v.need==nil, "internal error both need and innerexpr non-nil")
+
+			local current_scope={}
+			--setmetatable(current_scope, {__index=outerscope})
+			for k, v in pairs(outerscope) do  
+				current_scope[k]=v
 			end
+
+			-- except for matchrm, propagate and need are roughly the same
+			for k, v in pairs(v.produce) do
+				current_scope[k]={paramsign, tokenfromtok(k)}
+			end
+			
+			v.innerexpr_compiled, v.need=compile_outer(v.innerexpr, current_scope)
+			v.need=getvarsexpr(v.innerexpr_compiled)  -- TODO???
+		elseif v.need==nil then
+			v.need={}
+		end
+	end
+		
+
+	-- propagate the `need` values
+	local function propagate(i, tok)
+		local v=statements[i]
+		assert(v.need[tok])
+		for _, j in pairs(v.comefrom) do
+			if not statements[j].need[tok] and not statements[j].produce[tok] then
+				statements[j].need[tok]=argtype.normal
+				propagate(j, tok)
+			end
+		end
+	end
+	for i=1, #statements-1 do
+		for k, _ in pairs(statements[i].need) do
+			propagate(i, k)
 		end
 	end
 
@@ -886,7 +970,7 @@ function generic_compile_code(functionname, body, passcontrol, statement_extra)
 				end
 			end
 			s=s.."/"
-				
+
 			prettyprint(
 				{v.caller, i..". → "..tostring(v.nextindex).."|"..tostring(v.conditionalgoto)},
 				v.debug,
@@ -902,7 +986,7 @@ function generic_compile_code(functionname, body, passcontrol, statement_extra)
 	for i=1, #statements-1 do
 		if statements[i].generate_code then --TODO everything must have handler
 			local success, val=xpcall(function()
-				statements[i]:generate_code(statements)
+				statements[i]:generate_code(statements, statements[i].innerexpr_compiled)
 			end, debug.traceback)
 			if not success then
 				debug_print_statements()
@@ -917,7 +1001,11 @@ function generic_compile_code(functionname, body, passcontrol, statement_extra)
 	assert(#statements>0)
 	assert(#statements[#statements].needsequence==0)
 	finalize_generate_code(statements[#statements], {statements[#statements].caller}, passcontrol)
+
+	return statements[1].needsequence
 end
+
+local outervarmarker={}  -- marker
 
 --[[
 `scope` is a table like this...
@@ -926,25 +1014,50 @@ end
 { layer=1, a.tok=#1, b.tok=#2, prefix=## }  -- inside \scope #a #b 
 { layer=2, a.tok=#1, b.tok=#2, c.tok=##1, prefix=#### }  -- inside \scope #a #b → \scope #c
 
+this does assume that no tok value is equal to "layer" or "prefix" however.
+
+also the special outervarmarker value is used like this
+
+{ a.tok=outervarmarker }
+
+means a.tok is a imperative-variable defined outside e.g. \rfunction \f #a { \putnext { \rblock { ... #a  ... } } },
+then while compiling the inner rblock, 'a' is outervar (e.g. cannot be reassigned).
+
 ]]
 
 
 local compile_outer_handler={
-	rblock=function(stack, body, scope, lastlinenumber)
-		local param=getuntilbrace(stack)
-		local inner=getbracegroupinside(stack)
-		--appendto(body, 
-	end,
+	--rblock=function(stack, body, scope, lastlinenumber)
+	--	local param=getuntilbrace(stack)
+	--	local inner=getbracegroupinside(stack)
+	--	--appendto(body, 
+	--end,
 	zblock=function(stack, body, scope, lastlinenumber)
-	end,
-	rfunction=function(stack, body, scope, lastlinenumber)
-	end,
-	zfunction=function(stack, body, scope, lastlinenumber)
-	end,
+		local localfn=next_st(lastlinenumber)
+		local content=getbracegroupinside(stack)
+		local needsequence=generic_compile_code(localfn, content, {}, {}, scope)
+		-- TODO somehow mark this function as internal
 
-	scope=function(stack, body, scope, lastlinenumber)
+		body[#body+1]=localfn
+		for _, v in pairs(needsequence) do
+			local tok=v[1]
+			if not scope[tok] then
+				errorx("internal error var ", tokenfromtok(tok), " not found")
+			end
+			appendto(body, wrapinbracegroup(scope[tok]))  -- TODO optimization: brace can be omitted sometimes
+		end
+	end,
+	--rfunction=function(stack, body, scope, lastlinenumber)
+	--end,
+	--zfunction=function(stack, body, scope, lastlinenumber)
+	--end,
+
+	scopeunbraced=function(stack, body, scope, lastlinenumber)
 		local paramtext=getuntilbrace(stack)
 		if #paramtext%2~=0 then errorx("scope paramtext wrong format") end
+
+		local content=getbracegroupinside(stack)
+
 		for i=1, #paramtext, 2 do
 			if not is_paramsign(paramtext[i]) then
 				errorx("scope paramtext=", paramtext, ",token "..i.." is ", paramtext[i], " not a paramsign")
@@ -953,13 +1066,32 @@ local compile_outer_handler={
 
 		local newscope={}
 		for k, v in pairs(scope) do newscope[k]=v end
+		assert(scope.layer>=0)
+		newscope.layer=scope.layer+1
+		newscope.prefix=cat(scope.prefix, scope.prefix)
 
-		for i=2, #paramtext, 2 do
-			
+		if #paramtext>9*2 then
+			error("too many args, impossible")
 		end
+		for i=2, #paramtext, 2 do
+			local tok=paramtext[i].tok
+			if newscope[tok] then
+				errorx("variable shadowing in nested scope ", paramtext[i])
+			end
+			newscope[tok]=cat(scope.prefix, {token.create(48+i/2, 12)})
+		end
+
+		local innercontent=(compile_outer(content, newscope)) -- brace, only first arg
+		appendto(body, innercontent)
+	end,
+	---------------- macro-like
+
+	scope=function(stack, body, scope, lastlinenumber)
+		local paramtext=getuntilbrace(stack)
+		local content=getbracegroup(stack)
+		pushtostackfront(stack, cati({faketoken "scopeunbraced"}, paramtext, {bgroup}, content, {egroup}))
 	end,
 
-	---------------- macro-like
 
 	scopevar=function(stack, body, scope, lastlinenumber)  -- \scopevar #a, #b {  →  #1, #2 \scope #a #b {
 		local paramtext=getuntilbrace(stack)
@@ -968,37 +1100,97 @@ local compile_outer_handler={
 		-- assume currently paramtext = '#a, #b'
 		local param_tag, name_seq=namedef_to_macrodef(paramtext, {}, {need={}})
 
+		--now paramtext = '#1, #2'
+		--need to double the # as necessary
+		local old=paramtext
+		paramtext={}
+		for _, t in ipairs(old) do
+			if is_paramsign(t) then
+				appendto(paramtext, scope.prefix)
+			else
+				paramtext[#paramtext+1]=t
+			end
+		end
+
+		-- construct a sequence '#a #b' to be passed to \scope
 		local name_seq_as_args={}
-		for _, v in name_seq do appendto(name_seq_as_args, {paramsign, v}) end
+		for _, v in ipairs(name_seq) do
+			appendto(name_seq_as_args, {paramsign, v})
+		end
+
 
 		pushtostackfront(stack,
-				paramtext,  -- such as '#1, #2'
-				faketoken "scope", name_seq_as_args  -- such as \scope #a #b
-				)
+				cat(paramtext,  -- such as '##1, ##2'
+				{faketoken "scope"}, name_seq_as_args  -- such as \scope #a #b
+				))
 	end,
 }
 
 
 --body: tokenlist
---scope: {tok value → argtype, ...}
-function compile_outer(body, scope)
-	for _, t in ipairs(body) do tokenfromtok_t[t.tok]=t end
+--scope: format explained above
 
+--return
+-- * the compiled tokenlist itself (after replacing according to scope), and 
+-- * the need table i.e. {t.tok=argtype, ...}   which is subset of scope
+
+--recall that layer 0 is treated specially
+function compile_outer(body, scope)
+	if scope==nil then
+		scope={
+			layer=0,
+			prefix={paramsign},
+		}
+	end
+
+	for _, t in ipairs(body) do tokenfromtok_t[t.tok]=t end
 	body=populatelinenumber(body)
 	local stack=reverse(body)
 	body={}
 
 	local lastlinenumber=-1
 	while #stack>0 do
-		local token=popstack(stack)
-		lastlinenumber=token.linenumber
-		local handler=compile_outer_handler[token.csname]
-		if handler~=nil then
-			handler(stack, body, lastlinenumber)
+		local t=popstack(stack)
+		if t._linenumber then
+			lastlinenumber=t._linenumber
+		end
+		print("======== processing line", lastlinenumber)
+
+		if scope.layer>0 and is_paramsign(t) then
+			local n=popstack(stack)
+			if is_paramsign(n) then
+				for i=1, 1<<(scope.layer-1) do
+					appendto(body, {t, n})  -- '##', keep verbatim (multiply by scope depth)
+				end
+			else
+				local s=scope[n.tok]
+				if not s then
+					errorx("variable ", n, " is not in scope")
+				end
+				appendto(body, s)
+			end
 		else
-			body[#body+1]=token
+			local handler=compile_outer_handler[t.csname]
+			if handler~=nil then
+				if imperative_debug then
+					--so that debug.traceback prints out the functionname
+					load("({...})[1]." .. t.csname .. "(select(2, ...))")(compile_outer_handler, stack, body, scope, lastlinenumber)
+				else
+					handler(stack, body, scope, lastlinenumber)
+				end
+			else
+				body[#body+1]=t
+			end
 		end
 	end
+
+	--changed approach a bit. Instead of getting need while compiling body, getting need after compiling body
+	local need={}
+	if scope.layer>0 then
+		need=getvarsexpr(body)
+	end
+
+	return body, need
 end
 
 -- statement_extra: extra properties to be appended to the statement object
@@ -1019,7 +1211,7 @@ function generic_def_call(passcontrol, statement_extra)
 	-- special handler: get linenumber for each token in body
 	body=populatelinenumber(body)
 
-	generic_compile_code(functionname, body, passcontrol, statement_extra)
+	generic_compile_code(functionname, body, passcontrol, statement_extra, {})
 end
 
 imperative_nextstatement_properties={}
@@ -1058,14 +1250,16 @@ end
 
 function debug_rdef()
 	for _, pr in ipairs(pending_definitions) do
-		prettyprint(pr.paramtext, "→", pr.replacementtext)
+		local extra_status=""
+		if pr.is_internal then extra_status=extra_status.."[internal]" end
+		prettyprint(extra_status, pr.paramtext, "→", pr.replacementtext)
 	end
 end
 
 local function get_execute_pending_definitions_tl(pending_definitions)
 	local result={}
 	for _, pr in ipairs(pending_definitions) do
-		result=cati(result, {faketoken "def"}, pr.paramtext, wrapinbracegroup(pr.replacementtext))
+		result=cati(result, {faketoken "long", faketoken "def"}, pr.paramtext, wrapinbracegroup(pr.replacementtext))
 	end
 	return result
 end
@@ -1335,7 +1529,6 @@ function optimize_pending_definitions()
 			local caller=v.caller
 			if v.is_internal and refcount(caller.tok)==0 then
 				done_anything=true
-				--prettyprint("removed ", caller.csname)
 			else
 				pending_definitionsx[#pending_definitionsx+1]=v
 			end
@@ -1624,4 +1817,20 @@ do  -- block for withexpand.
 		end
 		return tokens
 	end
+end
+
+function cmd_imperative_run()
+	local result=(compile_outer(token.scan_toks()))
+	-- brace to get first return value only.
+
+	optimize_pending_definitions()
+	if imperative_debug then
+		debug_rdef()
+	end
+	execute_pending_definitions()
+
+	if imperative_debug then
+		prettyprint("going to execute", result)
+	end
+	print_fake_tokenlist(result)
 end

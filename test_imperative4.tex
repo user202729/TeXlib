@@ -1,0 +1,46 @@
+%! TEX program = lualatex
+\documentclass{article}
+\errorstopmode
+\usepackage{prettytok}
+\prettyinit
+\usepackage{imperative}
+\begin{document}
+\ExplSyntaxOn
+
+
+
+\begin{addlinemarkerenv}
+	\def \__b{c}
+	\def \__a{d}
+	\def \__d{e}
+\zdef \__test {
+
+
+
+
+	\putnextwithexpand {
+		\pretty:n{ \meaning \noexpand \__a \__b }
+	} {
+		\expandat \noexpand
+		\assertissingletoken{\noexpand \__a}
+		\expandat \__b
+		\expandat \meaning
+	}
+
+
+	
+	\prettyw
+}
+
+
+\directlua{optimize_pending_definitions()}
+\directlua{debug_rdef()}
+%\directlua{print_tlrepr()}
+\directlua{execute_pending_definitions()}
+
+
+\__test \prettystop
+
+\end{addlinemarkerenv}
+\ExplSyntaxOff
+\end{document}

@@ -67,7 +67,7 @@
 
 
 	% use this version if you already have verbatim data.
-	% (#1 are the tokens to be put before the output, #2 is the processed result)
+	% (#1 are the tokens to be put before the output -- which are rescanned tokens, #2 is the processed result)
 	\protected\def\addlinemarker:nn #1 #2 {
 		\tl_set:Nn \__body {#2}
 		\tl_replace_all:Nnn \__body {~} {\cO\ }
