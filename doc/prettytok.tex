@@ -4,6 +4,9 @@
 \EnableCrossrefs
 \CodelineIndex
 \RecordChanges
+\fvset{gobble=0,tabsize=4,frame=single,numbers=left,numbersep=3pt}
+\AtBeginDocument{\DeleteShortVerb\"}
+\MakeOuterQuote{"}
 \begin{document}
 \GetFileInfo{\jobname.tex}
 \DoNotIndex{\newcommand,\newenvironment}
@@ -21,11 +24,31 @@
 \changes{v0.0.0}{2022/05/18}{First public release}
 
 \begin{abstract}
-Pretty-print token lists to HTML file for debugging purposes.
-Open the file in any browser to view the result.
+Pretty-print token lists for debugging purposes.
 
 Can be used to replace |\tl_analysis_show:n|.
 \end{abstract}
+
+\section{Motivation}
+
+\TeX's default mechanism for debug-printing has a few limitations
+
+\begin{itemize}
+	\item If there's some unprintable character in the output (for example, |^^J|, |^^M|, |^^I| -- literal tab character), it's not easy to distinguish between them.
+	\item If some token has unexpected catcode (most commonly, letter versus other), it's not easy to distinguish as well.
+\end{itemize}
+
+|\tl_analysis_show:n| attempts to fix the second problem, but is very, very verbose and does not fix the first problem.
+
+This package aims to fix both.
+
+There are some additional expandable debug-printing functions, which unlike |\msg_expandable_error:nn|
+does not stop the compilation;
+and also support distinguishing between different catcode etc.,
+although it's \LuaTeX-only.
+
+And some more additional (expandable in \LuaTeX) functions to inspect the content of the input stream at a particular moment in time.
+
 
 \section{Usage}
 
@@ -57,9 +80,21 @@ Can be used to replace |\tl_analysis_show:n|.
 	This should be called right after the package is loaded, after setting the configuration variables described below.
 \end{function}
 
+\begin{function}{\prettyinitterm:}
+	\begin{syntax}
+		\cs{prettyinitterm:}
+	\end{syntax}
+	Same as above. However, if this is used, the information is printed on the terminal instead of to the HTML file.
+
+	This might require |-8bit| option, see \url{https://tex.stackexchange.com/q/168460/250119}.
+
+	Besides, this drops the distinction between the catcode of some tokens (for example \verb|{}$#&^_| are all shown as the same color as "special catcode"),
+	which is available in the tooltip in the HTML version.
+\end{function}
+
 \subsection{Expandable interface (\LuaTeX\ only)}
 
-\cs{prettyinit:} must be called before calling the functions in this section.
+\cs{prettyinit:} or \cs{prettyinitterm:} must be called before calling the functions in this section.
 
 \begin{function}[EXP]{\prettye:n}
 	\begin{syntax}
@@ -74,8 +109,24 @@ Can be used to replace |\tl_analysis_show:n|.
 	\end{syntax}
 	Print the tokens until \cs{prettystop} is seen. Useful for inspecting the content of the input stream.
 
-	Note that the input stream will be tokenized and has catcode frozen. Use with care.
+	As a debugging tool, it's possible to execute |\everyeof{\prettystop}| to avoid runaway printing in weird catcode environments.
 \end{function}
+
+The idea is that it can be inserted "anywhere" without affecting how the function works (as long as the function does not rely on the exact number of expansion steps).
+
+Note that the input stream will be tokenized and has catcode frozen;
+besides, currently some implementation details (it can be fixed, but the package author does not
+have an immediate need for it, see \url{https://tex.stackexchange.com/q/335994/250119}) means control sequences not
+in the hash table will be destroyed.
+Use with care.
+
+For example
+\begin{verbatim}
+\ExplSyntaxOn
+\def \f #1 {\prettye:w 789}
+\f 123456 \prettystop
+\end{verbatim}
+will print out |78923456|.
 
 \subsection{Lua programming interface}
 
@@ -93,7 +144,9 @@ Can be used to replace |\tl_analysis_show:n|.
 
 \subsection{View result}
 
-The result is printed to a HTML file named |pretty-|\meta{jobname}|.html| by default.
+If terminal output is selected, the output is on the terminal, no special action required. (although see the note on |-8bit| above)
+
+Otherwise, the result is printed to a HTML file named |pretty-|\meta{jobname}|.html| by default.
 Open the file in any browser to view the result.
 
 Note that the HTML file will not be touched if nothing is printed, as such it's encouraged to add a line such as |\pretty:n {start}| right after loading the file.
@@ -168,13 +221,14 @@ There are also these functions, for convenience.
 
 \subsection{\LaTeXe\ interface}
 
-\begin{function}{\prettyN,\prettyX,\prettyO,\prettyV,\prettyinit,\prettyshowN,\prettyshowC}
+\begin{function}{\prettyN,\prettyX,\prettyO,\prettyV,\prettyinit,\prettyinitterm\prettyshowN,\prettyshowC}
 	\begin{syntax}
 		\tn{prettyN} \Arg{token list}
 		\tn{prettyX} \Arg{token list}
 		\tn{prettyO} \Arg{token list}
 		\tn{prettyV} \meta{tl var}
 		\tn{prettyinit}
+		\tn{prettyinitterm}
 		\tn{prettyshowN} \meta{token}
 		\tn{prettyshowC} \Arg{control sequence name}
 	\end{syntax}
@@ -190,7 +244,7 @@ There are also these functions, for convenience.
 \end{function}
 
 
-\subsection{Customization}
+\subsection{Customization for HTML output}
 
 These variables can be redefined before the
 first call to \cs{pretty:n} or \cs{prettyinit:} to customize the behavior.
@@ -209,14 +263,29 @@ first call to \cs{pretty:n} or \cs{prettyinit:} to customize the behavior.
 	The duration between two consecutive refresh check, in milliseconds. Defaults to 1000.
 \end{variable}
 
+\subsection{Customization for terminal output}
+
+\begin{variable}{\prettytermprefix,\prettytermprefixmore}
+	Strings consist of prefixes to be output before each terminal line.
+
+	This might be useful for log-filtering/output-filtering tools such as |texfot| to recognize the output line.
+
+	Defaults to \verb*|> | and \verb*|> ... | respectively.
+\end{variable}
+
 \section{Implementation}
 
 Unfortunately, the implementation is not typesetted in \TeX. Read the |.sty| file.
 
-\StopEventually{^^A
-	\PrintChanges
-	\PrintIndex
-}
+Remark: it's possible to do expandable printing in other engines as well by, for example, turning on `\tracingmacros`, parse the token list somehow
+(and use some not-always-exact logic to distinguish normal character and active character with same meaning;
+then grep the resulting log file for special markers.
 
+But that would be very, very slow and slows down everything else by turning on logging. Just use \LuaTeX\ for debugging.
+
+There's another option of recompiling the engine and adding some expandable primitive for debug logging...
+
+\PrintChanges
+\PrintIndex
 \Finale
 \end{document}

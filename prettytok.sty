@@ -45,6 +45,7 @@
 \cs_generate_variant:Nn \use:N {c}
 \cs_generate_variant:Nn \str_map_inline:nn {xn}
 \cs_generate_variant:Nn \tl_build_put_right:Nn {Nx}
+\cs_generate_variant:Nn \tl_build_put_right:Nn {NV}
 \cs_generate_variant:Nn \iow_now:Nn {NV}
 
 \iow_new:N \_prettytok_file
@@ -57,14 +58,14 @@
 
 \msg_new:nnn {prettytok} {already-initialized} {Output~file~is~already~initialized!} 
 
+\cs_new_eq:NN \pretty_check_already_init: \relax
 
-% See also Lua function: local function check_file_opened()
-
-\global\let \pretty_check_already_init: \relax
+\tl_gset:Nn \_prettytok_output_format {}
 
 \precattl_exec:n {
 	\cs_new_protected:Npn \_prettyinit_unchecked: {
-		\global\protected\def \pretty_check_already_init: {\msg_error:nn {prettytok} {already-initialized}}
+		\cs_set_protected:Npn \pretty_check_already_init: {\msg_error:nn {prettytok} {already-initialized}}
+		\tl_gset:Nn \_prettytok_output_format {html}
 
 		\iow_open:NV \_prettytok_file \prettyfilename
 
@@ -86,9 +87,134 @@
 		\pretty_check_already_init:
 		\_prettyinit_unchecked:
 	}
+
+	\str_gset:Nn \_prettytok_gray {\cO\^^[[90m}
+	\str_gset:Nn \_prettytok_red {\cO\^^[[31m}
+	\str_gset:Nn \_prettytok_green {\cO\^^[[38;5;121m}  % this is the color vim use for green on my machine. Anyway~
+	\str_gset:Nn \_prettytok_yellow {\cO\^^[[93m}
+	\str_gset:Nn \_prettytok_white {\cO\^^[[0m}  % i.e. the default
+
+	% https://stackoverflow.com/q/4842424/5267751
+
+	\cs_new_protected:Npn \_prettytok_setcolor:N #1 {
+		\ifx \_prettytok_current_color #1
+		\else
+			\let \_prettytok_current_color #1
+			\tl_build_put_right:NV \_prettytok_content #1
+		\fi
+	}
+
+	\cs_new_protected:Npn \_prettytok_term_prepare_print_char:n #1 {
+		\tl_build_put_right:Nx \_prettytok_content {
+			\ifnum #1 < 27 ~
+				\ifnum #1 = 9 ~  % tab
+					\cO{⇥}
+				\else
+					\cO{\^\^} \char_generate:nn {#1+64} {12}
+					\bool_if:nT {\int_compare_p:nNn {#1} = {13} || \int_compare_p:nNn {#1} = {10}} {
+						\cO{^^J} \prettytermprefixmore
+					}
+				\fi
+			\else
+				\ifnum #1 = 32 ~
+					\cO{␣}
+				\else
+					\bool_if:nTF {\int_compare_p:nNn {#1} > {32} || \int_compare_p:nNn {#1} < {127}} {  % printable ASCII character
+						\char_generate:nn {#1} {12}
+					} {
+						\ifnum #1 < "100 ~
+							\cO{\^\^}
+							\expandafter \@gobble \romannumeral0 \int_to_Hex:n {"100+#1}  % convert to Hex, exactly 2 digits (by adding 100 then delete first '1')
+						\else
+							\ifnum #1 < "10000 ~
+								\cO{\^\^\^\^}
+								\expandafter \@gobble \romannumeral0 \int_to_Hex:n {"10000+#1}  % convert to Hex, exactly 4 digits
+							\else
+								\cO{\^\^\^\^\^\^}
+								\expandafter \@gobble \romannumeral0 \int_to_Hex:n {"1000000+#1}  % convert to Hex, exactly 6 digits
+							\fi
+						\fi
+					}
+				\fi
+			\fi
+		}
+	}
+	\cs_generate_variant:Nn \_prettytok_term_prepare_print_char:n {x}
+
+	\str_set:Nn \prettytermprefix {>~}
+	\str_set:Nn \prettytermprefixmore {>~...~}
+
+	\cs_new_protected:Npn \prettyterm:n #1 {
+		\tl_build_begin:N \_prettytok_content
+		\tl_build_put_right:NV \_prettytok_content \prettytermprefix
+
+		\let \_prettytok_current_color \_prettytok_white
+
+		\tl_analysis_map_inline:nn {#1} {
+			% by documentation of \tl_analysis_map_inline:nn: #1=token, #2=char code, #3=catcode
+			\int_compare:nNnTF {##2} = {-1} {
+				% token is control sequence
+				\tl_if_eq:onTF {##1} {\cFrozenRelax} {
+					\_prettytok_setcolor:N \_prettytok_red
+					\tl_build_put_right:Nn \_prettytok_content { \cO\\relax~ }
+				} {
+					\_prettytok_setcolor:N \_prettytok_yellow
+					\tl_build_put_right:Nn \_prettytok_content { \cO\\ }
+					\tl_if_eq:xoF {\use:c {}} {##1} {
+						\str_map_inline:xn {\exp_after:wN \cs_to_str:N ##1} {  % side note, must use str here to preserve spaces
+							\_prettytok_term_prepare_print_char:x {\int_eval:n {`####1}}
+						}
+					}
+					\tl_build_put_right:Nn \_prettytok_content {~}
+				}
+			}
+			{
+				% token is not control sequence
+				\if ##3 B   % letter
+					\_prettytok_setcolor:N \_prettytok_green
+				\else
+					\if ##3 A   % spacer
+						\_prettytok_setcolor:N \_prettytok_gray
+					\else
+						\if ##3 D  % active
+							\_prettytok_setcolor:N \_prettytok_yellow
+						\else
+							\if ##3 C   % other cat
+								\_prettytok_setcolor:N \_prettytok_white
+							\else  % something else.
+								\_prettytok_setcolor:N \_prettytok_red
+							\fi
+						\fi
+					\fi
+				\fi
+
+				\_prettytok_term_prepare_print_char:n {##2}
+			}
+		}
+		\_prettytok_setcolor:N \_prettytok_white
+		\tl_build_end:N \_prettytok_content
+
+		\sys_if_engine_luatex:TF {
+			\directlua{
+				texio.write_nl("") 
+				print(token.get_macro("_prettytok_content"))
+			} % https://tex.stackexchange.com/questions/64462/lualatex-print-directlua-env-and-newlinehttps://tex.stackexchange.com/questions/64462/lualatex-print-directlua-env-and-newline
+		} {
+			\typeout{\_prettytok_content}
+		}
+	}
+
+	\cs_new_protected:Npn \prettyinitterm: {
+		\pretty_check_already_init:
+		\cs_gset:Npn \pretty_check_already_init: {\msg_error:nn {prettytok} {already-initialized}}
+		\tl_gset:Nn \_prettytok_output_format {term}
+
+		\global\let \pretty:n \prettyterm:n
+	}
 }
 
 \cs_new_eq:NN \prettyinit \prettyinit:
+\cs_new_eq:NN \prettyinitterm \prettyinitterm:
 
 
 \precattl_exec:n {
