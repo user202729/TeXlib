@@ -1,10 +1,12 @@
 %! TEX program = lualatex
 \ProvidesFile{prettytok.tex} [2022/07/08 v0.0.1 ]
 \documentclass{l3doc}
+\usepackage[svgnames]{xcolor}
+\RequirePackage{fvextra}
 \EnableCrossrefs
 \CodelineIndex
 \RecordChanges
-\fvset{gobble=0,tabsize=4,frame=single,numbers=left,numbersep=3pt}
+\fvset{breaklines=true,gobble=0,tabsize=4,frame=single,numbers=left,numbersep=3pt}
 \AtBeginDocument{\DeleteShortVerb\"}
 \MakeOuterQuote{"}
 \begin{document}
@@ -31,26 +33,27 @@ Can be used to replace |\tl_analysis_show:n|.
 
 \section{Motivation}
 
-\TeX's default mechanism for debug-printing has a few limitations
+\TeX's default mechanism for debug-printing (|\showtokens{...}|, |\typeout{\unexpanded{...}}|, |\show...|) has a few limitations
 
 \begin{itemize}
+	\item |\show| and similar is considered an error and stops the TeX run. (this point is partially fixable, see the package author's question \url{https://tex.stackexchange.com/q/621919/250119})
 	\item If there's some unprintable character in the output (for example, |^^J|, |^^M|, |^^I| -- literal tab character), it's not easy to distinguish between them.
 	\item If some token has unexpected catcode (most commonly, letter versus other), it's not easy to distinguish as well.
+	\item They does not work in expansion-only context. (apart from |\msg_expandable_error:nn|, but this one suffers from the first problem as well)
 \end{itemize}
 
-|\tl_analysis_show:n| attempts to fix the second problem, but is very, very verbose and does not fix the first problem.
+|\tl_analysis_show:n| attempts to fix the third problem, but is very, very verbose and does not fix the other problems.
 
-This package aims to fix both.
+This package aims to fix all of them.
 
-There are some additional expandable debug-printing functions, which unlike |\msg_expandable_error:nn|
-does not stop the compilation;
-and also support distinguishing between different catcode etc.,
-although it's \LuaTeX-only.
+(although the expandable debug printing functions are \LuaTeX-only.)
 
 And some more additional (expandable in \LuaTeX) functions to inspect the content of the input stream at a particular moment in time.
 
 
 \section{Usage}
+
+See subsection~\ref{subsec:full-example} for a full example.
 
 \subsection{Main function}
 \begin{function}{\pretty:n,\pretty:x,\pretty:o,\pretty:V}
@@ -75,7 +78,7 @@ And some more additional (expandable in \LuaTeX) functions to inspect the conten
 	\begin{syntax}
 		\cs{prettyinit:}
 	\end{syntax}
-	Do necessary initialization.
+	Do necessary initialization for output to HTML file.
 
 	This should be called right after the package is loaded, after setting the configuration variables described below.
 \end{function}
@@ -86,7 +89,7 @@ And some more additional (expandable in \LuaTeX) functions to inspect the conten
 	\end{syntax}
 	Same as above. However, if this is used, the information is printed on the terminal instead of to the HTML file.
 
-	This might require |-8bit| option, see \url{https://tex.stackexchange.com/q/168460/250119}.
+	This might require |-8bit| option on engines other than \LuaTeX, see \url{https://tex.stackexchange.com/q/168460/250119}.
 
 	Besides, this drops the distinction between the catcode of some tokens (for example \verb|{}$#&^_| are all shown as the same color as "special catcode"),
 	which is available in the tooltip in the HTML version.
@@ -243,6 +246,59 @@ There are also these functions, for convenience.
 	Alias of the correspondingly-named commands. Only available in \LuaTeX.
 \end{function}
 
+\subsection{\label{subsec:full-example}Full example}
+
+For a full example, the following code, which prints several things, both using the \LaTeXe\ interface
+and using the \pkg{expl3}-style interface, using both expandable and unexpandable command (the former requires \LuaTeX, as mentioned above):
+\begin{verbatim}
+\documentclass{article}
+\usepackage{prettytok}
+
+\prettyinitterm
+
+\prettyN{123{4 5}\6}
+\prettyN{#&^_:}
+\edef\mytest{\prettyeN{\error}}
+
+\prettyN {very long long long long long long long long long long long long long long argument \argument\argument\test123456}
+\prettyeN {very long long long long long long long long long long long long long long argument \argument\argument\test123456}
+
+\ExplSyntaxOn
+\pretty:n {#&^_:}
+\ExplSyntaxOff
+
+\begin{document}
+\end{document}
+\end{verbatim}
+The corresponding output (in the current version) is:
+\begingroup%
+\ExplSyntaxOn
+
+\definecolor{myyellow}{RGB}{173, 174, 0}
+\definecolor{mygreen}{RGB}{52, 174, 0}
+
+\let \\ \textbackslash
+\def \cmd#1{\textcolor{myyellow}{\textbf{\textbackslash}#1}}
+\def \spec#1 {\textcolor{red}{#1}}
+\def \letr#1 {\textcolor{mygreen}{#1}}
+\setlength{\parindent}{0pt}
+\frenchspacing   %  no double space after dot
+
+\catcode`␣\active    \def␣{\textbf{\textcolor{gray!60}{\char32}}}
+
+\ExplSyntaxOff
+\small%
+\obeylines%
+\texttt{
+> 123\spec\{4␣5\spec\}\cmd{6}
+> \spec{\#\&\textasciicircum\_}:
+> \cmd{error}
+> \letr{very␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣argument}␣\cmd{argument}
+> .. \cmd{argument} \cmd{test} 123456
+> \letr{very␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣argument}␣\cmd{argument}
+> .. \cmd{argument} \cmd{test} 123456
+> \spec{\#\&\textasciicircum}\letr{\_:}
+}\endgroup
 
 \subsection{Customization for HTML output}
 
