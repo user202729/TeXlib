@@ -151,13 +151,13 @@ end
 
 
 function L.luadef(name, f, prefix)
-	if type(name)~="string" and name.csname then name=name.csname end
-	assert(type(name)=="string")
+	if type(name)~="string" and name~=nil and name.csname then name=name.csname end
+	assert(name==nil or type(name)=="string")
 
 	local prefix_tl={}
 	if prefix~=nil then
 		for t, _ in pairs(prefix) do
-			if not ({protected=1, long=1, outer=1})[t] then
+			if not ({global=1, protected=1, long=1, outer=1})[t] then
 				error("invalid prefix "..tostring(t))
 			end
 			prefix_tl[#prefix_tl+1]=token_create_force(t)

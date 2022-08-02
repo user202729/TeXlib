@@ -355,6 +355,12 @@ the tokens |{|\meta{\texttt{x}-expansion of \texttt{\textbackslash sometoken}}|}
 	Assign \meta{token object} to the meaning of the next-next token in the input stream. Uses the "|\afterassignment|+|\futurelet|" trick, details in \url{https://tex.stackexchange.com/a/19769/250119}.
 \end{luafn}
 
+\begin{luafn}{L.expandonce}
+	\begin{syntax}
+		L.expandonce()
+	\end{syntax}
+	Expand the following tokens in the input stream once.
+\end{luafn}
 
 \begin{luafn}{L.exp_o,L.exp_oo}
 	\begin{syntax}
