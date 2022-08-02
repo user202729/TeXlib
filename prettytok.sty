@@ -14,13 +14,13 @@
 	\relax
 \else
 \begingroup
-	\tl_set:Nn \__test {}
+	\tl_set:Nn \_prettytok_test {}
 	\tl_analysis_map_inline:nn {ab} {
 		\tl_analysis_map_inline:nn {cd} {
-			\tl_put_right:Nx \__test {#1 ##1 .}
+			\tl_put_right:Nx \_prettytok_test {#1 ##1 .}
 		}
 	}
-	\tl_if_eq:NnF \__test {ac.ad.bc.bd.} {
+	\tl_if_eq:NnF \_prettytok_test {ac.ad.bc.bd.} {
 		\msg_error:nn {prettytok} {tl-analysis-bug}
 	}
 \endgroup
@@ -92,7 +92,8 @@
 	\str_gset:Nn \_prettytok_red {\cO\^^[[31m}
 	\str_gset:Nn \_prettytok_green {\cO\^^[[38;5;121m}  % this is the color vim use for green on my machine. Anyway~
 	\str_gset:Nn \_prettytok_yellow {\cO\^^[[93m}
-	\str_gset:Nn \_prettytok_white {\cO\^^[[0m}  % i.e. the default
+	%\str_gset:Nn \_prettytok_white {\cO\^^[[0m}  % i.e. the default
+	\str_gset:Nn \_prettytok_white {\cO\^^[[97m}  % vim terminal has a quirk that if a line wraps, the status at the start of the line is considered "default" for that line, so need to explicitly specify color as white
 
 	% https://stackoverflow.com/q/4842424/5267751
 
@@ -104,8 +105,9 @@
 		\fi
 	}
 
+	% caller should call \_prettytok_check_wrap: when useful.
 	\cs_new_protected:Npn \_prettytok_term_prepare_print_char:n #1 {
-		\tl_build_put_right:Nx \_prettytok_content {
+		\_prettytok_append_content:x {
 			\ifnum #1 < 27 ~
 				\ifnum #1 = 9 ~  % tab
 					\cO{⇥}
@@ -119,19 +121,19 @@
 				\ifnum #1 = 32 ~
 					\cO{␣}
 				\else
-					\bool_if:nTF {\int_compare_p:nNn {#1} > {32} || \int_compare_p:nNn {#1} < {127}} {  % printable ASCII character
+					\bool_if:nTF {\int_compare_p:nNn {#1} > {32} && \int_compare_p:nNn {#1} < {127}} {  % printable ASCII character
 						\char_generate:nn {#1} {12}
 					} {
 						\ifnum #1 < "100 ~
-							\cO{\^\^}
-							\expandafter \@gobble \romannumeral0 \int_to_Hex:n {"100+#1}  % convert to Hex, exactly 2 digits (by adding 100 then delete first '1')
+							^ ^
+							\expandafter \@gobble \exp:w \exp_end_continue_f:w \int_to_hex:n {"100+#1}  % convert to hex, exactly 2 digits (by adding 100 then delete first '1')
 						\else
 							\ifnum #1 < "10000 ~
-								\cO{\^\^\^\^}
-								\expandafter \@gobble \romannumeral0 \int_to_Hex:n {"10000+#1}  % convert to Hex, exactly 4 digits
+								^ ^ ^ ^
+								\expandafter \@gobble \exp:w \exp_end_continue_f:w \int_to_hex:n {"10000+#1}  % convert to hex, exactly 4 digits
 							\else
-								\cO{\^\^\^\^\^\^}
-								\expandafter \@gobble \romannumeral0 \int_to_Hex:n {"1000000+#1}  % convert to Hex, exactly 6 digits
+								^ ^ ^ ^ ^ ^
+								\expandafter \@gobble \exp:w \exp_end_continue_f:w \int_to_hex:n {"1000000+#1}  % convert to hex, exactly 6 digits
 							\fi
 						\fi
 					}
@@ -141,12 +143,58 @@
 	}
 	\cs_generate_variant:Nn \_prettytok_term_prepare_print_char:n {x}
 
-	\str_set:Nn \prettytermprefix {>~}
-	\str_set:Nn \prettytermprefixmore {>~...~}
+	\str_gset:Nn \prettytermprefix {>~}
+	\str_gset:Nn \prettytermprefixmore {>~ ..~}
+	\tl_gset:Nn \prettytermwraplimit {90}
+
+	\int_new:N \_prettytok_content_len
+
+	% only call this on content that takes visible width. For example don't use this to set color
+	\cs_new_protected:Npn \_prettytok_append_content:n #1 {
+		\tl_build_put_right:Nn \_prettytok_content {#1}
+		\int_add:Nn \_prettytok_content_len {\str_count:n {#1}}
+	}
+
+	\cs_generate_variant:Nn \_prettytok_append_content:n {V,x}
+
+	\cs_new_protected:Npn \_prettytok_check_wrap: {
+		\int_compare:nNnT {\_prettytok_content_len} > {\prettytermwraplimit} {
+			% be careful to not color the \prettytermprefixmore part
+			\ifx \_prettytok_current_color \_prettytok_white
+			\else
+				\tl_build_put_right:NV \_prettytok_content \_prettytok_white
+			\fi
+			\tl_build_end:N \_prettytok_content
+			\_prettytok_typeout_content:
+
+			\tl_build_begin:N \_prettytok_content
+			\int_zero:N \_prettytok_content_len
+			\_prettytok_append_content:V \prettytermprefixmore
+			\ifx \_prettytok_current_color \_prettytok_white
+			\else
+				\tl_build_put_right:NV \_prettytok_content \_prettytok_current_color
+			\fi
+		}
+	}
+
+	% \_prettytok_content must have been called \tl_build_end:N on before this function is called
+	\sys_if_engine_luatex:TF {
+		\cs_new_protected:Npn \_prettytok_typeout_content: {
+			\directlua{
+				texio.write_nl("") 
+				print(token.get_macro("_prettytok_content"))
+			} % https://tex.stackexchange.com/questions/64462/lualatex-print-directlua-env-and-newlinehttps://tex.stackexchange.com/questions/64462/lualatex-print-directlua-env-and-newline
+		}
+	} {
+		\cs_new_protected:Npn \_prettytok_typeout_content: {
+			\typeout{\_prettytok_content}
+		}
+	}
 
 	\cs_new_protected:Npn \prettyterm:n #1 {
 		\tl_build_begin:N \_prettytok_content
-		\tl_build_put_right:NV \_prettytok_content \prettytermprefix
+		\int_zero:N \_prettytok_content_len
+		\_prettytok_append_content:V \prettytermprefix
 
 		\let \_prettytok_current_color \_prettytok_white
 
@@ -156,16 +204,17 @@
 				% token is control sequence
 				\tl_if_eq:onTF {##1} {\cFrozenRelax} {
 					\_prettytok_setcolor:N \_prettytok_red
-					\tl_build_put_right:Nn \_prettytok_content { \cO\\relax~ }
+					\_prettytok_append_content:n { \cO\\relax~ }
 				} {
 					\_prettytok_setcolor:N \_prettytok_yellow
-					\tl_build_put_right:Nn \_prettytok_content { \cO\\ }
+					\_prettytok_append_content:n { \cO\\ }
 					\tl_if_eq:xoF {\use:c {}} {##1} {
 						\str_map_inline:xn {\exp_after:wN \cs_to_str:N ##1} {  % side note, must use str here to preserve spaces
 							\_prettytok_term_prepare_print_char:x {\int_eval:n {`####1}}
 						}
 					}
-					\tl_build_put_right:Nn \_prettytok_content {~}
+					\_prettytok_append_content:n {~}
+					\_prettytok_check_wrap:  % here we do not wrap in the middle of a csname
 				}
 			}
 			{
@@ -189,19 +238,13 @@
 				\fi
 
 				\_prettytok_term_prepare_print_char:n {##2}
+				\_prettytok_check_wrap:
 			}
 		}
 		\_prettytok_setcolor:N \_prettytok_white
 		\tl_build_end:N \_prettytok_content
 
-		\sys_if_engine_luatex:TF {
-			\directlua{
-				texio.write_nl("") 
-				print(token.get_macro("_prettytok_content"))
-			} % https://tex.stackexchange.com/questions/64462/lualatex-print-directlua-env-and-newlinehttps://tex.stackexchange.com/questions/64462/lualatex-print-directlua-env-and-newline
-		} {
-			\typeout{\_prettytok_content}
-		}
+		\_prettytok_typeout_content:
 	}
 
 	\cs_new_protected:Npn \prettyinitterm: {
@@ -280,10 +323,10 @@
 \cs_new:Npn \prettystop {}
 
 \cs_generate_variant:Nn \pretty:n {x, o, V}
-\let \pretty:N \pretty:n
+\def \pretty:N {\pretty:n}  % note that \pretty:n might be redefined to be \prettyterm:n later
 
 % ======== normal-catcode alias
-\let\prettyN\pretty:n
+\def\prettyN{\pretty:n}
 \let\prettyX\pretty:x
 \let\prettyO\pretty:o
 \let\prettyV\pretty:V
@@ -295,26 +338,26 @@
 
 % ======== generate \pretty:nn, \pretty:nnn, etc.
 \begingroup
-	\def \__tmp:NN #1 #2 {   % #1: example \pretty:nn, #2: example \pretty:n (the latter has one more n than the former)
+	\def \_prettytok_tmp:NN #1 #2 {   % #1: example \pretty:nn, #2: example \pretty:n (the latter has one more n than the former)
 		\cs_new_protected:Npn #1 ##1 ##2 { #2 {##1 ##2} }
 	}
-	\cs_generate_variant:Nn \__tmp:NN {cc}
+	\cs_generate_variant:Nn \_prettytok_tmp:NN {cc}
 
-	\def \__tmp {pretty:n}
+	\def \_prettytok_tmp {pretty:n}
 	\int_step_inline:nn {9} {
-		\__tmp:cc {\__tmp n} {\__tmp}
-		\tl_put_right:Nn \__tmp {n}
+		\_prettytok_tmp:cc {\_prettytok_tmp n} {\_prettytok_tmp}
+		\tl_put_right:Nn \_prettytok_tmp {n}
 	}
 
 	\sys_if_engine_luatex:T {
-		\def \__tmp:NN #1 #2 {   % #1: example \prettye:nn, #2: example \prettye:n (the latter has one more n than the former)
+		\def \_prettytok_tmp:NN #1 #2 {   % #1: example \prettye:nn, #2: example \prettye:n (the latter has one more n than the former)
 			\cs_new:Npn #1 ##1 ##2 { #2 {##1 ##2} }
 		}
-		\def \__tmp {prettye:n}
+		\def \_prettytok_tmp {prettye:n}
 		\int_step_inline:nn {9} {
-			\__tmp:cc {\__tmp n} {\__tmp}
-			\__tmp:cc {\__tmp nw} {\__tmp w}
-			\tl_put_right:Nn \__tmp {n}
+			\_prettytok_tmp:cc {\_prettytok_tmp n} {\_prettytok_tmp}
+			\_prettytok_tmp:cc {\_prettytok_tmp nw} {\_prettytok_tmp w}
+			\tl_put_right:Nn \_prettytok_tmp {n}
 		}
 	}
 \endgroup

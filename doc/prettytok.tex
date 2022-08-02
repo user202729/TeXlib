@@ -270,7 +270,13 @@ first call to \cs{pretty:n} or \cs{prettyinit:} to customize the behavior.
 
 	This might be useful for log-filtering/output-filtering tools such as |texfot| to recognize the output line.
 
-	Defaults to \verb*|> | and \verb*|> ... | respectively.
+	Defaults to \verb*|> | and \verb*|> .. | respectively.
+\end{variable}
+
+\begin{variable}{\prettytermwraplimit}
+	Estimated line length limit. Set this to a little smaller than your terminal width.
+
+	Note that this is a \meta{tl var}, so it should be set like |\tl_gset:Nn \prettytermwraplimit {80}| instead of |\int_set:Nn \prettytermwraplimit {80}|.
 \end{variable}
 
 \section{Implementation}

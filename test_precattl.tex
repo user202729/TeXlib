@@ -24,9 +24,11 @@
 
 \precattl_exec:n {
 	\pretty:n { 123 \cO\^^M 456 \cO\^^J 789 \cO\^^I 00~0 }
-	\pretty:n { \cC{\^^M\^^J\^^I~} }
+	\pretty:n { \cC{\^^M\^^J\^^I~} \^^c0 }
+	\pretty:n {Lua~print:}
 	\prettye:n { 123 \cO\^^M 456 \cO\^^J 789 \cO\^^I 00~0 }
-	\prettye:n { \cC{\^^M\^^J\^^I~} }
+	\prettye:n { \cC{\^^M\^^J\^^I~} \^^c0 }
+	\pretty:n {Lua~print~end=}
 }
 
 
@@ -70,6 +72,13 @@
 
 \pretty:V \__tmp
 \prettye:V \__tmp
+
+\begingroup
+\tl_set:Nn \prettytermwraplimit {30}
+
+\pretty:V \__tmp
+\prettye:V \__tmp
+\endgroup
 
 \tl_build_begin:N \__tmpa
 \tl_analysis_map_inline:Nn \__tmp {

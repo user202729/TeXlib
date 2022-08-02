@@ -6,114 +6,8 @@ end
 -- public API :: once the package is loaded, this holds the .tok value of the frozen relax token
 prettyprint_frozenrelaxtok=nil
 
-local function prettyprint_term_one_arg(tokenlist)
-
-	if looks_like_token(tokenlist) then
-		return prettyprint_term_one_arg({tokenlist})
-	end
-
-	---- result variable here
-	local s=""
-
-	---- color
-
-	--[[
-	local gray  ='\x1b[90m'
-	local red   ='\x1b[31m'
-	local green ='\x1b[38;5;121m'
-	local yellow='\x1b[93m'
-	local white ='\x1b[0m'
-	]]
-
-	local gray  =token.get_macro "_prettytok_gray"
-	local red   =token.get_macro "_prettytok_red"
-	local green =token.get_macro "_prettytok_green"
-	local yellow=token.get_macro "_prettytok_yellow"
-	local white =token.get_macro "_prettytok_white"
-	local prettytermprefixmore=token.get_macro "prettytermprefixmore"
-
-
-	local color=white  -- the current color
-	local function set_color(c)
-		if color~=c then
-			color=c
-			s=s..c
-		end
-	end
-
-
-	local function print_term_char(code)
-		if code<27 then
-			if code==9 then
-				s=s.."⇥"
-			else
-				s=s.."^^"..string.char(code+64)
-				if code==13 or code==10 then
-					s=s.."\n"..prettytermprefixmore
-				end
-			end
-		elseif code==32 then
-			s=s.."␣"
-		else
-			s=s..utf8.char(code)
-		end
-	end
-
-
-	local function printstring(t)
-		-- this is just for debugging/convenience purpose. If the item is a string instead of a token...
-		t=tostring(t)
-		for _, c in utf8.codes(t) do
-			if c==32 then
-				set_color(gray)
-				s=s.."␣"
-			else
-				set_color(white)
-				s=s..utf8.char(c)
-			end
-		end
-	end
-
-	if type(tokenlist)~="table" then
-		-- user give a string (or something similar). Print it as detokenized characters
-		printstring(tokenlist)
-	
-	else
-
-		-- normal print of tokenlist
-		for i=1, #tokenlist do
-			local t=tokenlist[i]
-			if not looks_like_token(t) then
-				printstring(t)
-			elseif t.csname==nil then
-				set_color(({left_brace=red, right_brace=red, math_shift=red, tab_mark=red, mac_param=red, sup_mark=red, sub_mark=red, spacer=gray, letter=green, other_char=white})[t.cmdname])
-				print_term_char(t.mode)
-			else
-				if t.active then
-					set_color(yellow)
-					print_term_char(utf8.codepoint(t.csname))
-				elseif t.tok==prettyprint_frozenrelaxtok then
-					set_color(red)
-					s=s.."\\relax "
-				else
-					set_color(yellow)
-					s=s.."\\"
-					for _, c in utf8.codes(t.csname) do
-						print_term_char(c)
-					end
-					s=s.." "
-				end
-			end
-		end
-		
-	end
-
-	set_color(white)
-	return s
-end
 
 local function prettyprint_one_arg(tokenlist)
-
 	if looks_like_token(tokenlist) then
 		return prettyprint_one_arg({tokenlist})
 	end
@@ -196,12 +90,153 @@ function prettyprint(...)
 
 		texio.write(prettyfilenumber, s..")//</script><script>\n")
 	elseif output_format=="term" then
-		local s=token.get_macro "prettytermprefix"
-		for i=1, select("#", ...) do
-			s=s..prettyprint_term_one_arg(args[i])
-		end
 		texio.write_nl("")
-		print(s)
+
+		local content=""
+		local content_len=0  -- only count visible content
+
+		local function typeout_content()
+			print(content)
+			content=""
+			content_len=0
+		end
+
+		local function append_content(s)  -- only call this on content that takes visible width. For example don't use this to set color
+			assert(type(s)=="string")
+			content=content..s
+			content_len=content_len+utf8.len(s)
+		end
+
+		append_content(token.get_macro "prettytermprefix")
+		local wraplimit=tonumber(token.get_macro "prettytermwraplimit")
+
+		---- color
+
+		--[[
+		local gray  ='\x1b[90m'
+		local red   ='\x1b[31m'
+		local green ='\x1b[38;5;121m'
+		local yellow='\x1b[93m'
+		local white ='\x1b[0m'
+		]]
+
+		local gray  =token.get_macro "_prettytok_gray"
+		local red   =token.get_macro "_prettytok_red"
+		local green =token.get_macro "_prettytok_green"
+		local yellow=token.get_macro "_prettytok_yellow"
+		local white =token.get_macro "_prettytok_white"
+
+		local current_color=white
+		local function setcolor(c)
+			if current_color~=c then
+				current_color=c
+				content=content..c
+			end
+		end
+
+		local prettytermprefixmore=token.get_macro "prettytermprefixmore"
+
+		local function check_wrap()
+			if content_len>wraplimit then
+				if current_color~=white then
+					content=content..white
+				end
+				print(content)
+				
+				content=""
+				content_len=0
+				append_content(prettytermprefixmore)
+				if current_color~=white then
+					content=content..current_color
+				end
+			end
+		end
+
+		local function prettyprint_term_one_arg(tokenlist)
+			if looks_like_token(tokenlist) then
+				return prettyprint_term_one_arg({tokenlist})
+			end
+
+
+			local function print_term_char(code)
+				if code<27 then
+					if code==9 then
+						append_content("⇥")
+					else
+						append_content("^^"..string.char(code+64))
+						if code==13 or code==10 then
+							typeout_content()
+							append_content(prettytermprefixmore)  -- color the prefix with the same color
+						end
+					end
+				elseif code==32 then
+					append_content("␣")
+				else
+					append_content(utf8.char(code))  -- unlike TeX implementation currently this does not show ^^⟨hex digits⟩ representation
+				end
+			end
+
+
+			local function printstring(t)
+				-- this is just for debugging/convenience purpose. If the item is a string instead of a token...
+				t=tostring(t)
+				for _, c in utf8.codes(t) do
+					if c==32 then
+						setcolor(gray)
+						append_content("␣")
+					else
+						setcolor(white)
+						append_content(utf8.char(c))
+					end
+				end
+			end
+
+			if type(tokenlist)~="table" then
+				-- user give a string (or something similar). Print it as detokenized characters
+				printstring(tokenlist)
+				check_wrap()
+			
+			else
+
+				-- normal print of tokenlist
+				for i=1, #tokenlist do
+					local t=tokenlist[i]
+					if not looks_like_token(t) then
+						printstring(t)
+						check_wrap()
+					elseif t.csname==nil then
+						setcolor(({left_brace=red, right_brace=red, math_shift=red, tab_mark=red, mac_param=red, sup_mark=red, sub_mark=red, spacer=gray, letter=green, other_char=white})[t.cmdname])
+						print_term_char(t.mode)
+						check_wrap()
+					else
+						if t.active then
+							setcolor(yellow)
+							print_term_char(utf8.codepoint(t.csname))
+						elseif t.tok==prettyprint_frozenrelaxtok then
+							setcolor(red)
+							append_content("\\relax ")
+						else
+							setcolor(yellow)
+							append_content("\\")
+							for _, c in utf8.codes(t.csname) do
+								print_term_char(c)
+							end
+							append_content(" ")
+						end
+						check_wrap()
+					end
+				end
+				
+			end
+		end
+
+		for i=1, select("#", ...) do
+			prettyprint_term_one_arg(args[i])
+		end
+
+		setcolor(white)
+
+		typeout_content()
 	else
 		error_uninitialized()
 	end
