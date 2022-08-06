@@ -41,7 +41,7 @@ This package provides tools to create your own verbatim environments, and works 
 
 \begin{itemize}
 	\item \pkg{scontents} package is similar; however it does not allow programmer to programmatically retrieve the macro content, only do a limited number of actions with them (execute, typeset as verbatim code, etc.).
-	\item \pkg{fancyvrb} and \pkg{verbatimcopy} provides some internal macro for defining similar environments, however they're internal.
+	\item \pkg{fancyvrb}, \pkg{xsimverb} and \pkg{verbatimcopy} provides some internal macro for defining similar environments, however they're internal and/or too specialized (writes to file etc.).
 	\item \pkg{filecontentsdef} and \pkg{newverbs} provides very similar facilities (\env{filecontentsdefmacro} environment and \tn{Collectverbenv} command respectively); however it requires \verb+\endlinechar=13+ and does not support |\ExplSyntaxOn| environment.
 	\item \pkg{verbatim} provides facilities to define custom verbatim environment that processes the content line-by-line, however the interface is more complicated.
 

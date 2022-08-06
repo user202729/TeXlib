@@ -1,0 +1,83 @@
+\makeatletter
+\def\MergeSort {\romannumeral0\mergesort }%
+% The routine expects to manipulate explicit decimal numbers as acceptable
+% by \ifdim tests.
+
+% there are slightly faster techniques than the use of \ifx, \if conditionals
+% in the macros below, but for the sake of legibility of the code, I wrote
+% this draft using them nevertheless.
+
+% WE EXPAND LIST ARGUMENT AND CHECK IF EMPTY
+\def\mergesort #1{\expandafter\msort@a\romannumeral-`0#1,!,?,}%
+\def\msort@a   #1{\ifx,#1\expandafter\msort@abort\else
+                         \expandafter\msort@start\fi #1}%
+\def\msort@abort #1?,{ }%
+%
+% FIRST BOTTOM-UP PASS, WE TAKE THIS OPPORTUNITY TO INSERT DELIMITERS
+% and using \pdfescapestring trick to propagate expansion
+% 
+\def\msort@start {\expandafter\msort@c\pdfescapestring\bgroup\msort@b}%
+\def\msort@b #1#2,#3#4,%
+{%
+    \ifx?#3\expandafter\msort@be\fi
+    \ifx!#3\expandafter\msort@bs\fi
+    \ifdim #1#2\p@>#3#4\p@
+         \expandafter\@firstoftwo
+    \else\expandafter\@secondoftwo
+    \fi
+    {#3#4,#1#2}{#1#2,#3#4},!,;\msort@b 
+}%
+\def\msort@be #1\msort@b {\iffalse{\fi}!;?;}%
+\def\msort@bs \ifdim #1\p@#2\fi #3?,{#1\iffalse{\fi},!,;!;?;}%
+
+% MERGING SUB-ROUTINE TO BE USED NEXT
+% (improved: if first item of second bigger, keep it as long as necessary)
+\def\msort@merge #1#2,#3;#4#5,%
+{%
+    \if!#1\expandafter\msort@merge@ea\fi
+    \if!#4\expandafter\msort@merge@eb\fi
+    \ifdim #1#2\p@>#4#5\p@ #4#5,%
+       \expandafter\msort@merge
+    \else\msort@merge@a #4#5%
+    \fi #1#2,#3;%
+}%
+%
+\def\msort@merge@ea #1\msort@merge@a #2\fi !,;{#2,}% possibly #2=!
+\def\msort@merge@eb #1\fi #2;{#2}%
+%
+\def\msort@merge@a #1\fi #2,{\fi #2,\msort@merge@b #1,}%
+\def\msort@merge@b #1,#2#3,%
+{%
+    \if!#2\expandafter\msort@merge@ea\fi
+    \ifdim #2#3\p@>#1\p@ #1,%
+         \expandafter\msort@merge
+    \else\msort@merge@a #1%
+    \fi #2#3,%
+}%
+
+% DO WE HAVE ONLY ONE LIST LEFT ? 
+%    YES -> DONE
+%     NO -> MERGE TWO AND KEEP GOING
+\def\msort@c #1;#2#3;%
+{%
+    \if!#2\expandafter\msort@finish\fi
+    \expandafter\msort@c
+    \pdfescapestring\bgroup\msort@merge #1;#2#3;\msort@d 
+}%
+
+% KEEP ON FETCHING TWO BY TWO UNTIL HITTING FINAL ! OR ?
+\def\msort@d #1#2;#3#4;%
+{%
+    \if?#3\expandafter\msort@de\fi
+    \if!#3\expandafter\msort@ds\fi
+    \msort@merge #1#2;#3#4;\msort@d 
+}%
+\def\msort@de #1\msort@d {\iffalse{\fi}!;?;}%
+\def\msort@ds\msort@merge #1;#2?;{#1\iffalse{\fi};!;?;}%
+
+% THIS IS FINAL CLEAN UP.
+% THIS IS WHERE SPACES COULD GET REINSERTED AFTER COMMAS IF WANTED.
+\def\msort@finish #1\msort@merge #2,!#3?;{ #2}%
+
+\makeatother
+

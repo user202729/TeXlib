@@ -91,6 +91,16 @@ local function token_create_force(s)
 	return result
 end
 
+-- commonly used tokens
+local bgroup=token.create(string.byte "{", 1)
+L.bgroup=bgroup
+local egroup=token.create(string.byte "}", 2)
+L.egroup=egroup
+local space=token.create(string.byte " ", 10)
+L.space=space
+local param=token.create(string.byte "#", 6)
+L.param=param
+
 local endlocalcontrol_executed
 
 function L.runlocal_internal(value)
@@ -104,6 +114,8 @@ function L.runlocal_internal(value)
 	tex.runtoks(function()
 		local t=token.get_next()
 		assert(t.cmdname=="extension", "internal error")  -- the "internal \endlocalcontrol token"
+
+		tex.sprint {token_create_force "lowercase", bgroup, egroup}  -- for this https://tex.stackexchange.com/questions/527243/how-to-safely-check-by-means-of-expansion-methods-whether-a-list-of-tokens-conta/
 
 		if type(value)=="table" or type(value)=="string" then
 			tex.sprint(value)
@@ -217,15 +229,54 @@ function L.scan_toks(definer, expand)
 	return result
 end
 
--- commonly used tokens
-local bgroup=token.create(string.byte "{", 1)
-L.bgroup=bgroup
-local egroup=token.create(string.byte "}", 2)
-L.egroup=egroup
-local space=token.create(string.byte " ", 10)
-L.space=space
-local param=token.create(string.byte "#", 6)
-L.param=param
+
+
+function L.shorthand_tl_flat(t)
+	return {flat=true, t}
+end
+
+--[[
+this function is a helper function for the function below
+
+take argument in the same format as shorthand_tl(arg).
+result is a token list table to be appended to
+shorthand_tl_build_str is the handler function for string input, take (string, result) and append to result
+
+returns nothing (only appendto result)
+]]
+local function shorthand_tl_build(arg, result, shorthand_tl_build_str)
+	for _, v in ipairs(arg) do
+		if type(v)=="string" then
+			shorthand_tl_build_str(arg, result)
+		elseif type(v)=="table" then
+			if v.flat then
+				shorthand_tl_build(v[1], result)
+			else
+				result[#result+1]=bgroup
+				shorthand_tl_build(v, result)
+				result[#result+1]=egroup
+			end
+		else
+			assert(L.is_token(v))
+			result[#result+1]=v
+		end
+	end
+end
+
+-- for example
+--    local flat=L.shorthand_tl_flat
+-- then
+--    >>> L.shorthand_tl {A, B, {C, D}, flat {E, F}, G}
+--    {A, B, bgroup, C, D, egroup, E, F, G}
+function L.shorthand_tl(arg, ...)
+	assert(select("#", ...)==0)
+	local result={}
+	shorthand_tl_build(arg, result, nil)
+	assert(L.is_tl(result))
+	return result
+end
+
+local tl=L.shorthand_tl
 
 function L.expandonce() -- https://tex.stackexchange.com/a/649627/250119
 	--L.runlocal{L.expandafter}  -- abuse internal implementation details here ... (see below)
@@ -654,29 +705,16 @@ function L.expl_tokenize_unbalanced_braces(s)
 	return L.tokenize_unbalanced_braces(s, {E3.cctab_select.N, T.c_code_cctab})
 end
 
+function L.expl_tokenize(s)
+	return L.tokenize(s, {E3.cctab_select.N, T.c_code_cctab})
+end
+
 function L.doc_tokenize_unbalanced_braces(s)
 	return L.tokenize_unbalanced_braces(s, {E3.cctab_select.N, T.c_document_cctab})
 end
 
 
-function L.expl_tl(...)
-	local args={...}
-	if select("#", ...)~=#args then
-		error("some argument value is nil")
-	end
-	local result={}
-	for _, v in ipairs(arg) do
-		if type(v)=="string" then
-			appendto(result, L.expl_tokenize(v))
-		elseif type(v)=="table" then
-			appendto(result, v)
-		else
-			result[#result+1]=v
-		end
-	end
-	assert(L.is_tl(result))
-	return result
-end
+--function L.expl_tl(arg, result)
 
 L.runlocal(cati({T.expandafter, raw_get_next_token, T.ifnum}, L.str_to_tl "0=0", {T.fi}))
 L.frozen_relax=next_token

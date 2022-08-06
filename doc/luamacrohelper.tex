@@ -474,9 +474,11 @@ the tokens |{|\meta{\texttt{x}-expansion of \texttt{\textbackslash sometoken}}|}
 
 \begin{luafn}{L.tokenize}
 	\begin{syntax}
-		L.tokenize(string) -> \meta{token list}
+		L.tokenize(string, setup) -> \meta{token list}
 	\end{syntax}
 	Tokenize some \TeX\ code under the current catcode \reg. The result must be a balanced token list.
+
+	\meta{setup} is an optional string/token list that consist of \TeX\ code to setup the catcode \reg.
 \end{luafn}
 
 \begin{luafn}{L.unwind_input_stack}

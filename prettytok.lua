@@ -244,6 +244,7 @@ end
 
 function prettyprintw()
 	check_initialized()
+	local callback=token.scan_toks()
 	local extra=token.scan_toks()
 	local s={}
 	local last_token
@@ -251,10 +252,11 @@ function prettyprintw()
 		last_token=token.get_next()
 		if last_token.csname=="prettystop" then break end
 		s[#s+1]=last_token
+		callback[#callback+1]=last_token
 	end
 
 	prettyprint(extra, s)  -- exclude the \prettystop token
-	s[#s+1]=last_token
-	token.put_next(s)
+	callback[#callback+1]=last_token
+	token.put_next(callback)
 end
 end

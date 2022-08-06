@@ -113,22 +113,27 @@
 ======== future note, maybe I want to write code like this some day ========
 (although what about lualib?)
 
-\cs_new_protected:Npn \__start_get_body:N #1
-\scope! #\store_target {
-	\endlinechar=10~
-
+\cs_new_eq:NN \__start_get_body:N \zfunction_protected #\store_target {
 	\assigno #\env_name {\@currenvir}
-
-	\str_set:Nn \__env_name_other_cat {#\env_name}
-	\tl_replace_all:Nnn \__env_name_other_cat {~} {\cO\  }
+	\ucalllocal {
+		\endlinechar=10~
+		\str_set:Nn \__env_name_other_cat {#\env_name}
+		\tl_replace_all:Nnn \__env_name_other_cat {~} {\cO\  }
+	}
 	\assigno #\env_name_other_cat {\__env_name_other_cat}
-
 	\assignc #\body_grabber_cs { [saveenv]~verbatim~body~scanner~for~#\env_name_other_cat }
-
-	\cs_set_protected:Npn #\body_grabber_cs
-		##1 \cO{ \\end\{ } #\env_name_other_cat \cO\}
-	\scope! #\body
-	{
+	\ucallpeek {
+		\cs_set_protected:Npx
+			#\body_grabber_cs
+				##1
+				\cO{ \\end } \cO\{ #\env_name_other_cat \cO\}  % this is the delimiter
+		{
+			\unexpanded{\continuetl} {##1 \cO{ \\end } \cO\{ #\env_name_other_cat \cO\}}
+		}
+		#\body_grabber_cs
+	}
+   	\matchrm{#\body}  % #\body consist of tokens inbetween and the delimiter e.g. 'abc ^^J \end{name}'
+	\ucalllocal{
 		\peek_meaning_remove:NTF \cO\^^J {
 			\endgroup
 			\str_gset:Nn #\store_target {#\body}
@@ -137,8 +142,6 @@
 			\msg_error:nn {saveenv} {trailing-content-end-line}
 		}
 	}
-
-	#\body_grabber_cs
 }
 
 ========

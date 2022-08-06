@@ -5,12 +5,12 @@ local L=require "luamacrohelper"
 local preamble=(
 [[{]] ..
 [[\edef\F{\ifnum0=0\fi}]] ..
-[[\expandafter\let\expandafter\GGG\csname char_generate:nn\endcsname]] ..
+[[\expandafter\let\expandafter\G\csname char_generate:nn\endcsname]] ..
 [[\escapechar=-1\edef\-{\string\ }]] ..
-[[\def\C#1.#2{\GGG{#1}{"#2}}]] ..
-[[\def\P#1.{##\GGG{#1}6}]] ..
-[[\def\O#1.{\GGG{#1}{12}}]] ..
-[[\def\A#1.{\expandafter\expandafter\expandafter\noexpand\GGG{#1}{13}}]] ..
+[[\def\C#1.#2{\G{#1}{"#2}}]] ..
+[[\def\P#1.{##\G{#1}6}]] ..
+[[\def\O#1.{\G{#1}{12}}]] ..
+[[\def\A#1.{\expandafter\expandafter\expandafter\noexpand\G{#1}{13}}]] ..
 [[\def\S#1{\expandafter\noexpand\csname #1\endcsname}]] ..
 [[\edef\T{]]
 )
@@ -86,9 +86,15 @@ L.protected_long_luadef("tldeserialize:Nn", function()
 	L.set_macro(target, tldeserialize(L.tl_to_str(tl)))
 end)
 
-function tlserialize(tl)
+function tlserialize_optional(tl)
 	local s=tlserialize_unchecked(tl)
 	return s, L.tl_equal(tl, tldeserialize(s))
+end
+
+function tlserialize(tl)
+	local s, success=tlserialize_optional(tl)
+	assert(success)
+	return s
 end
 
 L.protected_long_luadef("tlserialize:NnTF", function()
@@ -97,7 +103,7 @@ L.protected_long_luadef("tlserialize:NnTF", function()
 	local true_branch=L.get_argument_braced()
 	local false_branch=L.get_argument_braced()
 
-	local s, success=tlserialize(tl)
+	local s, success=tlserialize_optional(tl)
 	L.set_macro(target, L.str_to_tl(s))
 
 	if success then token.put_next(true_branch) else token.put_next(false_branch) end

@@ -1,0 +1,159 @@
+%! TEX program = lualatex
+\documentclass{article}
+\usepackage{prettytok}
+\prettyinitterm
+\usepackage{imperative}
+\usepackage{l3benchmark}
+\directlua{imperative_debug=true}
+\errorcontextlines=3
+\begin{document}
+\ExplSyntaxOn
+
+\precattl_exec:n {
+
+
+\imperative_metadef:Npn \assignnumber #\var #\numexpression {
+	\assigno #\var {\the\numexpr #\numexpression}
+	\assertis\number #\var
+}
+
+\imperative_metadef:Npn \forint #\var #\begin #\end #\body {
+	\assign #\var {#\begin}
+	\assertis\number #\var
+	\while {} {\texconditional{\ifnum #\var < #\end \cS\ }} {
+		#\body
+		\assignnumber #\var {#\var+1}
+	}
+}
+
+\imperative_metadef:Npn \putnextbgroup {
+	\putnext{\expandafter{\iffalse}\fi}
+	\expandonce
+}
+
+\imperative_metadef:Npn \putnextegroup {
+	\putnext{\iffalse{\fi}}
+	\expandonce
+}
+
+}
+
+\begin{imperativerun}
+
+\relax
+
+
+% reverse #\data. Must have between 0 and 7 items.
+\cs_new_eq:NN \__reverse_small \rfunction #\data{
+	\putnext{#\data \exp_end: \empty \empty \empty \empty \empty \empty \empty \relax}
+	\matchrm{#1 #2 #3 #4 #5 #6 #7 #8 #\remaining_empty_tokens \relax}
+	\putnext{#8 #7 #6 #5 #4 #3 #2 #1}
+	\passcontrol  % following in the token list is \empty \empty ... \empty \exp_end: followed by the desired resulting token list
+}
+
+% usage: 
+%   \__collect_reverse_i {... result ...} ...8 more tokens...
+% r-expands to
+%   \__collect_reverse_i {⟨8 more tokens, reversed⟩ ... result ...}
+\cs_new:Npn \__collect_reverse_i #1 #2 #3 #4 #5 #6 #7 #8 #9 {
+	\exp_end: {#9 #8 #7 #6 #5 #4 #3 #2 #1}
+}
+
+\zfunction{
+
+	% ======== define \__collect_reverse_ii, \__collect_reverse_iii etc.
+	% which collects 16, 32, 64 etc. tokens respectively.
+	\assign #\prev{1}
+	\forint #x{2}{20}{
+
+		\backquote{
+			\ucalllocal{
+				\cs_new:Npn ,c{__collect_reverse_\romannumeral#x} {
+					\expandafter ,c{__collect_reverse_\romannumeral#\prev} \exp:w ,c{__collect_reverse_\romannumeral#\prev}
+				}
+			}
+		}
+
+		\assignnumber #\prev {#x}
+	}
+
+	%% ======== test...
+	%\assign #\result {}
+	%\forint #x{0}{200}{
+	%	\backquote{
+	%		\assign #\result {#\result ,c{#x}}
+	%	}
+	%}
+
+	%\putnext{{} #\result}
+	%\rcall{\__collect_reverse_iv}
+	%\prettyw
+}\prettystop
+
+% then define \__throw_next which
+%   \__throw_next {i} A } B
+% r-expands to
+%   A } i B
+% admittedly brace hack is not necessary here, but it's more convenient that way
+\cs_new_eq:NN \__throw_next \rfunction{
+	\putnextbgroup
+	\matchrm{#\block}  % block = {#i} A
+	\putnext{#\block \relax}
+	% input stream state: {#i} A \relax B
+	\matchrm{ #i #A \relax }
+	\putnext{ \iffalse{\fi  #A} #i }
+	\expandonce
+}
+
+
+% finally, the reverse function
+\cs_new_eq:NN \__reverse \rfunction #1 {
+	\assignnumber #\count {\str_count:n {#1}}
+	\putnext{ \iffalse{\fi #1 } }
+	\expandonce
+
+	% throw count: a → 2**(a+2)
+	% i → 8
+	% ii → 16
+	% iii → 32
+	% ...
+
+	\while {}{\texconditional{\ifnum #\count>2049~}}{
+		\assignnumber #\count{#\count-2049}
+		\rcall{\__collect_reverse_ix}
+		% if we don't give the {} it will collect-reverse one more
+		\rcall{\__throw_next}
+	}
+
+	\while {}{\texconditional{\ifnum #\count>7~}}{
+		\assignnumber #\count{#\count-8}
+		\rcall{\__collect_reverse_i{}}
+		\rcall{\__throw_next}
+	}
+	
+	% okay done
+	\putnextbgroup
+	\rcall{\__reverse_small}
+}
+
+\zfunction{
+	\assign #s {abac}
+	\forint #_ {1} {12} {
+		\assign #s{#s #s}
+	}
+	\prettyo{\number\str_count:n {#s}}
+	%\pretty{#s}
+	%\prettyo {\romannumeral\__reverse {#s}}
+	\ucalllocal{\benchmark_tic:}
+	\assignr #r{\__reverse{#s}}
+	\ucalllocal{\benchmark_toc:}
+	\ucalllocal{\benchmark_tic:}
+	\ucalllocal{\exp_args:Nx\use_none:n{\tl_reverse_items:n{#s}}}
+	\ucalllocal{\benchmark_toc:}
+	\prettyo{\number\str_count:n {#r}}
+}
+
+?
+\end{imperativerun}
+\ExplSyntaxOff
+\end{document}

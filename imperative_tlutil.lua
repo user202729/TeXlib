@@ -180,15 +180,23 @@ function F.print_fake_tokenlist(t)
 	)
 end
 
+local function token_create(s)
+	assert(type(s)=="string")
+	local result=token.create(s)
+	assert(result.csname==s)
+	return result
+end
+
 F.bgroup=token.create(string.byte "{", 1)
 F.egroup=token.create(string.byte "}", 2)
 F.paramsign=token.create(string.byte "#", 6)
 F.space_token=token.create(string.byte " ", 10)
 F.star_token=token.create(string.byte "*", 12)
-F.expandafter=token.create "expandafter"
-F.iffalseT=token.create "iffalse"
-F.fiT=token.create "fi"
-assert(expandafter.csname=="expandafter")  -- TODO
+F.exclam_token=token.create(string.byte "!", 12)
+F.expandafter=token_create "expandafter"
+F.exp_end=token_create "exp_end:"
+F.iffalseT=token_create "iffalse"
+F.fiT=token_create "fi"
 
 function F.wrapinbracegroup(t)
 	return cat({bgroup}, t, {egroup})
@@ -236,7 +244,15 @@ function F.find_subsequence(sub, s)  -- return the only offset (0-indexed even t
 	for offset=0, #s-#sub do
 		local okay=true
 		for j=1, #sub do
-			if sub[j].tok~=s[offset+j].tok then
+			if not (
+				sub[j].tok==s[offset+j].tok or
+				(  -- handle faketoken
+					(not sub[j].active) and
+					(not s[offset+j].active) and
+					sub[j].csname~=nil and
+					sub[j].csname==s[offset+j].csname  -- note that this does not distinguish between the null control sequence and '\cC{\\csname\\endcsname}'
+				)
+			) then
 				okay=false
 				break
 			end
@@ -305,6 +321,10 @@ local function star_delimited_get_nextvalue(token)
 	return {paramsign, token, star_token}
 end
 
+local function exclam_delimited_get_nextvalue(token)
+	return {paramsign, token, exclam_token}
+end
+
 local function singletoken_get_expandafter_sequence(token)
 	return {expandafter, paramsign, token}
 end
@@ -316,6 +336,11 @@ end
 local function star_delimited_arg_paramtext(token)
 	return {paramsign, token, star_token}
 end
+
+local function exclam_delimited_arg_paramtext(token)
+	return {paramsign, token, exclam_token}
+end
+
 
 F.argtype={
 	normal={
@@ -340,21 +365,36 @@ F.argtype={
 	expforward_chain={
 		get_nextvalue=star_delimited_get_nextvalue,
 		get_expandafter_sequence=function(token)
-			return {faketoken "exp:w", paramsign, token, expandafter, faketoken "exp_end:", expandafter, star_token}
+			return {faketoken "exp:w", paramsign, token, expandafter, exp_end, expandafter, star_token}
 		end,
 		paramtext=star_delimited_arg_paramtext,
 		specificity=4,
 	},
 	number={
-		get_nextvalue=star_delimited_get_nextvalue,
+		--get_nextvalue=star_delimited_get_nextvalue,
+		--get_expandafter_sequence=function(token)
+		--	return {faketoken "number", paramsign, token, expandafter, star_token}
+		--end,
+		--paramtext=star_delimited_arg_paramtext,
+
+		get_nextvalue=normal_get_nextvalue,
 		get_expandafter_sequence=function(token)
-			return {faketoken "number", paramsign, token, expandafter, star_token}
+			return {expandafter, bgroup, faketoken "number", paramsign, token, expandafter, egroup}
 		end,
-		paramtext=star_delimited_arg_paramtext,
+		paramtext=standard_arg_paramtext,
+
 		specificity=5,
 	},
-	deleted={  -- "bottom type"
+	dim={
+		get_nextvalue=exclam_delimited_get_nextvalue,
+		get_expandafter_sequence=function(token)
+			return {faketoken "the", faketoken "dimexpr", paramsign, token, expandafter, exclam_token}
+		end,
+		paramtext=exclam_delimited_arg_paramtext,
 		specificity=6,
+	},
+	deleted={  -- "bottom type"
+		specificity=7,
 	},
 }
 
@@ -391,6 +431,7 @@ inherit(argtype.single_token, argtype.normal)
 inherit(argtype.Ntype, argtype.single_token)  -- for example this line means a N-type arg is a single_token arg
 inherit(argtype.expforward_chain, argtype.normal)
 inherit(argtype.number, argtype.normal)
+inherit(argtype.dim, argtype.normal)
 
 inherit(argtype.deleted, argtype.number)
 inherit(argtype.deleted, argtype.expforward_chain)
@@ -433,6 +474,10 @@ end
 assert(argtype_either[argtype.Ntype][argtype.single_token]==argtype.single_token)  -- i.e. if it's either Ntype or single_token, it's guaranteed to be single_token
 
 assert(argtype_both[argtype.Ntype][argtype.single_token]==argtype.Ntype)  -- i.e. if it's both Ntype or single_token, it's guaranteed to be Ntype
+
+assert(argtype_either[argtype.deleted][argtype.Ntype]==argtype.Ntype)
+
+assert(argtype_either[argtype.deleted][argtype.deleted]==argtype.deleted)
 
 
 
@@ -502,6 +547,7 @@ function F.try_grab_args(caller_param_tag, target_paramtext, caller_replacementt
 	return matched_args, stack
 end
 
+-- note that the key of args here are Lua number 1 → 9.
 function F.substitute_replacementtext(replacementtext, args)
 	local i, n=1, #replacementtext
 	local result={}
@@ -514,6 +560,28 @@ function F.substitute_replacementtext(replacementtext, args)
 			else
 				local paramnumber=get_paramnumber(replacementtext[i+1])
 				appendto(result, args[paramnumber])
+			end
+			i=i+2
+		else
+			result[#result+1]=replacementtext[i]
+			i=i+1
+		end
+	end
+	return result
+end
+
+-- for this one the key of args is .tok value instead
+function F.substitute_replacementtext_symbolic(replacementtext, args)
+	local i, n=1, #replacementtext
+	local result={}
+	while i<=n do
+		if is_paramsign(replacementtext[i]) then
+			assert(i+1<=n)
+			if is_paramsign(replacementtext[i+1]) then
+				result[#result+1]=replacementtext[i]
+				result[#result+1]=replacementtext[i+1]
+			else
+				appendto(result, args[replacementtext[i+1].tok])
 			end
 			i=i+2
 		else

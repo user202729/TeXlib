@@ -24,6 +24,10 @@
 	\directlua{rdef_call()}{#1}
 }
 
+\cs_new_protected:Npn \imperative_metadef:Npn #1 #{
+	\directlua{metadef_call()}{#1}
+}
+
 % rdeflinenumbered can be called as
 %    \rdeflinenumbered #1 #2 { body }   % (format 1)
 % or

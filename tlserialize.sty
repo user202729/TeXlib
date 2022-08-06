@@ -51,12 +51,12 @@
 }
 \__set_str   \__preamble |{|
 \__append_str\__preamble |\edef\F{\ifnum0=0\fi}|  % F for frozen relax
-\__append_str\__preamble |\expandafter\let\expandafter\GGG\csname char_generate:nn\endcsname|  % (auxiliary)
+\__append_str\__preamble |\expandafter\let\expandafter\G\csname char_generate:nn\endcsname|  % (auxiliary)
 \__append_str\__preamble |\escapechar=-1\edef\-{\string\ }|  % - for space
-\__append_str\__preamble |\def\C#1.#2{\GGG{#1}{"#2}}|  % C for char
-\__append_str\__preamble |\def\P#1.{##\GGG{#1}6}|      % P for param
-\__append_str\__preamble |\def\O#1.{\GGG{#1}{12}}|      % O for other
-\__append_str\__preamble |\def\A#1.{\expandafter\expandafter\expandafter\noexpand\GGG{#1}{13}}|  % A for active character
+\__append_str\__preamble |\def\C#1.#2{\G{#1}{"#2}}|  % C for char
+\__append_str\__preamble |\def\P#1.{##\G{#1}6}|      % P for param
+\__append_str\__preamble |\def\O#1.{\G{#1}{12}}|      % O for other
+\__append_str\__preamble |\def\A#1.{\expandafter\expandafter\expandafter\noexpand\G{#1}{13}}|  % A for active character
 \__append_str\__preamble |\def\S#1{\expandafter\noexpand\csname #1\endcsname}|  % S for control sequence
 \__append_str\__preamble |\edef\T{|
 
@@ -130,3 +130,15 @@
 
 \end{rescansyncRewriteenv}
 
+\iffalse
+
+   ! "   $   & ' ( ) * + , - . /
+ 0 1 2 3 4 5 6 7 8 9   ; < = > ?
+   A B C D E F G H I J K L M N O
+ P Q R S T U V W X Y Z [   ]    
+ ` a b c d e f g h i j k l m n o
+ p q r s t u v w x y z   | 
+
+ _ : @ #
+
+\fi

@@ -1,0 +1,402 @@
+%! TEX program = lualatex
+% quick sort implementation
+\documentclass{article}
+\errorcontextlines=3
+\usepackage{prettytok}
+\usepackage{l3benchmark}
+\prettyinitterm
+\usepackage{luacode}
+\usepackage{minitest}
+\usepackage{genvar}
+\AutoGenerateVariants
+\usepackage{luamacrohelper}
+\usepackage{pdftexcmds}
+\directlua{imperative_debug=true}
+\usepackage{imperative}
+\begin{document}
+
+\begin{luacode*}
+do
+	local L=require "luamacrohelper"
+	L.luadef("pdfescapestring", function()
+		local t=L.scan_toks(false, true)  -- expand
+		token.put_next(
+			L.cat(
+			{
+				L.T["pdf@escapestring"],
+				L.bgroup,
+			}, t,
+				{L.egroup}
+				)
+				)
+		L.expandonce()
+		L.expandonce()
+	end, {global=true, long=true})
+end
+\end{luacode*}
+
+\input{test_imperative6_code1.tex}
+
+\ExplSyntaxOn
+\begin{imperativerun}
+
+	\zfunction #a #b #c{
+		\assigno #a{#a}
+		\pretty{#b}
+		\assigno #a{#a}
+		\assigno #a{#a}
+		\pretty{#b #c}
+	} a b c
+
+\end{imperativerun}
+
+\begin{imperativerun}
+	
+	\zfunction{
+		\matchrm{#1}
+		\putnext{{#1}}
+
+		% input stream state: {1}
+		\ocall{\string}
+		\matchrm{#\begin_group}
+		\ucalllocal{\assertequal:nn { \cO\{ } {#\begin_group} }
+
+		%\rcall{\putnextbgroup}
+		\putnext{\expandafter{\iffalse}\fi} \expandonce
+
+		\matchrm{#_}
+	} 1
+
+	\pretty:o {\pdfescapestring {123\cS\ \expandafter}\number 1}
+
+
+	\let\expandafterdimen\rfunction{
+		\expandonce
+		\matchrm{#1\cO{pt}}
+		\return{#1}
+	}
+
+	\def \reverseif  \scopevar #\condition {
+		#\condition \use_ii:nn \use_i:nn
+	}
+
+	% in the following code, list always have the format e.g. '12.3pt,45.6pt,' -- note the trailing comma
+	% pivot is a pt value
+
+
+	% ======== these 3 functions are for filtering. Duplicated code except for the comparison. ========
+	\let \filter_less \rfunction #\list #\pivot{
+		\putnext {#\list \relax,}
+		\while {\matchrm{#x,}} {\reverseif {\texconditional {\ifx \relax #x}}} {
+			\texconditional {\ifdim #x < #\pivot \cS\ } {
+				\rreturnpush_dim_comma {#x}
+			} {}
+		}
+	}
+	
+	\let \filter_equal \rfunction #\list #\pivot{
+		\putnext {#\list \relax,}
+		\while {\matchrm{#x,}} {\reverseif {\texconditional {\ifx \relax #x}}} {
+			\texconditional {\ifdim #x = #\pivot \cS\ } {
+				\rreturnpush_dim_comma {#x}
+			} {}
+		}
+	}
+
+	\let \filter_greater \rfunction #\list #\pivot{
+		\putnext {#\list \relax,}
+		\while {\matchrm{#x,}} {\reverseif {\texconditional {\ifx \relax #x}}} {
+			\texconditional {\ifdim #x > #\pivot \cS\ } {
+				\rreturnpush_dim_comma {#x}
+			} {}
+		}
+	}
+
+	% given the input stream contains e.g. '1pt,2pt,3pt,\maxdimen,' then sort it
+	\let \insertion_sort_following \rfunction {
+		\matchrm{#x,}
+		\texconditional {\ifx \maxdimen #x} {
+			\putnext{\maxdimen,}
+			\return {}
+		}{
+
+			% TODO fix this
+
+			%\assertis\dim #x
+			%\rcall {\insertion_sort_following}
+
+			\putnext {\the\dimexpr#x\expandafter,\romannumeral\insertion_sort_following}\expandonce\matchrm{#x,}
+
+			\while {\matchrm{#\next,}} {\texconditional{\ifdim #x > #\next \cS\ }} {
+				\rreturnpush_dim_comma {#\next}
+			}
+			\putnext{#x,#\next,}
+			\return {}
+		}
+	}
+	\let \insertion_sort \rfunction #\list {
+		\rcall {\insertion_sort_following #\list \maxdimen,}
+		\matchrm{#\result \maxdimen,}
+		\return{#\result}
+	}
+
+	\pretty:no {sort:} {\romannumeral \insertion_sort {1pt,2pt,3pt,4pt,5pt,}}
+	\prettystop
+
+	% variant using \pdfescapestring, should be much faster... [turns out much slower]
+
+	\let \filter_less_pdfescapestring \rfunction #\list #\pivot{
+		\ocall { \pdfescapestring {
+			\zblock {
+				\while {\matchrm{#x,}} {\reverseif {\texconditional {\ifx \relax #x}}} {
+					\texconditional {\ifdim #x < #\pivot \cS\ } {
+						\ucalllocal {#x,}
+					} {}
+				}
+			} #\list \relax,
+		} }
+	}
+	
+	\let \filter_equal_pdfescapestring \rfunction #\list #\pivot{
+		\ocall { \pdfescapestring {
+			\zblock {
+				\while {\matchrm{#x,}} {\reverseif {\texconditional {\ifx \relax #x}}} {
+					\texconditional {\ifdim #x = #\pivot \cS\ } {
+						\ucalllocal {#x,}
+					} {}
+				}
+			} #\list \relax,
+		} }
+	}
+
+	\let \filter_greater_pdfescapestring \rfunction #\list #\pivot{
+		\ocall { \pdfescapestring {
+			\zblock {
+				\while {\matchrm{#x,}} {\reverseif {\texconditional {\ifx \relax #x}}} {
+					\texconditional {\ifdim #x > #\pivot \cS\ } {
+						\ucalllocal {#x,}
+					} {}
+				}
+			} #\list \relax,
+		} }
+	}
+
+	% ========
+
+	\let \filter_less_expanded \rfunction #\list #\pivot{
+		\ocall { \expanded {
+			\zblock {
+				\while {\matchrm{#x,}} {\reverseif {\texconditional {\ifx \relax #x}}} {
+					\texconditional {\ifdim #x < #\pivot \cS\ } {
+						\ucalllocal {#x,}
+					} {}
+				}
+			} #\list \relax,
+		} }
+	}
+	
+	\let \filter_equal_expanded \rfunction #\list #\pivot{
+		\ocall { \expanded {
+			\zblock {
+				\while {\matchrm{#x,}} {\reverseif {\texconditional {\ifx \relax #x}}} {
+					\texconditional {\ifdim #x = #\pivot \cS\ } {
+						\ucalllocal {#x,}
+					} {}
+				}
+			} #\list \relax,
+		} }
+	}
+
+	\let \filter_greater_expanded \rfunction #\list #\pivot{
+		\ocall { \expanded {
+			\zblock {
+				\while {\matchrm{#x,}} {\reverseif {\texconditional {\ifx \relax #x}}} {
+					\texconditional {\ifdim #x > #\pivot \cS\ } {
+						\ucalllocal {#x,}
+					} {}
+				}
+			} #\list \relax,
+		} }
+	}
+
+	\clist_map_inline:nn {less,equal,greater}\scope #x{
+		\zblock{
+			\assignc #\filterx {filter_#x}
+			\assignc #\filterxtarget {filter_#x_expanded}
+			\ucalllocal{\let #\filterx #\filterxtarget}
+		}
+	}
+
+
+	% ======== count number of items in a list, format described above.
+	% return something suitable for \numexpr.
+	% actually just use \clist_count:n ... will benchmark later maybe
+	% ========
+	\let \list_count \zfunction #\list {
+		\putnext {#\list \relax,}
+		\while {\matchrm{#x,}} {\reverseif {\texconditional {\ifx \relax #x}}} {
+			\ucalllocal {1+}
+		}
+		\return{0}
+	}
+
+	\let \list_random_item \rfunction #\list #\count {  % (why not just expl3 \clist_rand_item...)
+		\putnext {#\list \relax,}
+		\assigno #\index {\the\numexpr \int_rand:n{#\count} \relax}
+		\while {} {\texconditional {\ifnum #\index > 1 \cS\ }} {
+			\assigno #\index {\the\numexpr #\index-1 \relax}
+			\matchrm {#_,}
+		}
+		\matchrm {#\result , #\anything \relax,}
+		\return{#\result}
+	}
+	
+	\let \list_sort \rfunction #\list {
+		\assigno #\count {\the\numexpr \list_count {#\list} \relax}
+		\texconditional {\ifnum #\count < 40 \cS\ } {
+			% okay done
+			\rcall {\insertion_sort{#\list}}
+			\return{}
+		} {
+			\assignr #\pivot {\list_random_item {#\list} {#\count}}
+
+			% TODO optimize...
+
+			%\backquote{
+			%	\return{
+			%		,r{\list_sort{,r{\filter_less{#\list}{#\pivot}}}}
+			%		,r{\filter_equal{#\list}{#\pivot}}
+			%		,r{\list_sort{,r{\filter_greater{#\list}{#\pivot}}}}
+			%	}
+			%}
+
+			\assignr #\tmp {\expandafter \list_sort \expandafter {\romannumeral\filter_greater{#\list}{#\pivot}}}
+			\putnext {#\tmp}
+			\assignr #\tmp {\expandafter \list_sort \expandafter {\romannumeral\filter_equal{#\list}{#\pivot}}}
+			\putnext {#\tmp}
+
+			%\assignr #\tmp {\expandafter \list_sort \expandafter {\romannumeral\filter_less{#\list}{#\pivot}}}
+			%\putnext {#\tmp}
+
+			\rcall {\expandafter \list_sort \expandafter {\romannumeral\filter_less{#\list}{#\pivot}}}
+		
+			%\putnext {\expandafter \list_sort \expandafter {\romannumeral\filter_less{#\list}{#\pivot}}}
+			%\passcontrol
+		}
+	}
+
+	\pretty:no {less: } {\romannumeral \filter_less {1pt,2pt,3pt,4pt,5pt,} {3pt}}
+	\pretty:no {equal:} {\romannumeral \filter_equal {1pt,2pt,3pt,4pt,5pt,} {3pt}}
+	\pretty:no {greater:} {\romannumeral \filter_greater {1pt,2pt,3pt,4pt,5pt,} {3pt}}
+
+	\pretty:no {count:} {\the\numexpr  \list_count {1pt,2pt,3pt,4pt,5pt,}  \relax}
+
+	\pretty:no {random:} {\romannumeral \list_random_item {1pt,2pt,3pt,4pt,5pt,} {5}}
+
+	\pretty:no {sort:} {\romannumeral \list_sort {1pt,2pt,3pt,4pt,5pt,}}
+
+
+	\zfunction{
+		%\assign #\list {}
+		%\assign #\list_float {}
+		\ucalllocal{
+			\tl_build_begin:N \__list
+			\tl_build_begin:N \__list_float
+		}
+		
+		\assign #i {1}
+		\assign #\optional_first_comma {}
+		\while {} {\texconditional{\unless\ifnum #i > 10000 ~}} {
+			\assigno #\item {
+				\the\dimexpr \int_rand:n{10000000}sp
+			}
+
+			\assignoperate #\item_float {#\item} {
+				\matchrm {#\item_float_ \cO{pt}}
+				\putnext {#\item_float_}
+			}
+			%\putnext {#\item}
+			%\matchrm {#\item_float \cO{pt}}
+
+
+			%\assign #\list {#\list  #\item,}
+			%\assign #\list_float {#\list_float #\optional_first_comma  #\item_float}
+			\ucalllocal{
+				\tl_build_put_right:Nn \__list {#\item,}
+				\tl_build_put_right:Nn \__list_float {#\optional_first_comma #\item_float}
+			}
+
+
+			\assign #\optional_first_comma {,}
+
+			\assigno #i {\the\numexpr #i+1}
+		}
+
+		\ucalllocal{
+			\tl_build_end:N \__list
+			\tl_build_end:N \__list_float
+		}
+
+		\assigno #\list {\__list}
+		\assigno #\list_float {\__list_float}
+
+		\pretty{done~generating~list}
+
+		%\pretty{#\list_float}
+		\assign #\list_sorted {}
+
+		\pretty{======== filter~only:}
+		\assign #i {1}
+		\while {} {\texconditional{\unless\ifnum #i > 5 ~}} {
+			\ucalllocal{\benchmark_tic:}
+			\assignr #\pivot {\list_random_item{#\list}{\list_count{#\list}}}
+			\assignr #\list_sorted {\filter_less {#\list} {#\pivot}}
+			\ucalllocal{\message{>~}\benchmark_toc:}
+
+			\assigno #i {\the\numexpr #i+1}
+		}
+
+		\pretty{======== full~sort:}
+		\assign #i {1}
+		\while {} {\texconditional{\unless\ifnum #i > 5 ~}} {
+			\ucalllocal{\benchmark_tic:}
+			\assignr #\list_sorted {\list_sort {#\list}}
+			\ucalllocal{\message{>~}\benchmark_toc:}
+
+			\assigno #i {\the\numexpr #i+1}
+		}
+		%\pretty{#\list_sorted}
+
+		\expcall{\use_none:n{
+
+		\pretty{======== insertion~sort:}
+		\assign #i {1}
+		\while {} {\texconditional{\unless\ifnum #i > 5 ~}} {
+			\ucalllocal{\benchmark_tic:}
+			\assignr #\list_sorted {\insertion_sort {#\list}}
+			\ucalllocal{\message{>~}\benchmark_toc:}
+
+			\assigno #i {\the\numexpr #i+1}
+		}
+
+		}}
+
+		\pretty{======== first~answer:}
+
+		\assign #i {1}
+		\while {} {\texconditional{\unless\ifnum #i > 5 ~}} {
+			\ucalllocal{\benchmark_tic:}
+			\assignoo #\list_sorted { \MergeSort{#\list_float} }
+			\ucalllocal{\message{>~}\benchmark_toc:}
+
+			\assigno #i {\the\numexpr #i+1}
+		}
+		%\pretty{#\list_sorted}
+		%}}
+	}
+
+	\prettystop
+
+\end{imperativerun}
+\ExplSyntaxOff
+\end{document}

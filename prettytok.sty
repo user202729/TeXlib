@@ -1,4 +1,4 @@
-\ProvidesExplPackage{prettytok}{2022/07/08}{0.0.1}{Pretty-print token list}
+\ProvidesExplPackage{prettytok}{2022/08/05}{0.1.0}{Pretty-print token list}
 \RequirePackage{precattl}
 
 
@@ -63,8 +63,9 @@
 \tl_gset:Nn \_prettytok_output_format {}
 
 \precattl_exec:n {
-	\cs_new_protected:Npn \_prettyinit_unchecked: {
-		\cs_set_protected:Npn \pretty_check_already_init: {\msg_error:nn {prettytok} {already-initialized}}
+	\cs_new_protected:Npn \_prettyinit_html_unchecked: {
+		\cs_gset_protected:Npn \pretty_check_already_init: {\msg_error:nn {prettytok} {already-initialized}}
+		\cs_gset_eq:NN \pretty:n \prettyhtml:n
 		\tl_gset:Nn \_prettytok_output_format {html}
 
 		\iow_open:NV \_prettytok_file \prettyfilename
@@ -85,7 +86,7 @@
 
 	\cs_new_protected:Npn \prettyinit: {
 		\pretty_check_already_init:
-		\_prettyinit_unchecked:
+		\_prettyinit_html_unchecked:
 	}
 
 	\str_gset:Nn \_prettytok_gray {\cO\^^[[90m}
@@ -252,7 +253,7 @@
 		\cs_gset:Npn \pretty_check_already_init: {\msg_error:nn {prettytok} {already-initialized}}
 		\tl_gset:Nn \_prettytok_output_format {term}
 
-		\global\let \pretty:n \prettyterm:n
+		\cs_gset_eq:NN \pretty:n \prettyterm:n
 	}
 }
 
@@ -260,13 +261,9 @@
 \cs_new_eq:NN \prettyinitterm \prettyinitterm:
 
 
+% ======== define \prettyhtml:n.
 \precattl_exec:n {
-
-
-	\cs_new_protected:Npn \pretty:n #1 {
-
-		% ======== first write out the preamble if it isn't written. Only do once.
-		\ifx \pretty_check_already_init: \relax \prettyinit: \fi
+	\cs_new_protected:Npn \prettyhtml:n #1 {
 
 		% ======== the actual content. Collect to one \write to put them on the same line (also maybe for efficiency???)
 		\tl_build_begin:N \_prettytok_content
@@ -298,6 +295,11 @@
 	}
 }
 
+\cs_new_protected:Npn \pretty:n #1 {
+	\prettyinitterm:
+	\pretty:n {#1}
+}
+
 % ======== Lua expandable variant.
 \sys_if_engine_luatex:T {
 	\cs_new:Npn \prettye:n #1 {
@@ -305,10 +307,13 @@
 	}
 
 	\cs_new:Npn \prettye:w {
-		\directlua{prettyprintw()} {}
+		\directlua{prettyprintw()} {} {}
 	}
 	\cs_new:Npn \prettye:nw #1 {
-		\directlua{prettyprintw()} {#1}
+		\directlua{prettyprintw()} {#1} {}
+	}
+	\cs_new:Npn \prettye:nnw #1 #2 {
+		\directlua{prettyprintw()} {#1} {#2}
 	}
 }
 
@@ -356,6 +361,14 @@
 		\def \_prettytok_tmp {prettye:n}
 		\int_step_inline:nn {9} {
 			\_prettytok_tmp:cc {\_prettytok_tmp n} {\_prettytok_tmp}
+			\tl_put_right:Nn \_prettytok_tmp {n}
+		}
+
+		\def \_prettytok_tmp:NN #1 #2 {   % #1: example \prettye:nnnw, #2: example \prettye:nnw (the latter has one more n than the former)
+			\cs_new:Npn #1 ##1 ##2 ##3 { #2 {##1} {##2 ##3} }  % here ##1 is the callback (first ⟨n⟩), ##2 etc. are the additional-print things
+		}
+		\def \_prettytok_tmp {prettye:nn}
+		\int_step_inline:nn {9} {
 			\_prettytok_tmp:cc {\_prettytok_tmp nw} {\_prettytok_tmp w}
 			\tl_put_right:Nn \_prettytok_tmp {n}
 		}

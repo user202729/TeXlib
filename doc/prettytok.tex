@@ -1,17 +1,15 @@
 %! TEX program = lualatex
-\ProvidesFile{prettytok.tex} [2022/07/08 v0.0.1 ]
+\ProvidesFile{prettytok.tex} [2022/08/05 v0.1.0 ]
 \documentclass{l3doc}
 \usepackage[svgnames]{xcolor}
 \RequirePackage{fvextra}
 \EnableCrossrefs
 \CodelineIndex
-\RecordChanges
 \fvset{breaklines=true,gobble=0,tabsize=4,frame=single,numbers=left,numbersep=3pt}
 \AtBeginDocument{\DeleteShortVerb\"}
 \MakeOuterQuote{"}
 \begin{document}
 \GetFileInfo{\jobname.tex}
-\DoNotIndex{\newcommand,\newenvironment}
 
 \title{\textsf{prettytok} --- Pretty-print token lists\thanks{This file
 	describes version \fileversion, last revised \filedate.}
@@ -22,8 +20,6 @@
 \date{Released \filedate}
 
 \maketitle
-
-\changes{v0.0.0}{2022/05/18}{First public release}
 
 \begin{abstract}
 Pretty-print token lists for debugging purposes.
@@ -131,9 +127,27 @@ For example
 \end{verbatim}
 will print out |78923456|.
 
+\begin{function}[EXP]{\prettye:nw}
+	\begin{syntax}
+		\cs{prettye:nw} \Arg {callback} \meta{tokens} \cs{prettystop}
+	\end{syntax}
+	Same as above, but has a callback, that is, code that is put in the input stream after the content is printed.
+
+	Useful if you want to fine-tune what is printed exactly.
+	(\texttt{\cs{prettye:w} \meta{callback} \meta{tokens}} is functionally the same, but the callback
+	is also printed, which will clutter the debug output)
+
+	For example
+\begin{verbatim}
+\prettye:nw {\somecode ...} 123 \prettystop
+\end{verbatim}
+will print |123|, then after some expansion steps results in the input stream contain
+|\somecode ... 123 \prettystop|
+\end{function}
+
 \subsection{Lua programming interface}
 
-\cs{prettyinit:} must also be called before calling the functions in this section.
+\cs{prettyinit:} or \cs{prettyinitterm:} must also be called before calling the functions in this section.
 
 \begin{function}{prettyprint}
 	\begin{syntax}
@@ -188,12 +202,18 @@ There are also these functions, for convenience.
 	Similar to multiple consecutive calls to \cs{prettye:n}.
 \end{function}
 
-\begin{function}[EXP]{\prettye:nw, \prettye:nnw}
+\begin{function}[EXP]{\prettye:nnw, \prettye:nnnw}
 	\begin{syntax}
-		\cs{prettye:nw} \Arg{token list} \meta{tokens} \cs{prettystop}
-		\cs{prettye:nnw} \Arg{token list} \Arg{token list} \meta{tokens} \cs{prettystop}
+		\cs{prettye:nnw}  \Arg{callback} \Arg{token list} \meta{tokens} \cs{prettystop}
+		\cs{prettye:nnnw} \Arg{callback} \Arg{token list} \Arg{token list} \meta{tokens} \cs{prettystop}
 	\end{syntax}
-	Similar to call(s) to \cs{prettye:n} followed by a call to \cs{prettye:w}.
+	Similar to call(s) to \cs{prettye:n} followed by a call to \cs{prettye:nw}.
+
+	For example
+\begin{verbatim}
+\prettye:nnw {\somecode ...} {123} 456 \prettystop
+\end{verbatim}
+will print |123456|, then, after some expansion steps, |\somecode ... 456 \prettystop| remains in the input stream.
 \end{function}
 
 \begin{function}{\pretty:w}
