@@ -664,20 +664,6 @@ local command_handler={
 		stack[#stack+1]=faketoken "expcall"
 	end,
 
-	rreturnpush_dim_comma=function(selftoken, lastlinenumber, stack, add_statement, context)
-		local content=getbracegroupinside(stack)
-		pushtostackfront(stack,
-			cati(
-				{
-					faketoken "expcallpeek", bgroup,
-						expandafter, exp_end, faketoken "the", faketoken "dimexpr",
-				}, content, {
-				   		expandafter, token.create(string.byte ",", 12),
-						faketoken "romannumeral", faketoken "continueblock",
-					egroup
-				}))
-	end,
-
 	["return"]=function(selftoken, lastlinenumber, stack, add_statement, context)
 		local group=getbracegroup(stack)
 		pushtostackfront(stack, 
@@ -689,25 +675,6 @@ local command_handler={
 	["passcontrol"]=function(selftoken, lastlinenumber, stack, add_statement, context)
 		pushtostackfront(stack,
 			{faketoken "goto", context.labelfunctionpasscontrol}
-		)
-	end,
-
-	
-	assignr=function(selftoken, lastlinenumber, stack, add_statement)  -- \assignr #x {\some function that is rdef-ed}
-		local varname=getvarname(stack)
-		local content=getbracegroupinside(stack)
-		pushtostackfront(stack, 
-			{faketoken "assigno", paramsign, varname, bgroup, faketoken "exp:w"}, content, {egroup}
-		)
-	end,
-
-	assignc=function(selftoken, lastlinenumber, stack, add_statement)
-		local varname=getvarname(stack)
-		local content=getbracegroupinside(stack)
-		pushtostackfront(stack, 
-			{faketoken "assigno", paramsign, varname, bgroup, faketoken "csname"}, content, {faketoken "endcsname", egroup,
-				faketoken "assertis", faketoken "Ntype", paramsign, varname
-			}
 		)
 	end,
 
@@ -726,21 +693,6 @@ local command_handler={
 		local tokens=getbracegroupinside(stack)
 		local prepare, processed=compile_backquote(tokens, is_mark)
 		pushtostackfront(stack, prepare, processed)
-	end,
-
-	assignoperate=function(selftoken, lastlinenumber, stack, add_statement)  -- \assignoperate #x {#x #y} {\matchrm...}
-		local varname=getvarname(stack)
-		local content=getbracegroupinside(stack)
-		local operations=getbracegroupinside(stack)
-
-		local localfn=next_st(lastlinenumber)
-		generic_compile_code(localfn, operations, {exp_end}, {r_optimizable=true, is_internal=true}, {})
-
-		pushtostackfront(stack, 
-			{faketoken "assigno", paramsign, varname, bgroup, faketoken "exp:w", localfn}, 
-			content,
-			{egroup}
-		)
 	end,
 
 	conditional=function(selftoken, lastlinenumber, stack, add_statement, context)  -- star = peek
@@ -772,41 +724,12 @@ local command_handler={
 		)
 	end,
 
-	["while"]=function(selftoken, lastlinenumber, stack, add_statement, context)
-		local codebefore=getbracegroupinside(stack)
-		local condition=getbracegroup(stack)
-		local code=getbracegroupinside(stack)
-
-		local labelcheck=randomlabel()
-		local labelcontinue=randomlabel()
-		pushtostackfront(stack, 
-			{faketoken "goto", labelcheck,
-			faketoken "label", labelcontinue},
-			code,
-			{faketoken "label", labelcheck},
-			codebefore,
-			{faketoken "conditionalgoto"}, condition, {labelcontinue}
-		)
-	end,
-
 	putnextwithexpand=function(selftoken, lastlinenumber, stack, add_statement, context)
 		local tokens=getbracegroupinside(stack)
 		local commands=getbracegroupinside(stack)
 		for i, v in pairs(tokens) do tokens[i]=makerealtoken(v) end
 		for i, v in pairs(commands) do commands[i]=makerealtoken(v) end
 		pushtostackfront(stack, {faketoken "putnext"}, wrapinbracegroup(withexpand_compile(tokens, commands)))
-	end,
-
-	rcall=function(selftoken, lastlinenumber, stack, add_statement, context)
-		local tokens=getbracegroupinside(stack)
-		pushtostackfront(stack, {faketoken "putnext",
-			bgroup, faketoken "exp:w"}, tokens, {egroup,
-			faketoken "expandonce"})
-	end,
-
-	ocall=function(selftoken, lastlinenumber, stack, add_statement, context)
-		local tokens=getbracegroup(stack)
-		pushtostackfront(stack, {faketoken "putnext"}, tokens, {faketoken "expandonce"})
 	end,
 
 	pretty=function(selftoken, lastlinenumber, stack, add_statement, context)
@@ -1478,10 +1401,12 @@ function metadef_call()
 		-- implement TeX's macro substitution mechanism manually here...
 		local arg_content={}  -- [.tok value] → matched value of tokenlist.
 		for _, arg in ipairs(args) do
-			if arg.csname:match "^randomlabel" then
+			if arg.csname:match "^label" then
 				arg_content[arg.tok]={randomlabel()}
 			elseif arg.csname:match "^var" then
 				arg_content[arg.tok]={paramsign, getvarname(stack)}
+			elseif arg.csname:match "^optionalstar" then
+				arg_content[arg.tok]={get_optional_star(stack)}
 			else
 				arg_content[arg.tok]=getbracegroupinside(stack)
 			end

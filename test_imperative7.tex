@@ -138,18 +138,21 @@
 
 \zfunction{
 	\assign #s {abac}
-	\forint #_ {1} {12} {
+	\forint #_ {1} {18} {
 		\assign #s{#s #s}
 	}
 	\prettyo{\number\str_count:n {#s}}
 	%\pretty{#s}
 	%\prettyo {\romannumeral\__reverse {#s}}
+
 	\ucalllocal{\benchmark_tic:}
 	\assignr #r{\__reverse{#s}}
 	\ucalllocal{\benchmark_toc:}
-	\ucalllocal{\benchmark_tic:}
-	\ucalllocal{\exp_args:Nx\use_none:n{\tl_reverse_items:n{#s}}}
-	\ucalllocal{\benchmark_toc:}
+
+	%\ucalllocal{\benchmark_tic:}
+	%\ucalllocal{\exp_args:Nx\use_none:n{\tl_reverse_items:n{#s}}}
+	%\ucalllocal{\benchmark_toc:}
+
 	\prettyo{\number\str_count:n {#r}}
 }
 

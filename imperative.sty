@@ -28,6 +28,8 @@
 	\directlua{metadef_call()}{#1}
 }
 
+
+
 % rdeflinenumbered can be called as
 %    \rdeflinenumbered #1 #2 { body }   % (format 1)
 % or
@@ -69,12 +71,13 @@
 \protected\def\rdefmark:N #1 {}
 \protected\def\zdefmark:N #1 {}
 
-\def\__odef_helper:Nnn #1 #2 #3 {
-	\def #1 #2 {#3}
-	\odefmark:N #1
+\def\__odef_helper:nNnn #1 #2 #3 #4 {
+	#1 \def #2 #3 {#4}
+	\directlua{register_lib_fn()} {#1} {#2} {#3} {#4}
+	\odefmark:N #2
 }
 \protected\def\odef #1 #2 #{
-	\__odef_helper:Nnn #1 {#2}
+	\__odef_helper:nNnn {\long} #1 {#2}
 }
 
 \protected\def \__try_def:nNnn #1 #2 #3 #4 {
@@ -158,4 +161,52 @@
 }{
 	\endsaveenvreinsert
 }
+}
+
+\imperative_metadef:Npn \while #\codebefore #\condition #\code 
+	#\labelcheck  #\labelcontinue
+{
+	\goto #\labelcheck
+	\label #\labelcontinue
+
+	#\code
+	
+	\label #\labelcheck
+	#\codebefore
+	\conditionalgoto {#\condition} #\labelcontinue
+}
+
+\imperative_metadef:Npn \assignoperate #\var #\initial_tl #\operations {
+	\assignr #\var {
+		\rblock{#\operations}    #\initial_tl
+	}
+}
+
+% maybe this would benefit from statement fusion (\assigncc, etc.) as long as they don't depend on flags
+\imperative_metadef:Npn \assignc #\var #\thecsname {
+	\assigno #\var {\csname #\thecsname \endcsname}
+	\assertis\Ntype #\var
+}
+
+% this one would benefit from checking if the first function is indeed r-function
+\imperative_metadef:Npn \assignr #\var #\content {
+	\assigno #\var {\exp:w #\content}
+}
+
+% similarly check if they're indeed o-function here etc.
+\imperative_metadef:Npn \ocall #\content {
+	\putnext {#\content} \expandonce
+}
+
+\imperative_metadef:Npn \rcall #\content {
+	\ocall {\exp:w #\content}
+}
+
+% this one is one-time-use...
+\imperative_metadef:Npn \rreturnpush_dim_comma #\content {
+	\expcallpeek {
+		\expandafter\exp_end:
+			\the\dimexpr \continueblock
+			\expandafter,
+	}
 }
