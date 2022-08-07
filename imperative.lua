@@ -658,6 +658,7 @@ local command_handler={
 
 	----------------------------------------------------------------------------
 	-- macro-like (transform the code itself)
+	-- could also be defined with \imperative_metadef:Npn 
 
 	-- TODO hack (does not check for expandability. will fix later)
 	ucalllocal=function(selftoken, lastlinenumber, stack, add_statement, context)
@@ -961,11 +962,12 @@ function generic_compile_code(functionname, body, passcontrol, statement_extra, 
 	for i, v in ipairs(statements) do
 		local computable={}
 		for tok, entries in pairs(v.reachable) do
-			local argt=argtype.deleted
+			local argt=argtype.empty_set
 			for argt2, _ in pairs(entries) do
 				argt=argtype_either[argt][argt2]
 			end
 			assert(argt~=argtype.deleted, "internal error if this were the case reachable[tok] would not exist")
+			assert(argt~=argtype.empty_set, "internal error, this probably cannot happen")
 			computable[tok]=argt
 		end
 		v.computable=computable

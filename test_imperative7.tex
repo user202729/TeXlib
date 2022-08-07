@@ -4,6 +4,11 @@
 \prettyinitterm
 \usepackage{imperative}
 \usepackage{l3benchmark}
+\usepackage{minitest}
+\usepackage{genvar}
+\ExplSyntaxOn
+\GenerateVariantsFile:n {test_imperative7.tex}
+\ExplSyntaxOff
 \directlua{imperative_debug=true}
 \errorcontextlines=3
 \begin{document}
@@ -44,6 +49,7 @@
 
 
 % reverse #\data. Must have between 0 and 7 items.
+% instead of using \ifcase / \or trick, we use this trick instead
 \cs_new_eq:NN \__reverse_small \rfunction #\data{
 	\putnext{#\data \exp_end: \empty \empty \empty \empty \empty \empty \empty \relax}
 	\matchrm{#1 #2 #3 #4 #5 #6 #7 #8 #\remaining_empty_tokens \relax}
@@ -136,27 +142,224 @@
 	\rcall{\__reverse_small}
 }
 
+
+% ======== unexpandable linear implementation ========
+% (apparently both \tl_range and \str_range[_ignore_spaces] work in quadratic time. Have to write my own, then)
+
+
+% there's a little problem, we need edef for this to be linear, but
+
+
+% because of a (presumably) TeX bug, implicit character tokens # are treated the same way as explicit
+% anyway, use '# ⟨the token⟩' suffices (results in the token stored in the macro), as well as \unexpanded{⟨the token⟩}
+
+
+\int_new:N \__num_block_left
+
+
+% bdef (callback-based return) not defined yet. For now stick with this.
+\cs_new:Npn \cC{__throw_after_level_0} #1 #2 {#2 #1}  % maybe '\unexpanded{#2} #1' to be safe, but they're all characters anyway, not # or something expandable
+
+% hand implemented optimization
+\cs_new:Npn \cC{__throw_after_level_1} #1 #2#3 {#2#3 #1}
+\cs_new:Npn \cC{__throw_after_level_2} #1 #2#3#4#5 {#2#3#4#5 #1}
+\cs_new:Npn \cC{__throw_after_level_3} #1 #2#3#4#5#6#7#8#9 {#2#3#4#5#6#7#8#9 #1}
+
+\zblock{
+	\assign #\last {\cC{__throw_after_level_3}}
+	\forint #x {4} {20} {
+		\assignc #\cur {__throw_after_level_#x}
+		\ucalllocal{
+			\cs_new:Npn #\cur ##1 {#\last {#\last {##1}} }
+		}
+		\assign #\last{#\cur}
+	}
+}
+
+% such that, in x-expansion context,
+% \__throw_after_level_0 {⟨callback⟩} {⟨item⟩} → ⟨item⟩ ⟨callback⟩
+% \__throw_after_level_1 {⟨callback⟩} {⟨item⟩} {⟨item⟩} → ⟨item⟩ ⟨item⟩ ⟨callback⟩
+% \__throw_after_level_X {⟨callback⟩} ⟨2**X optionally braced {item}s⟩ → ⟨2**X unbraced items⟩ ⟨callback⟩
+%
+
+\assertequal:xn { \cC{__throw_after_level_3} \use_none:n 12345678 9 0} {12345678 0}
+
+% works like this, if \__num_block_left=3
+%   \xdef \__tmp { \__throw_after_level_0 \__special_processor_at_level_0  123456789 }
+% → mostly equivalent to...
+%   \xdef \__tmp { 1 } \toks3=\expandafter{\__tmp} 
+%   \xdef \__tmp { 2 } \toks2=\expandafter{\__tmp} 
+%   \xdef \__tmp { 3 } \toks1=\expandafter{\__tmp} 
+%   \xdef \__tmp { 456789 }
+%
+% where the number of items in each block is equal to 2**⟨level⟩
+
+% \__num_block_left must be strictly positive.
+
+\zblock{
+	\forint #x {0} {20} {
+		\backquote{
+			\ucalllocal{
+				\cs_new:Npn ,c{__special_processor_at_level_#x} {
+						\iffalse{\fi
+					}
+					\toks\__num_block_left=\expandafter{\__tmp}
+					\int_decr:N \__num_block_left
+					\xdef \__tmp{
+						\iffalse}\fi
+						\int_compare:nNnF {\__num_block_left}={0} {,c{__throw_after_level_#x} ,c{__special_processor_at_level_#x}}
+				}
+			}
+		}
+	}
+}
+
+% let's try it
+\__num_block_left=3~
+
+\begingroup
+\xdef \__tmp {\cC{__throw_after_level_0} \cC{__special_processor_at_level_0} 123456789}
+\assertequal:on{\the\toks3}{1}
+\assertequal:on{\the\toks2}{2}
+\assertequal:on{\the\toks1}{3}
+\assertequal:on{\__tmp}{456789}
+\endgroup
+
+
+\begingroup
+\__num_block_left=3~
+\xdef \__tmp {\cC{__throw_after_level_1} \cC{__special_processor_at_level_1} 123456}
+\assertequal:on{\the\toks3}{12}
+\assertequal:on{\the\toks2}{34}
+\assertequal:on{\the\toks1}{56}
+\assertequal:on{\__tmp}{}
+\endgroup
+
+
+\int_new:N \__block_level
+\int_new:N \__input_size
+\int_new:N \__num_block
+\int_new:N \__index
+
+\cs_new_eq:NN \__reverse_tok \zfunction #1 {
+	\ucalllocal{
+		\int_set:Nn \__input_size {\str_count:n {#1}}
+		\int_set:Nn \__block_level {\fp_eval:n{floor(ln(\__input_size)/ln(4))}}  % each block would have size 2^level.
+		\int_set:Nn \__num_block {\int_div_truncate:nn {\__input_size} {
+				% here I'm lazy
+				\fp_eval:n {round(2**\__block_level)}
+		}}
+		% there would be \__num_block complete blocks and some "remaining" items (possibly empty)
+
+
+		\begingroup
+
+			\int_set:Nn \__num_block_left {\__num_block}
+			%\pretty:n{##1 = #1}
+
+			%\int_step_inline:nnn {0}{\__num_block}  \scope #\tokindex{
+			%	\pretty:no{before:\the\toks #\tokindex =~}{\the\toks #\tokindex}
+			%}
+
+			\xdef \__tmp {
+				\int_compare:nNnF {\__num_block}={0}
+				{
+					\csname __special_processor_at_level_ \the\__block_level \endcsname
+				}
+				#1
+			}
+			\toks0=\expandafter{\__tmp}
+
+			%\int_step_inline:nnn {0}{\__num_block}  \scope #\tokindex{
+			%	\pretty:no{after\the\toks #\tokindex =~}{\the\toks #\tokindex}
+			%}
+			%\pretty:no{after: tmp=}\__tmp
+
+
+			\int_step_inline:nnn {0}{\__num_block}  \scope #\tokindex{
+				% ======== now we reverse \the\toks #\tokindex in linear time
+				\begingroup  % we re-use the toksX content here, rely on the save stack operation to take constant time to restore per item
+
+					%\pretty:no{========going to reverse}{\the\toks #\tokindex}
+
+					\int_zero:N \__index
+					\str_map_inline:on {\the\toks #\tokindex} \scope #\char {
+						\int_incr:N \__index
+						\toks \__index={#\char}  % will be reverted at the following \endgroup
+					}
+					\xdef \__tmp {
+						\int_step_function:nnnN {\__index} {-1} {1} \zfunction #\index {\return{\the\toks #\index \cS\ }}
+					}
+
+					%\pretty:no{======== result is}{\__tmp}
+
+				\endgroup  % is reverted here
+
+				\toks #\tokindex=\expandafter{\__tmp}
+			}
+
+
+			% finally
+			\xdef \__tmp{
+				\int_step_function:nnN {0} {\__num_block} \zfunction #\index {\return{\the\toks #\index \cS\ }}
+			}
+
+
+		\endgroup
+	}
+}
+
+\__reverse_tok {123456789}
+\assertequal:oo {\detokenize{987654321}} {\__tmp}
+
+\__reverse_tok {abcdefghi}
+\assertequal:oo {\detokenize{ihgfedcba}} {\__tmp}
+
+
+\cs_new_protected:Npn \__reverse_build #1 {
+	\tl_build_begin:N \__tmp
+	\str_map_inline:nn {#1} {
+		\tl_build_put_left:Nn \__tmp {##1}
+	}
+	\tl_build_end:N \__tmp
+}
+
 \zfunction{
 	\assign #s {abac}
-	\forint #_ {1} {18} {
+	\assign #\level {17} 
+	\forint #_ {0} {#\level} {
 		\assign #s{#s #s}
 	}
-	\prettyo{\number\str_count:n {#s}}
+	\ucalllocal{\assertequal:xx{\str_count:n {#s}}{\fp_eval:n{2**(#\level+2)}}}
 	%\pretty{#s}
 	%\prettyo {\romannumeral\__reverse {#s}}
 
 	\ucalllocal{\benchmark_tic:}
 	\assignr #r{\__reverse{#s}}
-	\ucalllocal{\benchmark_toc:}
+	\ucalllocal{\benchmark_toc: \prettye:n {↑ ======== expandable performance ========}}
 
-	%\ucalllocal{\benchmark_tic:}
-	%\ucalllocal{\exp_args:Nx\use_none:n{\tl_reverse_items:n{#s}}}
-	%\ucalllocal{\benchmark_toc:}
+	\ucalllocal{\assertequal:xx{\str_count:n {#r}}{\str_count:n {#s}}}
 
-	\prettyo{\number\str_count:n {#r}}
+	\ucalllocal{\benchmark_tic:}
+	\ucalllocal{\__reverse_tok{#s}}
+	\ucalllocal{\benchmark_toc: \prettye:n {↑ ======== unexpandable performance ========}}
+
+	\ucalllocal{\assertequal_str:on{\__tmp}{#r}}
+
+	\ucalllocal{\benchmark_tic:}
+	\ucalllocal{\__reverse_build{#s}}
+	\ucalllocal{\benchmark_toc: \prettye:n {↑ ======== build performance ========}}
+
+	\ucalllocal{\assertequal_str:on{\__tmp}{#r}}
+
+	\comment{
+		\ucalllocal{\benchmark_tic:}
+		\ucalllocal{\exp_args:Nx\use_none:n{\tl_reverse_items:n{#s}}}
+		\ucalllocal{\benchmark_toc: \prettye:n {↑ ======== expl3 performance ========}}
+	}
+
 }
 
-?
 \end{imperativerun}
 \ExplSyntaxOff
 \end{document}

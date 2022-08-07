@@ -210,3 +210,9 @@
 			\expandafter,
 	}
 }
+
+% well. for convenience only.
+% although the optimizer is smart enough to optimize \conditional{\use_i:nn}{}{ ... comment... } away (it's not yet enough to optimize \texconditional{\iffalse} though)
+\imperative_metadef:Npn \comment #\content {}
+
+\imperative_metadef:Npn \run #\content {#\content}

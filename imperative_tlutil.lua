@@ -141,7 +141,7 @@ function F.get_tlreprx(tokens)
 	local s={}
 	for _, t in ipairs(tokens) do
 		if t.csname==nil then
-			local ch=string.char(t.mode)
+			local ch=utf8.char(t.mode)
 			local cat=cmdname_to_catcode[t.cmdname]
 
 			if t.cmdname=="mac_param" then s[#s+1]="6#" end  -- not necessary for e-expansion, only for x-expansion
@@ -343,6 +343,9 @@ end
 
 
 F.argtype={
+	deleted={  -- "bottom type"
+		specificity=0,
+	},
 	normal={
 		get_nextvalue=normal_get_nextvalue,
 		paramtext=standard_arg_paramtext,
@@ -393,9 +396,9 @@ F.argtype={
 		paramtext=exclam_delimited_arg_paramtext,
 		specificity=6,
 	},
-	deleted={  -- "bottom type"
+	empty_set={
 		specificity=7,
-	},
+	}
 }
 
 --[[
@@ -418,6 +421,7 @@ end
 
 local inherit_frozen={}
 local function inherit(a, b)
+	assert(a.specificity>b.specificity)
 	inherit_frozen[b]=true assert(not inherit_frozen[a])  --some simple checking of the order below
 	for c, _ in pairs(b.is_a) do
 		a.is_a[c]=true  -- inheritance is transitive
@@ -427,20 +431,30 @@ end
 
 -- note about the ordering, upper ones must be specified before lower ones.
 -- everything must be subtype of normal.
+inherit(argtype.normal, argtype.deleted)
+
 inherit(argtype.single_token, argtype.normal)
 inherit(argtype.Ntype, argtype.single_token)  -- for example this line means a N-type arg is a single_token arg
 inherit(argtype.expforward_chain, argtype.normal)
 inherit(argtype.number, argtype.normal)
 inherit(argtype.dim, argtype.normal)
 
-inherit(argtype.deleted, argtype.number)
-inherit(argtype.deleted, argtype.expforward_chain)
-inherit(argtype.deleted, argtype.Ntype)
-inherit(argtype.deleted, argtype.single_token)
-inherit(argtype.deleted, argtype.normal)
+inherit(argtype.empty_set, argtype.normal)
+inherit(argtype.empty_set, argtype.single_token)
+inherit(argtype.empty_set, argtype.Ntype)
+inherit(argtype.empty_set, argtype.expforward_chain)
+inherit(argtype.empty_set, argtype.number)
+inherit(argtype.empty_set, argtype.dim)
+
 
 -- essentially inherit(A, B) means "the set of possible values of A is a subset of possible values of B"
--- and "normal" is the "everything" set (must be balanced however), "deleted" is the empty set.
+-- and "normal" is the "everything" set (must be balanced however), "deleted" is the everything set plus the [INVALID] value.
+-- Any operation on the [INVALID] value must give error.
+--
+-- unlike the normal definition of bottom type (being the empty set), this one is more convenient I think...?
+--
+--
+-- the type "empty_set" represents the "real" bottom type. This is just for convenience i.e. it's an identity in argtype_either operation
 
 
 -- just checking
@@ -456,10 +470,10 @@ for _, a in pairs(argtype) do
 	argtype_either[a]={}
 	argtype_both[a]={}
 	for _, b in pairs(argtype) do
-		local result_either=argtype.normal
+		local result_either=argtype.deleted  -- the most general type
 		for _, c in pairs(argtype) do
 			if a.is_a[c] and b.is_a[c] and c.is_a[result_either] then
-				result_either=c
+				result_either=c  -- only update if c.is_a[result_either] i.e. let result_either be the most specific type that is a superset of both a and b
 			end
 		end
 		argtype_either[a][b]=result_either
@@ -475,9 +489,12 @@ assert(argtype_either[argtype.Ntype][argtype.single_token]==argtype.single_token
 
 assert(argtype_both[argtype.Ntype][argtype.single_token]==argtype.Ntype)  -- i.e. if it's both Ntype or single_token, it's guaranteed to be Ntype
 
-assert(argtype_either[argtype.deleted][argtype.Ntype]==argtype.Ntype)
-
+assert(argtype_either[argtype.deleted][argtype.Ntype]==argtype.deleted)
 assert(argtype_either[argtype.deleted][argtype.deleted]==argtype.deleted)
+
+assert(argtype_either[argtype.empty_set][argtype.Ntype]==argtype.Ntype)
+assert(argtype_either[argtype.empty_set][argtype.deleted]==argtype.deleted)
+assert(argtype_either[argtype.empty_set][argtype.normal]==argtype.normal)
 
 
 
