@@ -1,0 +1,79 @@
+\ProvidesFile{outputdir.tex}[2022/08/08 0.0.0 Get the current output directory]
+\documentclass{l3doca}
+\begin{document}
+\GetFileInfo{\jobname.tex}
+\title{\pkg{\jobname} --- \fileinfo
+\thanks{This file describes version \fileversion, last revised \filedate.}
+}
+\author{user202729}
+\date{Released \filedate}
+\maketitle
+
+\begin{abstract}
+Get the current output directory.
+\end{abstract}
+
+\section{Motivation}
+
+Unfortunately, there's no straightforward way to get the output directory in \TeX.
+
+Thus, packages that uses either shell escape or Lua code to write to files
+usually require the user to explicitly provide the output directory, or
+fails to work if the output directory is not the current working directory
+(e.g. \pkg{minted}, externalize feature in \pkg{tikz}).
+
+This package uses various trick to try to determine the output directory.
+
+\section{Usage}
+
+Simply load the package:
+
+\begin{verbatim}
+\usepackage{outputdir}
+\end{verbatim}
+
+\begin{variable}{\outputdir}
+   If the package successfully determine the current output directory, \cs{outputdir} will be defined
+   (as an \pkg{expl3} string). Otherwise, it's left undefined.
+
+   Note that this might not have a trailing slash, have one trailing slash, or have two trailing slashes.
+
+   And this might be an absolute path, or relative to the current folder.
+\end{variable}
+
+\section{Remark}
+
+The package may create a temporary file named \file{outputdir-tempfile.tex} or similar in its working. Do not
+put a similar name for your file.
+
+This package is not guaranteed to work in all cases: it needs either \LuaTeX\ or |-recorder| flag enabled.
+
+There are some corner cases where the |-recorder| flag is initially enabled, then afterwards disabled. In that case the package might
+give the wrong result.
+
+If unrestricted |-shell-escape| is enabled, the output directory value is double-checked if |-recorder| is used.
+In other words, it will never give wrong result, but might fail to determine the output directory if |-recorder| is disabled.
+
+The limitation of |-recorder| method is the same as \pkg{currfile-abspath} package. As mentioned in that documentation,
+on Mik\TeX\ the output directory value is only available since the second run.
+
+\begin{function}{\outputdirstopifundefined}
+	If you execute this in the \TeX\ file such as
+	\begin{verbatim}
+	\usepackage{outputdir}
+	\outputdirstopifundefined
+	\end{verbatim}
+	then the \TeX\ run will stop immediately if \cs{outputdir} cannot be determined.
+
+	(which might be a good idea since it speeds up the run, and gets to the second run more quickly in the Mik\TeX\ case)
+\end{function}
+
+\begin{variable}{default}  % TODO hack this is not a macro, this is an option (l3doc does not support this)
+Alternatively, you can provide a default value for \cs{outputdir} which will be used (only) if a value cannot be determined:
+\begin{verbatim}
+\usepackage[default=.]{outputdir}
+\end{verbatim}
+\end{variable}
+
+\PrintIndex
+\end{document}

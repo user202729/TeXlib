@@ -1,0 +1,129 @@
+\ProvidesExplPackage{outputdir}{2022/08/05}{0.0.0}{Get the output directory location}
+\RequirePackage{currfile-abspath}
+
+\msg_new:nnn {outputdir} {outputdir-already-defined} {outputdir~ macro~ already~ defined!}
+
+% \ifdefined is way too fickle......
+\prg_new_conditional:Npnn \__cs_if_exist_strict:N #1 {T, F, TF} {
+	\ifdefined #1 \prg_return_true: \else \prg_return_false: \fi
+}
+
+\__cs_if_exist_strict:NT \outputdir {
+	\msg_error:nn {outputdir} {outputdir-already-defined}
+}
+
+
+
+
+\RequirePackage{l3keys2e}
+\keys_define:nn{outputdir}{
+	default.code:n=\tl_set:Nx \outputdir {#1},
+}
+\ProcessKeysOptions{outputdir}
+
+
+
+\__cs_if_exist_strict:NT \outputdir {   % i.e. the user provides something
+	\str_set:NV \outputdir \outputdir  % just in case
+}
+
+
+\bool_new:N \__done
+
+
+% given a file name (string), will double check whether the file name is the correct outputdir, and 
+%  * set \outputdir to the file name and set \__done if it's correct,
+%  * set \outputdir to undefined if it's incorrect.
+% unrestricted shell escape must be enabled.
+\cs_new_protected:Npn \__shell_doublecheck:n #1 {
+	\str_set:Nn \__dir_escaped {#1}
+	\sys_if_platform_windows:F {
+		% escape special characters in "..." for Bash just in case. Probably not foolproof however
+		\exp_args:NNV \str_replace_all:Nnn \__dir_escaped \c_backslash_str { \\ }  % must replace this one first
+		\str_replace_all:Nnn \__dir_escaped {"} {\"}
+	}
+
+	\sys_shell_now:x {echo~ a~ >~ "\__dir_escaped/outputdir-tempfile.tex"}
+	\expandafter \ifx \@@input outputdir-tempfile.tex~   a
+		% if the file is empty here, a ≠ \let so it will skip to the \fi. We assume there's nothing weird in the file
+		% side note the @@input must be delimited with ~ instead of \relax because it only gobble a ~
+		\str_set:Nn \outputdir {#1}
+		\bool_set_true:N \__done
+	\else
+		\let\outputdir\undefined  % it's definitely wrong
+	\fi
+
+	% ======== (delete the file just in case)
+	\sys_if_platform_windows:TF {
+		\sys_shell_now:x {del~ "\__dir_escaped/outputdir-tempfile.tex"}
+		} {
+		\sys_shell_now:x {rm~ "\__dir_escaped/outputdir-tempfile.tex"}
+	}
+}
+\cs_generate_variant:Nn \__shell_doublecheck:n {V}
+
+
+% ======== user provides default value. Double check if it's correct value if possible.
+\__cs_if_exist_strict:NT \outputdir {
+	\sys_if_shell_unrestricted:T {
+		\__shell_doublecheck:V \outputdir
+	}
+}
+
+% we avoid \endinput here so that the file still works even if the whole file is tokenized in advance
+
+\bool_if:NF \__done {
+	% ======== first create this file (side note LaTeX3 is smart enough to garbage collect them when they're unused)
+	\iow_new:N \__tempfile
+	\iow_open:Nn \__tempfile {outputdir-tempfile.tex}
+	\sys_if_engine_luatex:F{
+		\iow_now:Nn \__tempfile{\let \__tempvalue 1}
+	}
+	\iow_close:N \__tempfile
+
+	% ======== for LuaTeX, use open_read_file callback to determine the file name
+	\sys_if_engine_luatex:T{\directlua{require "outputdir_helper"()}}
+
+	% ======== \input it so it's written to the .fls file (or open_read_file callback get called in Lua case)
+	\@@input outputdir-tempfile.tex\relax
+
+	\sys_if_engine_luatex:T{
+		\edef\outputdir{\directlua{tex.sprint(-2,outputdir)}}
+		\bool_set_true:N \__done
+	}
+}
+
+
+\bool_if:NF \__done {
+	% ======== okay, it's not LuaTeX. Use -recorder feature to check ========
+	% ======== (blank out the file)
+	\iow_open:Nn \__tempfile {outputdir-tempfile.tex}
+	\iow_close:N \__tempfile
+
+	\token_if_eq_meaning:NNF \__tempvalue 1 {
+		% this must be true, otherwise the file being \input'ed is not equal to the just-written file
+		% (this cannot happen because as far as I can see implementations prioritize files in output directory)
+		\bool_set_true:N \__done
+	}
+}
+
+% ======== determine the output directory
+\getabspath{outputdir-tempfile.tex}
+\ifx\theabsdir\empty
+	 % cannot be determined
+\else
+	\sys_if_shell_unrestricted:TF {
+		\__shell_doublecheck:V \theabsdir  % -recorder might be wrong as explained in the documentation
+	} {
+		% otherwise we can't really check
+		\str_set:NV \outputdir \theabsdir
+	}
+\fi
+
+% ======== define helper function
+\cs_new_protected:Npn \outputdirstopifundefined {
+	\__cs_if_exist_strict:NF \outputdir {
+		\stop
+	}
+}
+
