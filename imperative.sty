@@ -133,13 +133,9 @@
 \register_lib_fn:N \use_none:nnnnnnnn
 \register_lib_fn:N \use_none:nnnnnnnnn
 
-% used in the \texconditional macro below
-% example: \if<some TeX conditional> ... \use_ii_to_i:w \fi \use_ii:nn → can be used as a conditional
-\odef \use_ii_to_i:w \fi \use_ii:nn #1 #2 { \fi #1 }
-
-% usage: for example \def \testEqualToken:TF #1 #2 { \texconditional {\ifx #1 #2} }
-% \texconditional { <TeX conditional expression> } is a <condition> suitable for argument of \conditional{...}
-\odef \texconditional #1 {#1 \use_ii_to_i:w \fi \use_ii:nn}
+% defined in imperative_util.sty
+\register_lib_fn:N \use_ii_to_i:w
+\register_lib_fn:N \texconditional
 
 \cs_new_protected:Npn \__precattl_next_then #1 #2 {
 	\precattl_set:Nn \__tmp {#2}
@@ -216,3 +212,29 @@
 \imperative_metadef:Npn \comment #\content {}
 
 \imperative_metadef:Npn \run #\content {#\content}
+
+\imperative_metadef:Npn \assignnumber #\var #\numexpression {
+	\assigno #\var {\the\numexpr #\numexpression}
+	\assertis\number #\var
+}
+
+\precattl_exec:n{
+\imperative_metadef:Npn \forint #\var #\begin #\end #\body {
+	\assign #\var {#\begin}
+	\assertis\number #\var
+	\while {} {\texconditional{\ifnum #\var < #\end \cS\ }} {
+		#\body
+		\assignnumber #\var {#\var+1}
+	}
+}
+}
+
+\imperative_metadef:Npn \putnextbgroup {
+	\putnext{\expandafter{\iffalse}\fi}
+	\expandonce
+}
+
+\imperative_metadef:Npn \putnextegroup {
+	\putnext{\iffalse{\fi}}
+	\expandonce
+}

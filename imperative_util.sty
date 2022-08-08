@@ -1,4 +1,4 @@
-\ProvidesExplPackage{imperative_util}{2022-06-17}{0.0.0}{Utilities for imperative package}
+\ProvidesExplPackage{imperative_util}{2022-06-17}{0.0.0}{Utilities for imperative package. Must not require LuaTeX}
 \RequirePackage{saveenv}
 
 \protected\def \__locallyset@@_aux:N #1 {  % #1: the modified token
@@ -301,3 +301,13 @@
 \def\__process_all#1{
 	\begingroup \exp_last_unbraced:Nx \endgroup {\__process_s #1}
 }
+
+
+
+% used in the \texconditional macro below
+% example: \if<some TeX conditional> ... \use_ii_to_i:w \fi \use_ii:nn → can be used as a conditional
+\def \use_ii_to_i:w \fi \use_ii:nn #1 #2 { \fi #1 }
+
+% usage: for example \def \testEqualToken:TF #1 #2 { \texconditional {\ifx #1 #2} }
+% \texconditional { <TeX conditional expression> } is a <condition> suitable for argument of \conditional{...}
+\def \texconditional #1 {#1 \use_ii_to_i:w \fi \use_ii:nn}

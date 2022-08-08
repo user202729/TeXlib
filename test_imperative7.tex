@@ -17,29 +17,6 @@
 \precattl_exec:n {
 
 
-\imperative_metadef:Npn \assignnumber #\var #\numexpression {
-	\assigno #\var {\the\numexpr #\numexpression}
-	\assertis\number #\var
-}
-
-\imperative_metadef:Npn \forint #\var #\begin #\end #\body {
-	\assign #\var {#\begin}
-	\assertis\number #\var
-	\while {} {\texconditional{\ifnum #\var < #\end \cS\ }} {
-		#\body
-		\assignnumber #\var {#\var+1}
-	}
-}
-
-\imperative_metadef:Npn \putnextbgroup {
-	\putnext{\expandafter{\iffalse}\fi}
-	\expandonce
-}
-
-\imperative_metadef:Npn \putnextegroup {
-	\putnext{\iffalse{\fi}}
-	\expandonce
-}
 
 }
 

@@ -1,6 +1,5 @@
-if not imperative_debug then
-	imperative_debug=false
-end
+imperative_debug=imperative_debug or false
+imperative_print_tlserialize=imperative_print_tlserialize or false
 
 
 for k, v in pairs(require "imperative_tlutil") do
@@ -1412,7 +1411,7 @@ function metadef_call()
 			else
 				arg_content[arg.tok]=getbracegroupinside(stack)
 			end
-			prettyprint(arg,"→", arg_content[arg.tok])
+			--prettyprint(arg,"→", arg_content[arg.tok])
 		end
 		pushtostackfront(stack, substitute_replacementtext_symbolic(body, arg_content))
 	end
@@ -1476,6 +1475,9 @@ function print_tlrepr()
 end
 
 function execute_pending_definitions()
+	if imperative_print_tlserialize then
+		texio.write_nl(tlserialize_unchecked(get_execute_pending_definitions_tl(pending_definitions)))
+	end
 	print_fake_tokenlist(get_execute_pending_definitions_tl(pending_definitions))
 	pending_definitions={}
 end
@@ -2048,6 +2050,10 @@ function cmd_imperative_run()
 
 	if imperative_debug then
 		prettyprint("going to execute", result)
+	end
+
+	if imperative_print_tlserialize then
+		texio.write_nl(tlserialize_unchecked(result))
 	end
 	print_fake_tokenlist(result)
 end
