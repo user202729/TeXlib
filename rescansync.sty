@@ -1,4 +1,4 @@
-\ProvidesExplPackage{rescansync}{2022/07/09}{0.0.0}{Re-scan tokens with synctex information}
+\ProvidesExplPackage{rescansync}{2022/08/08}{0.1.0}{Re-scan tokens with synctex information}
 
 \cs_generate_variant:Nn \regex_replace_all:nnN {nxN}
 \cs_generate_variant:Nn \tl_replace_all:Nnn {Nxn}
@@ -44,10 +44,10 @@
 % they cannot be \write safely, we detokenize it then replace ^^M later.
 \cs_new_protected:Npn \rescansync:nnnn #1 #2 #3 #4 {
 	\tl_gset:Nx \_RS_count {\int_eval:n {\_RS_count+1}}
-	\tl_set:Nx \_RS_filename {RS\_RS_count-#3}
+	\tl_gset:Nx \rescansynclastfilename {RS\_RS_count-#3}
 
 	\begingroup  % will be closed by the active `~` later
-		\iow_open:Nn \_RS_file {\_RS_filename}
+		\iow_open:Nn \_RS_file {\rescansynclastfilename}
 
 		\iow_now:Nx \_RS_file {
 			% print some initial padding newlines first
@@ -73,7 +73,7 @@
 
 
 		\char_set_active_eq:NN \~ \endgroup
-		\exp_args:NNNo \expandafter \_RS_skip_initial_endlinechars \@@input {\_RS_filename}
+        \expandafter \_RS_skip_initial_endlinechars \@@input {\rescansynclastfilename}
 }
 
 \cs_new_protected:Npn \rescansync:nnn #1 #2 #3 {

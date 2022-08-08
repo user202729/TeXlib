@@ -1,5 +1,5 @@
 %%! TEX program = lualatex
-\ProvidesFile{rescansync.tex} [2022/07/09 v0.0.0 ]
+\ProvidesFile{rescansync.tex} [2022/08/08 v0.1.0 ]
 \documentclass{l3doc}
 \EnableCrossrefs
 \CodelineIndex
@@ -152,11 +152,13 @@ then the text |abcdef| will be typesetted, the Sync\TeX\ information points to l
 
 If there's any error while typesetting |abcdef|, the error file name will be reported as for example, \file{RS1-rescanned-a.tex} (the number |1| might vary) instead of \file{a.tex}.
 
-\StopEventually{%
-  \PrintChanges
-  \PrintIndex
-}
-\Finale
+\begin{variable}{\rescansynclastfilename}
+	Contains the file name of the last temporary file (contains the rescanned code). Might be undefined.
+
+	Note that this is not stable API, as only currently is the feature implemented by writing the code to a temporary file.
+\end{variable}
+
+\PrintIndex
 \end{document}
 
 
