@@ -1,0 +1,58 @@
+%! TEX program = pdflatex
+\documentclass{article}
+\errorcontextlines=5
+\usepackage{prettytok}
+\prettyinitterm
+\ExplSyntaxOn
+\pretty:n{going to load}
+\ExplSyntaxOff
+\usepackage[mode=unnamed_pipe]{pythonimmediate}
+
+\ExplSyntaxOn
+\pretty:n{1.start}
+
+\begin{pythonimmediateenv}
+import pythonimmediate
+x="xxx"
+import sys
+print("======== test stdout ========")
+print("======== test stderr ========", file=sys.stderr)
+pythonimmediate.run_tokenized_line_finish(r'\pretty:n {2.a}')
+\end{pythonimmediateenv}
+
+\pythonimmediateverb|pythonimmediate.run_block_finish(r'\pretty:n {3.xxx~ =~ ' + x + '}')|
+
+\begin{pythonimmediateenv}
+pythonimmediate.run_block_finish(r'''
+\pretty:n {4.}
+\pythonimmediateverb|pythonimmediate.run_tokenized_line_finish(r'\pretty:n{5.}')|
+\pretty:n {6.}
+''')
+\end{pythonimmediateenv}
+
+\begin{pythonimmediateenv}
+
+x=123
+
+pythonimmediate.run_tokenized_line_peek(
+r'\pretty:n{7.} \pythonimmediate:n{x=456} \pretty:n{8.} \pythonimmediatecontinue'
+)
+
+assert x==456
+
+pythonimmediate.run_tokenized_line_finish(
+r'\pretty:n{9.}'
+)
+\end{pythonimmediateenv}
+
+\pretty:n{10.}
+
+
+\ExplSyntaxOff
+
+
+\begin{document}
+
+
+
+\end{document}

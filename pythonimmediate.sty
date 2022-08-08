@@ -1,0 +1,175 @@
+%\@@input failed-namedpipe-pythonimmediate.sty
+%\endinput
+
+\ProvidesExplPackage{pythonimmediate}{2022/08/05}{0.0.0}{Execute Python code from TeX immediately}
+
+\RequirePackage{genvar}
+\RequirePackage{saveenv}
+\RequirePackage{rescansync}
+
+%\GenerateVariantsFile:n{pythonimmediate.sty}
+\begin{rescansyncRewriteenv}{ \str_replace_all:Nnn #1 {__} {_pythonimmediate_} }
+\GenerateVariantsFile:n{\rescansynclastfilename}
+
+
+
+\RequirePackage{l3keys2e}
+
+
+\str_set:Nn \__outputdir{.}
+\str_set:Nn \__mode{}
+\keys_define:nn{pythonimmediate}{
+	outputdir.tl_set:N=\__outputdir,
+	%outputdir.default:n={.},  % huh does not work?
+
+	mode.tl_set:N=\__mode,
+}
+\ProcessKeysOptions{pythonimmediate}
+
+\str_set:NV \__outputdir \__outputdir
+\str_set:NV \__mode \__mode
+
+
+
+
+
+\msg_new:nnn {pythonimmediate} {shell-fail} {Shell~command~execution~failed!}
+\msg_new:nnn {pythonimmediate} {cannot-determine-script-path} {Cannot~determine~script~path!}
+\msg_new:nnn {pythonimmediate} {cannot-read-line} {Cannot~read~line!}
+\msg_new:nnn {pythonimmediate} {internal-error} {Internal~error!}
+\msg_new:nnn {pythonimmediate} {invalid-mode} {Invalid~mode:~'#1'.}
+
+
+\bool_new:N \__mode_multiprocessing_network
+\bool_new:N \__mode_unnamed_pipe
+\str_if_eq:VnT \__mode {multiprocessing_network} {\bool_set_true:N \__mode_multiprocessing_network}
+\str_if_eq:VnT \__mode {unnamed_pipe} {\bool_set_true:N \__mode_unnamed_pipe}
+\bool_if:nF {\__mode_multiprocessing_network || \__mode_unnamed_pipe} {
+    \msg_error:nnV {pythonimmediate} {invalid-mode} \__mode
+}
+
+% we need to persistently open the file anyway, so using LaTeX3 stream reference counting doesn't help
+\newread \__read_file
+
+
+
+% ======== first use kpsewhich to get the __script_path here ========
+% (abuse \__read_file variable for this purpose)
+\openin \__read_file=|"kpsewhich~ pythonimmediate_script_textopy.py"~
+
+\begingroup
+	\endlinechar=-1~
+	\readline \__read_file to \__textopy_script_path
+	\ifeof \__read_file
+		\msg_error:nn {pythonimmediate} {cannot-determine-script-path}
+	\fi
+
+	\str_if_eq:xnF {\str_range:Vnn \__textopy_script_path {-10} {-1}} {textopy.py} {
+		\msg_error:nn {pythonimmediate} {cannot-determine-script-path}
+	}
+
+	\newwrite \__write_file
+
+	% ======== open persistent pipes to the child processes
+	\bool_if:NTF \__mode_unnamed_pipe {  % in this case make sure the pipe remains open...
+		\openin \__read_file=|"sleep~ infinity|python3~ \str_range:Vnn \__textopy_script_path {1} {-11} pytotex.py \space \__mode"~  % we must use the primitive here to use the pipe file path
+	} {
+		\openin \__read_file=|"python3~ \str_range:Vnn \__textopy_script_path {1} {-11} pytotex.py \space \__mode"~  % we must use the primitive here to use the pipe file path
+	}
+
+	\readline \__read_file to \__dummy_line  % endlinechar still -1
+	\bool_if:NT \__mode_multiprocessing_network {
+		\str_if_eq:VnF \__dummy_line {listener-setup-done} {
+			\msg_error:nn {pythonimmediate} {cannot-read-line}
+		}
+	}
+	\bool_if:NT \__mode_unnamed_pipe {
+		\str_if_in:VnF \__dummy_line {pytotex_pid=} {
+			\msg_error:nn {pythonimmediate} {cannot-read-line}
+		}
+	}
+	\immediate\openout \__write_file=|"python3~ \__textopy_script_path \space \__mode"~
+	\bool_if:NT \__mode_unnamed_pipe {
+		\immediate\write\__write_file {\__dummy_line}  % which contains pytotex's pid
+	}
+\endgroup
+
+% e.g. if `block' is read from the communication channel, run \__run_block:
+\cs_new_protected:Npn \__read_do_one_command: {
+	\begingroup
+		\endlinechar=-1~
+		\global\readline \__read_file to \__line
+	\endgroup
+	\begingroup\expandafter\endgroup  % give an error instead of silently do nothing when command is invalid
+		\csname __run_ \__line :\endcsname
+}
+
+\cs_new_protected:Npn \pythonimmediatecontinue {
+	\immediate\write \__write_file {r}
+	\__read_do_one_command:
+}
+
+\cs_new_protected:Npn \__run_tokl: {
+	\ifeof \__read_file
+		\msg_error:nn {pythonimmediate} {internal-error}
+	\fi
+	\global \read \__read_file to \__line  % note that this uses \read to tokenize instead of \readline
+	\__line
+}
+
+\cs_new_protected:Npn \__run_toklcont: {
+	\__run_tokl:
+	\pythonimmediatecontinue
+}
+
+\cs_new_eq:NN \__run_none: \relax
+
+\cs_new_protected:Npn \__run_block: {
+	\readline \__read_file to \__delimiter
+
+	\tl_build_begin:N \__code
+	\global \readline \__read_file to \__line
+	\bool_do_until:nn {\tl_if_eq_p:NN \__delimiter \__line} {
+		\tl_build_put_right:NV \__code \__line
+		\ifeof \__read_file
+			\msg_error:nn {pythonimmediate} {internal-error}
+		\fi
+		\global \readline \__read_file to \__line
+	}
+	\tl_build_end:N \__code
+
+	\scantokens \expandafter{\__code}
+}
+
+\cs_new_protected:Npn \__run_blockcont: {
+	\__run_block:
+	\pythonimmediatecontinue
+}
+
+% first arg is the code
+\cs_new_protected:Npn \pythonimmediate:n #1  {
+	\immediate\write \__write_file {\unexpanded{
+		i ^^J
+		#1 ^^J
+		pythonimm?"""?'''?  % following character will be newline
+	}}
+	\__read_do_one_command:
+}
+
+\NewDocumentCommand\pythonimmediateverb{v}{
+	\pythonimmediate:n {#1}
+}
+
+\NewDocumentEnvironment{pythonimmediateenv}{}{
+	\saveenvreinsert \__code {
+		\pythonimmediate:V \__code  % outside the group.
+	}
+}{
+	\endsaveenvreinsert
+}
+
+\AtEndDocument{
+	\immediate\write \__write_file {r}
+}
+
+\end{rescansyncRewriteenv}
