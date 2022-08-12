@@ -1,0 +1,32 @@
+%! TEX program = lualatex
+\documentclass{article}
+\usepackage{prettytok}
+\usepackage{imperative}
+\prettyinitterm
+\begin{document}
+
+\ExplSyntaxOn
+\begin{imperativerun}
+\tl_analysis_map_inline:nn {
+   ! "   $   & ' ( ) * + , - . /
+ 0 1 2 3 4 5 6 7 8 9   ; < = > ?
+   A B C D E F G H I J K L M N O
+ P Q R S T U V W X Y Z [   ]    
+ ` a b c d e f g h i j k l m n o
+ p q r s t u v w x y z   | 
+} \scope #\token #\char #\cat{
+\zblock{
+	\assignnumber #\catn{"#\cat}
+	\expcall{\pretty:n {safecat[#\char]=#\catn}}
+}
+}
+
+
+\tl_analysis_map_inline:nn {
+ _ : @ #
+} \scope #\token #\char #\cat{
+\pretty:n{cssafe[#\char]=true}
+}
+\end{imperativerun}
+
+\end{document}

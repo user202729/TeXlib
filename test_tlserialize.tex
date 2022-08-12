@@ -2,7 +2,7 @@
 \errorcontextlines=100
 \documentclass{article}
 \usepackage{prettytok}
-\prettyinit
+\prettyinitterm
 \usepackage{saveenv}
 \usepackage{tlserialize}
 \usepackage{minitest}
@@ -12,6 +12,7 @@
 \GenerateVariantsFile:n{test_tlserialize.tex}
 \precattl_exec:n{
 \tl_map_inline:nn {
+	{\par}
 	{\relax}
 	{\cFrozenRelax}
 	{\tenrm}
