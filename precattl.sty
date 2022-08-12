@@ -226,12 +226,49 @@
 \def \_prctl_do_special_cStr_outer { \_prctl_do_special\_prctl_do_special_cStr }
 \def \_prctl_do_special_cA_outer { \_prctl_do_special\_prctl_do_special_cA }
 
+% special tokens
+\begingroup
+
+% ======== frozen relax
 \def \_prctl_tmp_help #1 {
-	\def \_prctl_do_frozen_relax { \EI_append:n {#1} }
+	\gdef \_prctl_do_frozen_relax { \EI_append:n {#1} }
 	% #1 here will be substituted by the frozen relax
 }
 \expandafter \_prctl_tmp_help \ifnum0=0\fi
-\let \_prctl_tmp_help \undefined
+
+% ======== endwrite
+\def \_prctl_weird{\expandafter\_prctl_weirda\string}
+\def \_prctl_weirda
+		#1  %  the stringified }
+{\expandafter\_prctl_weirdb\noexpand}
+\def \_prctl_weirdb #1 { \iffalse{\fi  } #1 \xdef \_prctl_insert_endwrite { \noexpand \noexpand \noexpand #1 } }
+\immediate\write-1{\_prctl_weird}
+\gdef \_prctl_do_endwrite {\EI_append_raw:n \_prctl_insert_endwrite}
+
+% ======== endtemplate tokens
+\def \_prctl_weird #1 {
+	\xdef \_prctl_insert_outer_endtemplate {\noexpand \noexpand \noexpand #1}
+	\expandafter \_prctl_weirdb #1
+	#1
+}
+\def \_prctl_weirdb #1 {
+	\xdef \_prctl_do_inner_endtemplate { \EI_append_raw:n { #1 } }
+}
+
+\vbox_set:Nn \l_tmpa_box {
+	\halign{
+		#\cr
+		\relax \expandafter \_prctl_weird \noexpand\cr
+	}
+}
+
+\gdef \_prctl_do_outer_endtemplate {\EI_append_raw:n \_prctl_insert_outer_endtemplate}
+
+
+\endgroup
+
+
+
 
 
 
@@ -253,6 +290,9 @@
 		\def \EIhandler_cStr { \EI_collect_arg:Nn \_prctl_do_special_cStr_outer 1 }
 		\def \EIhandler_cA { \EI_collect_arg:Nn \_prctl_do_special_cA_outer 1 }
 		\let \EIhandler_cFrozenRelax \_prctl_do_frozen_relax
+		\let \EIhandler_cEndwrite \_prctl_do_endwrite
+		\let \EIhandler_cOuterEndtemplate \_prctl_do_outer_endtemplate
+		\let \EIhandler_cInnerEndtemplate \_prctl_do_inner_endtemplate
 		\execinside_gset:Nn \_prctl_valueg {#1}
 	\endgroup
 }

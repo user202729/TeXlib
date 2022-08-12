@@ -26,8 +26,10 @@
 	\pretty:n { 123 \cO\^^M 456 \cO\^^J 789 \cO\^^I 00~0 }
 	\pretty:n { \cC{\^^M\^^J\^^I~} \^^c0 }
 	\pretty:n {Lua~print:}
-	\prettye:n { 123 \cO\^^M 456 \cO\^^J 789 \cO\^^I 00~0 }
-	\prettye:n { \cC{\^^M\^^J\^^I~} \^^c0 }
+	\sys_if_engine_luatex:T {
+		\prettye:n { 123 \cO\^^M 456 \cO\^^J 789 \cO\^^I 00~0 }
+		\prettye:n { \cC{\^^M\^^J\^^I~} \^^c0 }
+	}
 	\pretty:n {Lua~print~end=}
 }
 
@@ -71,13 +73,17 @@
 
 
 \pretty:V \__tmp
-\prettye:V \__tmp
+\sys_if_engine_luatex:T {
+	\prettye:V \__tmp
+}
 
 \begingroup
 \tl_set:Nn \prettytermwraplimit {30}
 
 \pretty:V \__tmp
-\prettye:V \__tmp
+\sys_if_engine_luatex:T {
+	\prettye:V \__tmp
+}
 \endgroup
 
 \tl_build_begin:N \__tmpa
@@ -90,6 +96,22 @@
 -1,0;-1,0;-1,0;97,1;122,2;123,1;125,2;40,1;41,2;98,3;98,3;126,3;99,4;100,6;100,6;126,6;101,7;101,7;126,7;102,8;106,A;103,B;104,C;105,D;105,D;126,D;126,D;32,D;32,3;32,4;32,6;32,7;32,8;32,A;32,B;32,C;35,6;-1,0;-1,0;-1,0;-1,0;
 }
 
+\testname:n {check special tokens}
+\precattl_exec:n {
+	\edef \__tmp{
+		\string\cEndwrite
+		\string\cOuterEndtemplate
+		\string\cInnerEndtemplate
+	}
+	\assertequal_str:Vn \__tmp {\cStr{\\endwrite\\endtemplate\\endtemplate}}
+	\pretty:V \__tmp
+
+	\edef \__tmp{
+		\meaning\cOuterEndtemplate
+		\meaning\cInnerEndtemplate
+	}
+	\pretty:V \__tmp
+}
 
 % ========
 \testname:n {check cC not accidentally make tokens relax}
