@@ -242,7 +242,7 @@
 		#1  %  the stringified }
 {\expandafter\_prctl_weirdb\noexpand}
 \def \_prctl_weirdb #1 { \iffalse{\fi  } #1 \xdef \_prctl_insert_endwrite { \noexpand \noexpand \noexpand #1 } }
-\immediate\write-1{\_prctl_weird}
+\immediate\write-1{\_prctl_weird}  % this writes a blank line to the log file, but it's harmless, right
 \gdef \_prctl_do_endwrite {\EI_append_raw:n \_prctl_insert_endwrite}
 
 % ======== endtemplate tokens
