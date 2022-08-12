@@ -494,5 +494,17 @@ the tokens |{|\meta{\texttt{x}-expansion of \texttt{\textbackslash sometoken}}|}
 	This only works for token-list-type input stack, not buffer-type input stack such as those created with |tex.sprint|.
 \end{luafn}
 
+\begin{luafn}{L.shorthand_tl, L.shorthand_flat}
+	\begin{syntax}
+		L.shorthand_tl {...} -> \meta{token list}
+	\end{syntax}
+	Convenient shorthand to create token lists. For example, if you have
+		|local flat=L.shorthand_tl_flat|
+	you can specify
+		|L.shorthand_tl {A, B, {C, D}, flat {E, F}, G}|
+	to get the token list
+		|{A, B, bgroup, C, D, egroup, E, F, G}|
+\end{luafn}
+
 \PrintIndex
 \end{document}

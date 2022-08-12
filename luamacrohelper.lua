@@ -263,11 +263,6 @@ local function shorthand_tl_build(arg, result, shorthand_tl_build_str)
 	end
 end
 
--- for example
---    local flat=L.shorthand_tl_flat
--- then
---    >>> L.shorthand_tl {A, B, {C, D}, flat {E, F}, G}
---    {A, B, bgroup, C, D, egroup, E, F, G}
 function L.shorthand_tl(arg, ...)
 	assert(select("#", ...)==0)
 	local result={}
