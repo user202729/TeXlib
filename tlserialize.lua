@@ -22,7 +22,8 @@ local alt_finale=[[}\expandafter}\csname __tlser_result:n\expandafter\endcsname\
 -- use test_tlserialize_generate_table.tex to generate this table...
 
 local safecat, cssafe={}, {}
-safecat[33]=12 safecat[34]=12 safecat[36]=3 safecat[38]=4 safecat[39]=12 safecat[40]=12 safecat[41]=12 safecat[42]=12 safecat[43]=12 safecat[44]=12 safecat[45]=12 safecat[46]=12 safecat[47]=12 safecat[48]=12 safecat[49]=12 safecat[50]=12 safecat[51]=12 safecat[52]=12 safecat[53]=12 safecat[54]=12 safecat[55]=12 safecat[56]=12 safecat[57]=12 safecat[59]=12 safecat[60]=12 safecat[61]=12 safecat[62]=12 safecat[63]=12 safecat[65]=11 safecat[66]=11 safecat[67]=11 safecat[68]=11 safecat[69]=11 safecat[70]=11 safecat[71]=11 safecat[72]=11 safecat[73]=11 safecat[74]=11 safecat[75]=11 safecat[76]=11 safecat[77]=11 safecat[78]=11 safecat[79]=11 safecat[80]=11 safecat[81]=11 safecat[82]=11 safecat[83]=11 safecat[84]=11 safecat[85]=11 safecat[86]=11 safecat[87]=11 safecat[88]=11 safecat[89]=11 safecat[90]=11 safecat[91]=12 safecat[93]=12 safecat[96]=12 safecat[97]=11 safecat[98]=11 safecat[99]=11 safecat[100]=11 safecat[101]=11 safecat[102]=11 safecat[103]=11 safecat[104]=11 safecat[105]=11 safecat[106]=11 safecat[107]=11 safecat[108]=11 safecat[109]=11 safecat[110]=11 safecat[111]=11 safecat[112]=11 safecat[113]=11 safecat[114]=11 safecat[115]=11 safecat[116]=11 safecat[117]=11 safecat[118]=11 safecat[119]=11 safecat[120]=11 safecat[121]=11 safecat[122]=11 safecat[124]=12 cssafe[95]=true cssafe[58]=true cssafe[64]=true cssafe[35]=true
+safecat[33]=12 safecat[34]=12 safecat[36]=3 safecat[38]=4 safecat[39]=12 safecat[40]=12 safecat[41]=12 safecat[42]=12 safecat[43]=12 safecat[44]=12 safecat[45]=12 safecat[46]=12 safecat[47]=12 safecat[48]=12 safecat[49]=12 safecat[50]=12 safecat[51]=12 safecat[52]=12 safecat[53]=12 safecat[54]=12 safecat[55]=12 safecat[56]=12 safecat[57]=12 safecat[59]=12 safecat[60]=12 safecat[61]=12 safecat[62]=12 safecat[63]=12 safecat[65]=11 safecat[66]=11 safecat[67]=11 safecat[68]=11 safecat[69]=11 safecat[70]=11 safecat[71]=11 safecat[72]=11 safecat[73]=11 safecat[74]=11 safecat[75]=11 safecat[76]=11 safecat[77]=11 safecat[78]=11 safecat[79]=11 safecat[80]=11 safecat[81]=11 safecat[82]=11 safecat[83]=11 safecat[84]=11 safecat[85]=11 safecat[86]=11 safecat[87]=11 safecat[88]=11 safecat[89]=11 safecat[90]=11 safecat[91]=12 safecat[93]=12 safecat[96]=12 safecat[97]=11 safecat[98]=11 safecat[99]=11 safecat[100]=11 safecat[101]=11 safecat[102]=11 safecat[103]=11 safecat[104]=11 safecat[105]=11
+safecat[106]=11 safecat[107]=11 safecat[108]=11 safecat[109]=11 safecat[110]=11 safecat[111]=11 safecat[112]=11 safecat[113]=11 safecat[114]=11 safecat[115]=11 safecat[116]=11 safecat[117]=11 safecat[118]=11 safecat[119]=11 safecat[120]=11 safecat[121]=11 safecat[122]=11 safecat[124]=12 cssafe[95]=true cssafe[58]=true cssafe[64]=true cssafe[35]=true 
 
 for k, _ in pairs(safecat) do cssafe[k]=true end
 
@@ -105,7 +106,7 @@ end)
 L.protected_long_luadef("tlserialize_unchecked:Nn", function()
 	local target=L.get_argument_unbraced()
 	local tl=L.get_argument_braced()
-	L.set_macro(target, L.str_to_tl(tlserialize_unchecked(tl)))
+	L.set_macro(target, L.str_to_strtl(tlserialize_unchecked(tl)))
 end)
 
 function tldeserialize(s)
@@ -122,7 +123,7 @@ end
 L.protected_long_luadef("tldeserialize:Nn", function()
 	local target=L.get_argument_unbraced()
 	local tl=L.get_argument_braced()
-	L.set_macro(target, tldeserialize(L.tl_to_str(tl)))
+	L.set_macro(target, tldeserialize(L.strtl_to_str(tl)))
 end)
 
 function tlserialize_optional(tl)
@@ -143,7 +144,7 @@ L.protected_long_luadef("tlserialize:NnTF", function()
 	local false_branch=L.get_argument_braced()
 
 	local s, success=tlserialize_optional(tl)
-	L.set_macro(target, L.str_to_tl(s))
+	L.set_macro(target, L.str_to_strtl(s))
 
 	if success then token.put_next(true_branch) else token.put_next(false_branch) end
 end)

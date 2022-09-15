@@ -60,6 +60,14 @@
 
 \cs_new_eq:NN \pretty_check_already_init: \relax
 
+\prg_new_conditional:Npnn \pretty_if_initialized: {p, T, F, TF} {
+	\ifx \pretty_check_already_init: \relax
+		\prg_return_false:
+	\else
+		\prg_return_true:
+	\fi
+}
+
 \tl_gset:Nn \_prettytok_output_format {}
 
 \precattl_exec:n {
@@ -335,6 +343,7 @@
 \let\prettyX\pretty:x
 \let\prettyO\pretty:o
 \let\prettyV\pretty:V
+\let\prettyW\pretty:w
 \let\prettyeN\prettye:n
 \let\prettyeW\prettye:w
 

@@ -1,6 +1,8 @@
 \ProvidesExplPackage{imperative}{2022-06-17}{0.0.0}{Imperative-style programming for LaTeX}
 \RequirePackage{imperative_util}
 \RequirePackage{genvar}
+\RequirePackage{prettytok}
+\pretty_if_initialized:F { \prettyinitterm }
 \GenerateVariantsFile:n {imperative.sty}
 
 \msg_new:nnn {imperative} {cannot-rebuild-fn} {Library~function~\detokenize{#1}~cannot~be~rebuilt!}
@@ -237,4 +239,42 @@
 \imperative_metadef:Npn \putnextegroup {
 	\putnext{\iffalse{\fi}}
 	\expandonce
+}
+
+% check if #\content starts with #\prefix (prefix is a compile-time fixed value that does not contain # or {})
+
+%\imperative_metadef:Npn \ifstartswith #\content #\prefix #\truebranch #\falsebranch {
+%	\conditional{
+%		\zfunction{
+%			\matchrm {##a #\prefix ##_ \_imperative_q} 
+%			\return {
+%				\tl_if_empty:nTF {##a}
+%			}
+%		} #\content \_imperative_d #\prefix \_imperative_q
+%	} {#\truebranch} {#\falsebranch}
+%}
+
+
+
+% can leave out the truebranch and falsebranch here,
+% but this will probably give "missing brace" diagnostic slightly earlier.
+
+\imperative_metadef:Npn \ifcontains #\content #\inner #\truebranch #\falsebranch {
+	\conditional{
+		\zfunction{
+			\matchrm {##a #\inner ##_ \_imperative_d}
+		}
+
+			#\content \_imperative_d  % case 1: if #\inner appears inside #\content then the first \_imperative_d match will ends here
+			% then the function below will be executed which returns the true branch
+			\zfunction{\matchrm{##_ \_imperative_d \use_ii:nn ##a ##b} \return{##a}}
+
+			#\inner \_imperative_d  % case 2: otherwise, the first #\_imperative_d match will ends here
+			% then the function below will be executed which returns the false branch
+			\use_ii:nn
+	} {#\truebranch} {#\falsebranch}
+}
+
+\imperative_metadef:Npn \ifstartswith #\content #\prefix #\truebranch #\falsebranch {
+	\ifcontains {\_imperative_s #\content} {\_imperative_s #\prefix} {#\truebranch} {#\falsebranch}
 }

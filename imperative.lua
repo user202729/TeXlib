@@ -120,15 +120,17 @@ end
 
 local function preprocess_line_number(s)  -- speed up https://tex.stackexchange.com/q/147966/250119
 	s=tostring(s)
-	if imperative_debug then
+	--if imperative_debug then
 		return s  -- for readability
-	else
-		local result=s:sub(1, 1)
-		for i=2, #s do
-			result=result.."..."..s:sub(i, i)
-		end
-		return result
-	end
+		-- actually using the token does not incur extra cost because of hashing, only creating them does
+		-- can just ignore?
+	--else
+	--	local result=s:sub(1, 1)
+	--	for i=2, #s do
+	--		result=result.."..."..s:sub(i, i)
+	--	end
+	--	return result
+	--end
 end
 
 imperative_prefix="stzz"
@@ -190,7 +192,7 @@ local function populatelinenumber(body) -- return new table with _linenumber pro
 	return result
 end
 
-local pending_definitions={}  -- list of {paramtext=paramtext, replacementtext=replacementtext, (something else)}
+pending_definitions={}  -- list of {paramtext=paramtext, replacementtext=replacementtext, (something else)}
 -- possible keys: see function finalize_generate_code() below
 
 local standard_paramtext
@@ -663,6 +665,9 @@ local command_handler={
 	ucalllocal=function(selftoken, lastlinenumber, stack, add_statement, context)
 		stack[#stack+1]=faketoken "expcall"
 	end,
+	ucallpeek=function(selftoken, lastlinenumber, stack, add_statement, context)
+		stack[#stack+1]=faketoken "expcallpeek"
+	end,
 
 	["return"]=function(selftoken, lastlinenumber, stack, add_statement, context)
 		local group=getbracegroup(stack)
@@ -735,6 +740,12 @@ local command_handler={
 	pretty=function(selftoken, lastlinenumber, stack, add_statement, context)
 		local content=getbracegroupinside(stack)
 		pushtostackfront(stack, {faketoken "expcall",
+			bgroup, faketoken "pretty:n", bgroup, faketoken("[L"..lastlinenumber.."]:")}, content, {egroup, egroup})
+	end,
+
+	prettye=function(selftoken, lastlinenumber, stack, add_statement, context)
+		local content=getbracegroupinside(stack)
+		pushtostackfront(stack, {faketoken "expcall",
 			bgroup, faketoken "prettye:n", bgroup, faketoken("[L"..lastlinenumber.."]:")}, content, {egroup, egroup})
 	end,
 
@@ -747,6 +758,24 @@ local command_handler={
 	prettyw=function(selftoken, lastlinenumber, stack, add_statement, context)
 		pushtostackfront(stack, {faketoken "expcallpeek", bgroup,
 			faketoken "prettye:nnw", bgroup, faketoken "continueblock", egroup, faketoken("[L"..lastlinenumber.."]:"),
+		egroup})
+	end,
+
+	futurelet=function(selftoken, lastlinenumber, stack, add_statement, context)
+		local targettoken=popstack(stack)
+		assert(targettoken.csname~=nil, "token is not assignable")
+		pushtostackfront(stack, {faketoken "ucallpeek", bgroup,
+			faketoken "tl_set:Nn", faketoken "_imperative_tmp", bgroup, faketoken "continueblock", egroup,
+			faketoken "futurelet", targettoken, faketoken "_imperative_tmp",
+		egroup})
+	end,
+
+	futureletnext=function(selftoken, lastlinenumber, stack, add_statement, context)
+		local targettoken=popstack(stack)
+		assert(targettoken.csname~=nil, "token is not assignable")
+		pushtostackfront(stack, {faketoken "ucallpeek", bgroup,
+			faketoken "tl_set:Nn", faketoken "_imperative_tmp", bgroup, faketoken "continueblock", egroup,
+			faketoken "afterassignment", faketoken "_imperative_tmp", faketoken "futurelet", targettoken, 
 		egroup})
 	end,
 }
@@ -1187,8 +1216,8 @@ local compile_outer_handler={
 	imperativesetprefix=function(stack, body, scope, lastlinenumber)
 		local prefix_tl=getbracegroupinside(stack)
 		local prefix=""
-		for t in prefix_tl do
-			assertf(t.csname==nil, "imperativeprefix contain control sequence or active character")
+		for _, t in ipairs(prefix_tl) do
+			assert(t.csname==nil, "imperativeprefix contain control sequence or active character")
 			prefix=prefix..utf8.char(t.mode)
 		end
 
@@ -1280,6 +1309,10 @@ local compile_outer_handler={
 				{faketoken "scope"}, name_seq_as_args  -- such as \scope #a #b
 				))
 	end,
+
+	--scopeanalysis=function(stack, body, scope, lastlinenumber)
+	--	pushtostackfront(stack, {faketoken "scope", paramsign, token.create "token", paramsign, token.create "char", paramsign, token.create "cat"})
+	--end,
 }
 
 
@@ -1460,7 +1493,7 @@ function debug_rdef()
 	end
 end
 
-local function get_execute_pending_definitions_tl(pending_definitions)
+function get_execute_pending_definitions_tl(pending_definitions)
 	local result={}
 	for _, pr in ipairs(pending_definitions) do
 		result=cati(result, {faketoken "long", faketoken "def"}, pr.paramtext, wrapinbracegroup(pr.replacementtext))
@@ -2040,7 +2073,7 @@ end
 
 function cmd_imperative_run()
 	local result=(compile_outer(token.scan_toks()))
-	-- brace to get first return value only.
+	-- parenthesis to get first return value only.
 
 	optimize_pending_definitions()
 	if imperative_debug then

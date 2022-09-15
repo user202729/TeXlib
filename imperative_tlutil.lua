@@ -595,10 +595,13 @@ function F.substitute_replacementtext_symbolic(replacementtext, args)
 		if is_paramsign(replacementtext[i]) then
 			assert(i+1<=n)
 			if is_paramsign(replacementtext[i+1]) then
-				result[#result+1]=replacementtext[i]
 				result[#result+1]=replacementtext[i+1]
 			else
-				appendto(result, args[replacementtext[i+1].tok])
+				local c=args[replacementtext[i+1].tok]
+				if c==nil then
+					errorx("metadef variable ",replacementtext[i+1], " not found")
+				end
+				appendto(result, c)
 			end
 			i=i+2
 		else

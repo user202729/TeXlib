@@ -7,6 +7,11 @@
 
 \ExplSyntaxOn
 \begin{imperativerun}
+
+\typeout {}
+\typeout {}
+\typeout {}
+
 \tl_analysis_map_inline:nn {
    ! "   $   & ' ( ) * + , - . /
  0 1 2 3 4 5 6 7 8 9   ; < = > ?
@@ -17,7 +22,7 @@
 } \scope #\token #\char #\cat{
 \zblock{
 	\assignnumber #\catn{"#\cat}
-	\expcall{\pretty:n {safecat[#\char]=#\catn}}
+	\ucalllocal{\message{safecat[#\char]=#\catn}}
 }
 }
 
@@ -25,8 +30,15 @@
 \tl_analysis_map_inline:nn {
  _ : @ #
 } \scope #\token #\char #\cat{
-\pretty:n{cssafe[#\char]=true}
+\message{cssafe[#\char]=true}
 }
+
+% while { and } is safe in \csname...\endcsname it's not safe in \S{...} which is the method currently being used to generate control sequences
+
+\typeout {}
+\typeout {}
+\typeout {}
+
 \end{imperativerun}
 
 \end{document}

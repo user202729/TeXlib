@@ -515,7 +515,7 @@ function L.exp_e(...)
 end
 
 
-function L.tl_to_str(tl)
+function L.strtl_to_str(tl)
 	for i, v in ipairs(tl) do
 		assert(v.csname==nil)
 		if v.cmdname=="spacer" then
@@ -532,9 +532,9 @@ end
 
 local space_token=L.spaceT " "
 
-function L.str_to_tl(s)
+function L.utf8_code_iter_to_strtl(f, s, var)  -- such that (f, s, var) returns the utf8 code as the **second** argument each time
 	result={}
-	for _, c in utf8.codes(s) do
+	for _, c in f, s, var do
 		if c==32 then
 			result[#result+1]=space_token
 		else
@@ -542,6 +542,14 @@ function L.str_to_tl(s)
 		end
 	end
 	return result
+end
+
+function L.str_to_strtl(s)
+	return L.utf8_code_iter_to_strtl(utf8.codes(s))
+end
+
+function L.utf8_code_table_to_strtl(t)
+	return L.utf8_code_iter_to_strtl(ipairs(t))
 end
 
 function L.is_token(token_obj)
@@ -558,31 +566,31 @@ function L.is_tl(tl)
 	return true
 end
 
-function L.detokenize(tl)  -- return a token list of detokenized characters
+function L.detokenize(tl)
 	assert(L.is_tl(tl))
 	return L.exp_o({T.detokenize, bgroup}, tl, {egroup})
 end
-function L.detokenize_str(tl)  -- return a Lua string
+function L.detokenize_str(tl)
 	assertf(L.is_tl(tl), "%s is not a tl", tl)
-	return L.tl_to_str(L.detokenize(tl))
+	return L.strtl_to_str(L.detokenize(tl))
 end
 
-function L.meaning(token_obj)  -- return a token list of detokenized characters
+function L.meaning(token_obj)
 	assert(L.is_token(token_obj))
 	return L.exp_o{T.meaning, token_obj}
 end
-function L.meaning_str(token_obj)  -- return a Lua string
+function L.meaning_str(token_obj)
 	assert(L.is_token(token_obj))
-	return L.tl_to_str(L.meaning(token_obj))
+	return L.strtl_to_str(L.meaning(token_obj))
 end
 
-function L.stringify(token_obj)  -- return a token list of detokenized characters
+function L.stringify(token_obj)
 	assert(L.is_token(token_obj))
 	return L.exp_o{T.string, token_obj}
 end
-function L.stringify_str(token_obj)  -- return a Lua string
+function L.stringify_str(token_obj)
 	assert(L.is_token(token_obj))
-	return L.tl_to_str(L.stringify(token_obj))
+	return L.strtl_to_str(L.stringify(token_obj))
 end
 
 
@@ -607,6 +615,7 @@ L.runlocal{T.outer, T.def, Tprivate.tokenize_unbalanced_delimiter, L.otherT("?")
 
 
 function L.tokenize(str, setup)
+	assert(type(str)=="string", tostring(str).." is not a string")
 	L.runpeek(function()
 		tex.sprint {T.begingroup}
 		if setup~=nil then
@@ -711,7 +720,7 @@ end
 
 --function L.expl_tl(arg, result)
 
-L.runlocal(cati({T.expandafter, raw_get_next_token, T.ifnum}, L.str_to_tl "0=0", {T.fi}))
+L.runlocal(cati({T.expandafter, raw_get_next_token, T.ifnum}, L.str_to_strtl "0=0", {T.fi}))
 L.frozen_relax=next_token
 assert(L.frozen_relax.csname=="relax")
 

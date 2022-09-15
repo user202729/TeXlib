@@ -59,6 +59,8 @@ Throughout this document:
 \begin{itemize}
 	\item \meta{token object} is used to represent a Lua built-in token object.
 	\item \meta{token list} is used to represent a Lua integer-indexed table of \meta{token object}s.
+	\item \meta{strtl} is a \meta{token list} that consist of only detokenized characters, that is,
+		space tokens or tokens with catcode other and charcode different from space (32).
 	\item \meta{function} is used to represent a Lua function object.
 \end{itemize}
 
@@ -257,6 +259,8 @@ L.is_other(\meta{token object})        -> bool
 L.is_active(\meta{token object})       -> bool
 \end{syntax}
 Check if a token object is an explicit character of specified catcode.
+
+As above, \pkg{expl3}-naming style variants are also available, although not explicitly listed here.
 \end{luafn}
 
 
@@ -390,27 +394,34 @@ the tokens |{|\meta{\texttt{x}-expansion of \texttt{\textbackslash sometoken}}|}
 \end{luafn}
 
 
-\begin{luafn}{L.tl_to_str}
+\begin{luafn}{L.strtl_to_str}
 	\begin{syntax}
-		L.tl_to_str(\meta{token list}) -> string
+		L.tl_to_str(\meta{strtl}) -> string
 	\end{syntax}
-	Convert a token list consist of detokenized characters to Lua (UTF-8) string.
+	Convert a \meta{strtl} to Lua (UTF-8) string.
 
 	If the token list is not guaranteed to contain only detokenized characters, see |L.detokenize_str| instead.
 \end{luafn}
 
 \begin{luafn}{L.str_to_tl}
 	\begin{syntax}
-		L.str_to_tl(string) -> \meta{token list}
+		L.str_to_strtl(string) -> \meta{strtl}
 	\end{syntax}
-	Convert a (UTF-8) string to a token list consist of detokenized characters.
+	Convert a (UTF-8) string to a \meta{strtl}.
 
 	See also: |L.tokenize|.
 \end{luafn}
 
+\begin{luafn}{L.utf8_code_table_to_strtl}
+	\begin{syntax}
+		L.utf8_code_table_to_strtl(table) -> \meta{strtl}
+	\end{syntax}
+	Same as above, but takes a list of UTF-8 codes instead.
+\end{luafn}
+
 \begin{luafn}{L.detokenize}
 	\begin{syntax}
-		L.detokenize(\meta{token list}) -> \meta{token list}
+		L.detokenize(\meta{token list}) -> \meta{strtl}
 	\end{syntax}
 	Return the result of applying the \TeX\ primitive |\detokenize| on the token list.
 \end{luafn}
@@ -426,7 +437,7 @@ the tokens |{|\meta{\texttt{x}-expansion of \texttt{\textbackslash sometoken}}|}
 
 \begin{luafn}{L.meaning,L.meaning_str}
 	\begin{syntax}
-		L.meaning(\meta{token object}) -> \meta{token list}
+		L.meaning(\meta{token object}) -> \meta{strtl}
 		L.meaning_str(\meta{token object}) -> string
 	\end{syntax}
 	Return the result of applying the \TeX\ primitive |\meaning| on the token object.
@@ -434,7 +445,7 @@ the tokens |{|\meta{\texttt{x}-expansion of \texttt{\textbackslash sometoken}}|}
 
 \begin{luafn}{L.stringify,L.stringify_str}
 	\begin{syntax}
-		L.stringify(\meta{token object}) -> \meta{token list}
+		L.stringify(\meta{token object}) -> \meta{strtl}
 		L.stringify_str(\meta{token object}) -> string
 	\end{syntax}
 	Return the result of applying the \TeX\ primitive |\string| on the token object.
