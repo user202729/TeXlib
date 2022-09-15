@@ -1,0 +1,31 @@
+\usepackage{miniprep}
+\miniprep{test_miniprep}
+======== doc
+this is the doc.
+======== verbatim
+123
+456
+789
+======== verbatim
+123
+456
+789
+======== replace: _miniprep_
+show \__x
+======== ignore
+\ExplSyntaxOn
+======== precattl
+123\cO\x
+======== precat
+123{!"x  y"}
+======== expl_tokenize, precattl_raw, tlserialize
+123\cO\x
+======== imperative
+123\cO\x
+
+\zfunction{\return{123}}
+======== imperative
+123\cO\x
+
+\zfunction{\return{123}}
+

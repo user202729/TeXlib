@@ -1,0 +1,120 @@
+% an alternative for docstrip. Provides some more functionalities that I need in particular.
+% ========
+\ExplSyntaxOn
+
+\RequirePackage{saveenv}
+\RequirePackage{currfile}
+\RequirePackage{rescansync}
+\sys_if_engine_luatex:T {
+	\RequirePackage{tlserialize}
+	\RequirePackage{imperative}
+	\RequirePackage{luamacrohelper}
+}
+
+\begin{rescansyncRewriteenv}{\str_replace_all:Nnn #1 {__} {_miniprep_}}
+
+
+\iow_new:N \__input_file
+\iow_new:N \__output_file
+
+\tl_gset:Nn \miniprepoutputdirvalue {.}
+\cs_new_protected:Npn \miniprepoutputdir {\tl_gset:Nn \miniprepoutputdirvalue}
+
+\cs_new_protected:Npn \miniprep_generate:nnn #1 #2 #3 {
+	% #1 is the source file name
+	% #2 is the target file name
+	% #3 is the "mode" e.g. "doc" etc.
+
+
+	% we use TeX's file read/write instead of Lua's to use the same file look up algorithm (i.e. write to outputdir)
+	\ior_open:Nn \__input_file {#1}
+	\tl_build_begin:N \__data
+	\ior_str_map_inline:Nn \__input_file {\tl_build_put_right:Nn \__data {##1^^J}}
+	\tl_build_end:N \__data
+	\ior_close:N \__input_file
+
+	% now write to the output file
+	\iow_open:Nn \__output_file {#2}
+	\iow_now:Nx \__output_file {
+		\directlua{require"miniprep"("\luaescapestring{\__data}","\luaescapestring{#3}")}    %"%" fix my syntax highlighter
+	}
+	\iow_close:N \__output_file
+}
+
+% run this after generation is done.
+% Either stop the script (if #1 equal jobname) or input the generated sty file (at #2)
+
+% Because of the use of \endinput the whole file MUST NOT be tokenized in advance
+
+\cs_new_protected:Npn \miniprep_finalize:nn #1 #2 {
+	\str_if_eq:onTF {\jobname} {#1} {
+		% this script is run standalone. Exit after generating the sty file
+		\stop
+	} {
+		\input{#2.sty}
+		\endinput
+	}
+}
+
+\cs_new_protected:Npn \__spawn_prep_process:n #1 {
+	\typeout{
+		^^J^^J^^J^^J
+		========~Spawning~LuaLaTeX~to~prepare~file~========
+	}
+	\sys_shell_now:x {lualatex ~ --output-directory ~ "\miniprepoutputdirvalue" ~ #1-src.sty}
+	\typeout{
+		========~LuaLaTeX~finished~========
+		^^J^^J^^J^^J
+	}
+}
+
+\cs_new_protected:Npn \miniprep_only_recompile_when_source_changed: {
+	\cs_gset_eq:NN \miniprep_check_source_changed:TF \use_i:nn
+}
+\cs_new_protected:Npn \miniprep_always_recompile: {
+	\cs_gset_eq:NN \miniprep_check_source_changed:TF \use_ii:nn
+}
+\miniprep_only_recompile_when_source_changed:
+
+\cs_new_protected:Npn \miniprep:n #1 {  % #1 is the package name without -src or extension
+	\sys_if_engine_luatex:TF {
+		\miniprep_generate:nnn {#1-src.sty} {#1.sty} {}
+		\miniprep_generate:nnn {#1-src.sty} {#1-doc.tex} {doc}
+	} {
+		\miniprep_check_source_changed:TF {
+			% since spawning the shell is a bit expensive we don't do that unless the source file changed
+			\file_get:nnN {#1-md5.txt} {} \__old_hash
+			\file_get_mdfive_hash:nN {#1-src.sty} \__new_hash
+			\str_if_eq:VVF \__old_hash \__new_hash {
+				\iow_open:Nn \g_tmpa_iow {#1-md5.txt}
+				\iow_now:NV \g_tmpa_iow \__new_hash
+				\iow_close:N \g_tmpa_iow
+
+				\__spawn_prep_process:n {#1}
+			}
+		} {
+			% if the switch is off, always recompile
+			\__spawn_prep_process:n {#1}
+		}
+		\ifdefined\weird
+			\typeout{======== this should not happen ========}
+			\stop
+		\fi
+		\let\weird\empty
+	}
+	\miniprep_finalize:nn {#1-src} {#1}
+}
+
+\cs_new_eq:NN \miniprep \miniprep:n
+
+% ======== use these functions for standalone TeX file ========
+
+\cs_new_protected:Npn \minipreptex:n #1 {  % #1 is the TeX file name without extension
+	\miniprep_generate:nnn {#1.tex} {#1-miniprep-generated.tex} {}
+	\input{#1-miniprep-generated.tex}
+	\endinput
+}
+
+\cs_new_eq:NN \minipreptex \minipreptex:n
+
+\end{rescansyncRewriteenv}

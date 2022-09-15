@@ -1,0 +1,59 @@
+\ProvidesFile{miniprep.tex}[2022/08/03 0.0.0 Helper to prepare .sty file, alternative to docstrip program]
+\documentclass{l3doca}
+\begin{document}
+\GetFileInfo{\jobname.tex}
+\title{\pkg{\jobname} --- \fileinfo
+\thanks{This file describes version \fileversion, last revised \filedate.}
+}
+\author{user202729}
+\date{Released \filedate}
+
+\maketitle
+
+\begin{abstract}
+Helper to prepare .sty file. Alternative to docstrip program.
+\end{abstract}
+
+\section{Usage}
+
+For example, you have a sty file named \file{mypackage.sty}.
+
+Rename it to \file{mypackage-src.sty}, then
+add the following 2 lines at the start of the file to use this package's functionality:
+
+\begin{verbatim}
+\input{miniprep.tex}
+\miniprep{mypackage}
+\end{verbatim}
+
+Note that the |.sty| extension should not be included in the parameter.
+
+Optionally define |\miniprepoutputdir{/tmp/}| to specify a particular output directory.
+Required if the output directory is not the current directory and shell-escape mode is used (i.e. the compiler is not \LuaLaTeX).
+Remember to include the training slash, and don't try to put weird characters in the path.
+
+\section{Why not \pkg{docstrip}?}
+
+I think the main reason is that it's not easy to extend \pkg{docstrip} or \pkg{l3docstrip}
+to do what I want here. (preprocess the source code with some custom processor)
+
+\section{Why not \pkg{l3build}?}
+
+Not sure, actually.
+
+I might be reinventing some part of the code.
+
+Although \pkg{l3build} is more focused on the building part instead of the "preprocess the code" part.
+
+\section{Functionality}
+
+Without any change, when the package is run, it will compile \file{mypackage-src.sty}
+to \file{mypackage.sty}, then |\input| the resulting file, and execute |\endinput| on the current file.
+
+There are some special directive that invokes specific functionality.
+
+
+
+\PrintIndex
+
+\end{document}
