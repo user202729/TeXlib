@@ -1,0 +1,83 @@
+\ProvidesFile{utf8y.tex}[2022/09/17 0.0.0 Unicode characters defined in ucs/utf8x]
+\documentclass{l3doca}
+\begin{document}
+\GetFileInfo{\jobname.tex}
+\title{\pkg{\jobname} --- \fileinfo
+\thanks{This file describes version \fileversion, last revised \filedate.}
+}
+\author{user202729}
+\date{Released \filedate}
+\maketitle
+
+\begin{abstract}
+	Unicode characters defined in ucs/utf8x.
+\end{abstract}
+
+\section{Motivation}
+
+\pkg{utf8x} is mostly the only choice for Unicode-input for math formula nowadays, but it's
+rather annoying that it is
+\begin{itemize}
+	\item incompatible with many, many packages (\url{https://tex.stackexchange.com/q/13067/250119}), and
+	\item is only usable in PDFLaTeX.
+\end{itemize}
+
+If you do low-level TeX programming, you may also notice that
+\pkg{ucs}-declared macros does not work very well peeking forward
+(for example, in the following code
+\begin{verbatim}
+\def\mymacro#1{...}
+\DeclareUnicodeCharacter{8594}{\mymacro}
+
+→{123}
+\end{verbatim}
+where |8594| is the Unicode value of the character |→| in decimal,
+then the argument will not be equal to |123| when \pkg{ucs} is used)
+which is rather limiting.
+
+As such, this package allows entering Unicode character in the input
+without using \pkg{unicode-math}.
+
+For Unicode engines, only math-mode characters are defined.
+
+\section{Features}
+
+Mostly, all the characters that \pkg{ucs} supports are supported.
+
+Just like with the \pkg{ucs} package, sometimes you may get spurious "undefined control sequence" error, which happens
+because you may need to load some additional packages that defines particular commands to use the character (for example load \pkg{amssymb}
+so that |\emptyset| is defined to use $\emptyset$)
+
+The following features are not supported:
+
+\begin{itemize}
+	\item Combining characters: while it can be implemented, it requires either 
+		\begin{itemize}
+			\item scanning through the whole file in advance (thus needs something like \pkg{rescansync}
+				to avoid losing Sync\TeX\ data, but then the current approach only works in \LuaLaTeX\ so it's useless in this case), or
+			\item wrapping all the text that possibly use combining character within some command (and lose Sync\TeX\ data in that block)
+		\end{itemize}
+		In either case, it's not a very nice solution.
+
+	\item Most of the time |\ensuremath| around some characters are removed, as such they're only usable in math mode.
+\end{itemize}
+
+\section{Additional feature}
+
+In addition, if you type consecutive superscript/subscript characters in the source code, it will be converted to the correct sequence.
+
+\section{Implementation remark}
+
+Although all characters are ported from \pkg{ucs} package, only the characters that the package author frequently use is actually tested.
+
+First the bundle is downloaded from 
+\url{https://ctan.org/pkg/ucs}, then use the \TeX\ file to generate the output.
+
+For characters where the standard \pkg{inputenc} already defines a text-mode meaning, the new definition is defined to use |\ifmmode|.
+(thus, for example $\times$ is defined to be |\texttimes| in text mode, and |\times| in math mode)
+
+|\relax| is inserted before |\ifmmode| in such cases, to avoid constructs based on |\halign| expanding the head of a table cell.
+Refer to  the second double-bend paragraph in page 240 of the \TeX book if you don't understand what this sentence is about.
+
+\PrintIndex
+\end{document}
