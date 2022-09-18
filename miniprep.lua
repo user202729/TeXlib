@@ -85,6 +85,11 @@ return function(str, mode)
 			return table.concat(result)
 		end),
 
+		genvar=notdoc(function(code)
+			local genvar=require "genvar"
+			return genvar(code)..code
+		end),
+
 		debug=notdoc(function(code, arg)
 			if arg=="on" then
 				return code:gsub('debug%(%(', ''):gsub('debug%)%)', '')

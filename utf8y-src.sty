@@ -5,7 +5,7 @@
 %\miniprep_always_recompile:
 \miniprep{utf8y}
 
-======== debug: on, replace: _utfy_, imperative
+======== debug: on, replace: _utfy_, genvar, imperative
 
 \imperativesetprefix{_utfy_}
 
@@ -14,12 +14,10 @@
 
 \errorcontextlines=100
 
-\RequirePackage{genvar}
 \RequirePackage{imperative_util}
 debug((
 \RequirePackage{prettytok}
 debug))
-\GenerateVariantsFile:n{utf8y-src.sty}  % will fix later.
 
 
 \cs_new_protected:Npn \__default {}
