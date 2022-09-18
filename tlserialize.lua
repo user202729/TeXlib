@@ -60,7 +60,9 @@ function tlserialize_unchecked(tl)
 		if L.is_explicit_character(token_obj) then
 			local cat=L.get_catcode(token_obj)
 			local char=L.get_charcode(token_obj)
-			if brace_safe[index] or cat==safecat[char] then
+			if char>=0x80 then
+				cur="\\detokenize{" .. utf8.char(char) .. "}"  -- TODO temporary hack
+			elseif brace_safe[index] or cat==safecat[char] then
 				cur=utf8.char(char)
 			elseif cat==6 then
 				cur='\\P' .. char .. '.'

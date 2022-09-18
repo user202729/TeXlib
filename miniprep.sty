@@ -51,7 +51,11 @@
 		% this script is run standalone. Exit after generating the sty file
 		\stop
 	} {
-		\input{#2.sty}
+		%\str_if_eq:VnTF \miniprepoutputdirvalue {.} {
+		%	\input{#2.sty}
+		%} {
+			\input{\miniprepoutputdirvalue / #2.sty}
+		%}
 		\endinput
 	}
 }
@@ -116,5 +120,7 @@
 }
 
 \cs_new_eq:NN \minipreptex \minipreptex:n
+
+\cs_generate_variant:Nn \iow_now:Nn {NV}
 
 \end{rescansyncRewriteenv}

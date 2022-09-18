@@ -1,0 +1,243 @@
+% ======== handle superscript and subscript characters.
+
+
+\ExplSyntaxOn
+\makeatletter
+\RequirePackage{miniprep}
+\miniprepoutputdir{/tmp/}
+\miniprep_always_recompile:
+\miniprep{utf8y-a-script}
+
+======== debug: on, replace: _utfy_, imperative
+
+
+\imperativesetprefix{_utfy_}
+%\RequirePackage{genvar}
+\RequirePackage{imperative_util}
+%\GenerateVariantsFile:n{utf8y-a-script-src.sty}  % will fix later.
+
+
+% ======== these functions assumes control sequence consist of a single UTF-8 high byte does not exist...
+
+% \__brace_next:TF {true} {false} abc ≡ false abc
+% \__brace_next:TF {true} {false} αβγ ≡ true {α}βγ
+% true code is executed only if the next UTF8 character has code > "7F
+\cs_new_protected:Npn \__brace_next:TF \scopevar #\true #\false {
+	\peek_N_type:TF {
+		\zblock{
+			\matchrm {#\nexttoken} \putnext {#\nexttoken}
+			\return {
+				\int_compare:nNnTF {\str_count:n {#\nexttoken}} = {1} {
+					debug((
+						\begingroup \expandafter \endgroup  % if the control sequence is undefined this will raise error
+					debug))
+					\csname __brace_handle_\string #\nexttoken \endcsname {#\true} {#\false}
+				} {
+					#\false
+				}
+			}
+		}
+	} {
+		#\false
+	}
+}
+
+%% check if next character is some UTF-8 character with code > "7F
+%\cs_new_protected:Npn \__if_next_high:TF \scopevar #\true #\false {
+%	\peek_N_type:TF {
+%		\zblock{
+%			\matchrm {#\nexttoken} \putnext {#\nexttoken}
+%			\return {
+%				\int_compare:nNnTF {\str_count:n {#\nexttoken}} = {1} {
+%					\int_compare:nNnTF {`#\nexttoken} > {"7F} {#\true} {#\false}
+%				} {
+%					#\false
+%				}
+%			}
+%		}
+%	} {
+%		#\false
+%	}
+%}
+
+
+\def \__brace_error #1 #2             {\errmessage{!"Invalid UTF-8 byte"} #2}
+\def \__brace_two   #1 #2 #3 #4       {#1 {#3 #4}}
+\def \__brace_three #1 #2 #3 #4 #5    {#1 {#3 #4 #5}}
+\def \__brace_four  #1 #2 #3 #4 #5 #6 {#1 {#3 #4 #5 #6}}
+
+\int_step_inline:nnn {"00} {"7F} {
+	\expandafter\let\csname __brace_handle_ \char_generate:nn {#1} {12} \endcsname
+		\use_ii:nn
+}
+\int_step_inline:nnn {"80} {"BF} {
+	\expandafter\let\csname __brace_handle_ \char_generate:nn {#1} {12} \endcsname
+		\__brace_error
+}
+\int_step_inline:nnn {"C0} {"DF} {
+	\expandafter\let\csname __brace_handle_ \char_generate:nn {#1} {12} \endcsname
+		\__brace_two
+}
+\int_step_inline:nnn {"E0} {"EF} {
+	\expandafter\let\csname __brace_handle_ \char_generate:nn {#1} {12} \endcsname
+		\__brace_three
+}
+\int_step_inline:nnn {"F0} {"F7} {
+	\expandafter\let\csname __brace_handle_ \char_generate:nn {#1} {12} \endcsname
+		\__brace_four
+}
+\int_step_inline:nnn {"F8} {"FF} {
+	\expandafter\let\csname __brace_handle_ \char_generate:nn {#1} {12} \endcsname
+		\__brace_error
+}
+
+
+
+% ======== superscript/subscript handling
+
+\cs_new_protected:Npn \__collect_superscript \scopevar #\collected {
+	\__brace_next:TF {
+		\zblock{
+			\matchrm{#\char}
+			\texconditional{\ifcsname __superscript_meaning_#\char \endcsname}{
+				\assignoo #\morecollect {\csname __superscript_meaning_#\char \endcsname}
+				\return {\__collect_superscript {#\collected #\morecollect}}
+			}{
+				\return{^{#\collected} #\char}
+			}
+		}
+	} {
+		^{#\collected}
+	}
+}
+
+\cs_new_protected:Npn \__collect_subscript \scopevar #\collected {
+	\__brace_next:TF {
+		\zblock{
+			\matchrm{#\char}
+			\texconditional{\ifcsname __subscript_meaning_#\char \endcsname}{
+				\assignoo #\morecollect {\csname __subscript_meaning_#\char \endcsname}
+				\return {\__collect_subscript {#\collected #\morecollect}}
+			}{
+				\return{\sb{#\collected} #\char}
+			}
+		}
+	} {
+		\sb{#\collected}
+	}
+}
+
+\cs_new_protected:Npn \__setup_superscript:nn \scopevar #\char #\meaning {
+	\expandafter\def\csname __superscript_meaning_#\char\endcsname {#\meaning}
+	\expandafter\def\csname u8:#\char \endcsname {\__collect_superscript {#\meaning}}
+}
+
+\cs_new_protected:Npn \__setup_subscript:nn \scopevar #\char #\meaning {
+	\expandafter\def\csname __subscript_meaning_#\char\endcsname {#\meaning}
+	\expandafter\def\csname u8:#\char \endcsname {\__collect_subscript {#\meaning}}
+}
+
+
+\__setup_superscript:nn {⁰} {0}
+\__setup_superscript:nn {¹} {1}
+\__setup_superscript:nn {²} {2}
+\__setup_superscript:nn {³} {3}
+\__setup_superscript:nn {⁴} {4}
+\__setup_superscript:nn {⁵} {5}
+\__setup_superscript:nn {⁶} {6}
+\__setup_superscript:nn {⁷} {7}
+\__setup_superscript:nn {⁸} {8}
+\__setup_superscript:nn {⁹} {9}
+\__setup_superscript:nn {⁺} {+}
+\__setup_superscript:nn {⁻} {-}
+\__setup_superscript:nn {⁼} {=}
+\__setup_superscript:nn {⁽} {(}
+\__setup_superscript:nn {⁾} {)}
+\__setup_superscript:nn {ᴬ} {A}
+\__setup_superscript:nn {ᴮ} {B}
+\__setup_superscript:nn {ᴰ} {D}
+\__setup_superscript:nn {ᴱ} {E}
+\__setup_superscript:nn {ᴳ} {G}
+\__setup_superscript:nn {ᴴ} {H}
+\__setup_superscript:nn {ᴵ} {I}
+\__setup_superscript:nn {ᴶ} {J}
+\__setup_superscript:nn {ᴷ} {K}
+\__setup_superscript:nn {ᴸ} {L}
+\__setup_superscript:nn {ᴹ} {M}
+\__setup_superscript:nn {ᴺ} {N}
+\__setup_superscript:nn {ᴼ} {O}
+\__setup_superscript:nn {ᴾ} {P}
+\__setup_superscript:nn {ᴿ} {R}
+\__setup_superscript:nn {ᵀ} {T}
+\__setup_superscript:nn {ᵁ} {U}
+\__setup_superscript:nn {ⱽ} {V}
+\__setup_superscript:nn {ᵂ} {W}
+\__setup_superscript:nn {ᵃ} {a}
+\__setup_superscript:nn {ᵇ} {b}
+\__setup_superscript:nn {ᶜ} {c}
+\__setup_superscript:nn {ᵈ} {d}
+\__setup_superscript:nn {ᵉ} {e}
+\__setup_superscript:nn {ᶠ} {f}
+\__setup_superscript:nn {ᵍ} {g}
+\__setup_superscript:nn {ʰ} {h}
+\__setup_superscript:nn {ⁱ} {i}
+\__setup_superscript:nn {ʲ} {j}
+\__setup_superscript:nn {ᵏ} {k}
+\__setup_superscript:nn {ˡ} {l}
+\__setup_superscript:nn {ᵐ} {m}
+\__setup_superscript:nn {ⁿ} {n}
+\__setup_superscript:nn {ᵒ} {o}
+\__setup_superscript:nn {ᵖ} {p}
+\__setup_superscript:nn {ʳ} {r}
+\__setup_superscript:nn {ˢ} {s}
+\__setup_superscript:nn {ᵗ} {t}
+\__setup_superscript:nn {ᵘ} {u}
+\__setup_superscript:nn {ᵛ} {v}
+\__setup_superscript:nn {ʷ} {w}
+\__setup_superscript:nn {ˣ} {x}
+\__setup_superscript:nn {ʸ} {y}
+\__setup_superscript:nn {ᶻ} {z}
+\__setup_superscript:nn {ᵝ} {\beta}
+\__setup_superscript:nn {ᵞ} {\gamma}
+\__setup_superscript:nn {ᵟ} {\delta}
+\__setup_superscript:nn {ᵠ} {\phi}
+\__setup_superscript:nn {ᵡ} {\chi}
+\__setup_superscript:nn {ᶿ} {\theta}
+
+\__setup_subscript:nn {₀} {0}
+\__setup_subscript:nn {₁} {1}
+\__setup_subscript:nn {₂} {2}
+\__setup_subscript:nn {₃} {3}
+\__setup_subscript:nn {₄} {4}
+\__setup_subscript:nn {₅} {5}
+\__setup_subscript:nn {₆} {6}
+\__setup_subscript:nn {₇} {7}
+\__setup_subscript:nn {₈} {8}
+\__setup_subscript:nn {₉} {9}
+\__setup_subscript:nn {₊} {+}
+\__setup_subscript:nn {₋} {-}
+\__setup_subscript:nn {₌} {=}
+\__setup_subscript:nn {₍} {(}
+\__setup_subscript:nn {₎} {)}
+\__setup_subscript:nn {ₐ} {a}
+\__setup_subscript:nn {ₑ} {e}
+\__setup_subscript:nn {ₕ} {h}
+\__setup_subscript:nn {ᵢ} {i}
+\__setup_subscript:nn {ⱼ} {j}
+\__setup_subscript:nn {ₖ} {k}
+\__setup_subscript:nn {ₗ} {l}
+\__setup_subscript:nn {ₘ} {m}
+\__setup_subscript:nn {ₙ} {n}
+\__setup_subscript:nn {ₒ} {o}
+\__setup_subscript:nn {ₚ} {p}
+\__setup_subscript:nn {ᵣ} {r}
+\__setup_subscript:nn {ₛ} {s}
+\__setup_subscript:nn {ₜ} {t}
+\__setup_subscript:nn {ᵤ} {u}
+\__setup_subscript:nn {ᵥ} {v}
+\__setup_subscript:nn {ₓ} {x}
+\__setup_subscript:nn {ᵦ} {\beta}
+\__setup_subscript:nn {ᵧ} {\gamma}
+\__setup_subscript:nn {ᵨ} {\rho}
+\__setup_subscript:nn {ᵩ} {\phi}
+\__setup_subscript:nn {ᵪ} {\chi}
