@@ -1,8 +1,0 @@
-\ProvidesExplPackage{peekprint}{2022/03/26}{0.0.0}{Debugging function, print following content in the input stream}
-
-\def \peekprint #1 \peekprintend {
-	\wlog{PEEKPRINT~\detokenize{#1}}
-	#1
-	\peekprintend
-}
-\let \peekprintend \relax
