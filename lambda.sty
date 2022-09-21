@@ -1,7 +1,0 @@
-\ProvidesExplPackage{lambda}{2022/04/17}{0.0.0}{Define lambda command in TeX}
-\RequirePackage{luacr}
-
-\directlua{require "lambda"}
-\cs_set_protected:Npn \lambdacompile:n #1 {
-	\directlua{lambda.compile()}
-}
