@@ -18,6 +18,7 @@ import tempfile
 import signal
 import traceback
 import time
+import re
 
 
 def user_documentation(x: Union[Callable, str])->Any:
@@ -58,18 +59,18 @@ if args.mode=="multiprocessing_network":
 
 elif args.mode=="unnamed_pipe":
 	pytotex_pid_line=raw_readline()
-	import re
 	match_=re.fullmatch("pytotex_pid=(\d+)\n", pytotex_pid_line)
+	assert match_
 	pytotex_pid=int(match_[1])
 
-	connection=open("/proc/" + str(pytotex_pid) + "/fd/0", "w", encoding='u8',
+	connection_=open("/proc/" + str(pytotex_pid) + "/fd/0", "w", encoding='u8',
 			buffering=1  # line buffering
 			)
 
 	def send_raw(s: str)->None:
-		global connection
-		connection.write(s)
-		connection.flush()  # just in case
+		global connection_
+		connection_.write(s)
+		connection_.flush()  # just in case
 
 else:
 	assert False
@@ -83,7 +84,7 @@ pythonimmediate.__file__="pythonimmediate.py"
 sys.modules["pythonimmediate"]=pythonimmediate
 
 
-def export_function_to_module(f):
+def export_function_to_module(f: Callable)->Callable:
 	"""
 	the functions decorated with this decorator are accessible from user code with
 
@@ -96,7 +97,7 @@ def export_function_to_module(f):
 action_done=False
 
 
-def check_not_finished():
+def check_not_finished()->None:
 	global action_done
 	if action_done:
 		raise RuntimeError("can only do one action per block!")
@@ -128,6 +129,30 @@ def mark_bootstrap(code: str)->None:
 	bootstrap_code+=code
 
 
+# when 'i⟨string⟩' is sent from TeX to Python, the function with index ⟨string⟩ in this dict is called
+TeX_handlers: dict[str, Callable[[], None]]={}
+
+TeXToPyObjectType=Optional[str]
+
+def run_main_loop()->TeXToPyObjectType:
+	while True:
+		line=readline()
+		if not line: return None
+
+		if line[0]=="i":
+			TeX_handlers[line[1:]]()
+		elif line[0]=="r":
+			return line[1:]
+		else:
+			raise RuntimeError("Internal error: unexpected line "+line)
+
+def run_main_loop_get_return_one()->str:
+	line=readline()
+	assert line is not None
+	assert line[0]=="r"
+	return line[1:]
+
+
 
 user_documentation(
 """
@@ -157,7 +182,6 @@ In other words, |run_*_local(code)| is almost identical to |run_*_peek(code + "\
 def run_block_finish(block: str)->None:
 	send_finish("block\n" + surround_delimiter(block))
 
-TeXToPyObjectType=Optional[str]
 
 mark_bootstrap(
 r"""
@@ -271,7 +295,7 @@ def run_error_finish()->None:
 
 
 
-#def on_signal_function(signal_number, stack_frame):
+#def on_signal_function(signal_number, stack_frame)->None:
 #	debug("======== signal")
 #	traceback.print_stack(file=sys.stderr)
 #	
@@ -280,7 +304,7 @@ def run_error_finish()->None:
 
 if 0:
 	import atexit
-	def atexit_function():
+	def atexit_function()->None:
 		debug("======== die")
 		traceback.print_stack(file=sys.stderr)
 	atexit.register(atexit_function)
@@ -288,11 +312,15 @@ if 0:
 
 
 
-user_scope: dict={}  # consist of user's local variables etc.
+user_scope: dict[str, Any]={}  # consist of user's local variables etc.
 
+# this makes sure if TeX process errors out everything will only be printed once
+# (I think? run_main_loop() might be called recursively...)
+# actually it's probably unnecessary because raise RuntimeError() will halt the Python process
+# what if the error is caught?...
 traceback_already_printed_on_TeX_error=False
 
-def readline()->Optional[str]:
+def readline(allow_nothing=False)->Optional[str]:
 	global traceback_already_printed_on_TeX_error
 	line=raw_readline()
 	if not line:
@@ -301,9 +329,11 @@ def readline()->Optional[str]:
 			#print("\n\nTraceback (most recent call last):", file=sys.stderr)
 			#traceback.print_stack(file=sys.stderr)
 			#print("Runtime", file=sys.stderr)
-			raise RuntimeError("Cannot receive message from TeX -- perhaps a TeX error occurred?")
-		
-		return None
+
+		if allow_nothing:
+			return None
+		raise RuntimeError("Cannot receive message from TeX -- perhaps a TeX error occurred?")
+
 	assert line[-1]=='\n'
 	line=line[:-1]
 	debug("======== saw line", line)
@@ -325,7 +355,7 @@ def read_block()->str:
 		else:
 			lines.append(line)
 
-def wrap_executor(f):
+def wrap_executor(f: Callable[..., None])->Callable:
 	"""
 	some internal function. I don't know how to explain this but it works.
 
@@ -333,7 +363,7 @@ def wrap_executor(f):
 	then it must be a "executor"...?
 	"""
 	@functools.wraps(f)
-	def result(*args, **kwargs):
+	def result(*args, **kwargs)->None:
 		global action_done
 		old_action_done=action_done
 
@@ -364,6 +394,9 @@ def run_python_block()->None:
 	debug("executing", content)
 	exec(content, user_scope)
 
+assert "" not in TeX_handlers
+TeX_handlers[""]=run_python_block
+
 def send_bootstrap_code()->None:
 	global bootstrap_code
 	code = (bootstrap_code
@@ -372,27 +405,16 @@ def send_bootstrap_code()->None:
 		 )
 	send_raw(surround_delimiter(code))
 
-def run_main_loop()->TeXToPyObjectType:
-	while True:
-		line=readline()
-		if not line: return None
-
-		if line[0]=="i":
-			if len(line)==1:
-				run_python_block()
-			else:
-				globals()[line[1:]]()
-		elif line[0]=="r":
-			return line[1:]
-		else:
-			raise RuntimeError("Internal error: unexpected line "+line)
-
 # ======== implementation of |\py| etc. Doesn't support verbatim argument yet. ========
 
-def define_handler(f: Callable)->Callable:
+def define_generic_handler(user: bool, f: Callable, name: str=None)->Callable:
 	num_arg = len(inspect.signature(f).parameters)
-	assert f.__name__.endswith("_handler")
-	name = f.__name__.removesuffix("_handler")
+	if name is None:
+		assert f.__name__.endswith("_handler")
+		name = f.__name__.removesuffix("_handler")
+
+	assert name not in TeX_handlers
+	assert name.startswith("u") == user
 
 	TeX_send_block_commands = ""
 	TeX_argspec = ""
@@ -403,17 +425,20 @@ def define_handler(f: Callable)->Callable:
 	mark_bootstrap(
 	"""
 	\\cs_new_protected:Npn \\""" + name + TeX_argspec + """ {
-		\immediate \write \__write_file { i """ + name + """_handler }
+		\immediate \write \__write_file { i """ + name + """ }
 		""" + TeX_send_block_commands + """
 		\__read_do_one_command:
 	}
 	""")
 	@functools.wraps(f)
-	def result():
+	def result()->Callable:
 		args=[read_block() for _ in range(num_arg)]
 		return wrap_executor(f)(*args)
+	TeX_handlers[name]=result
 	return result
 
+define_internal_handler=functools.partial(define_generic_handler, False)
+define_user_handler=functools.partial(define_generic_handler, True)
 
 import linecache
 
@@ -429,30 +454,50 @@ def exec_or_eval_with_linecache(code: str, globals: dict, mode: str)->Any:
 	linecache.cache[sourcename] = len(code), None, lines, sourcename
 
 	compiled_code=compile(code, sourcename, mode)
-	result=(exec if mode=="exec" else eval)(compiled_code, globals)
+	return (exec if mode=="exec" else eval)(compiled_code, globals)
 
-	# here the cache data is deleted; however it's **not** deleted if the code throws an error...
-	# which is a bit wasteful but overall not a big issue
-	del linecache.cache[sourcename]
+	#del linecache.cache[sourcename]
+	# we never delete the cache, in case some function is defined here then later are called...
 
-	return result
-
-def exec_with_linecache(code: str, globals: dict)->None:
+def exec_with_linecache(code: str, globals: dict[str, Any])->None:
 	exec_or_eval_with_linecache(code, globals, "exec")
 
-def eval_with_linecache(code: str, globals: dict)->Any:
+def eval_with_linecache(code: str, globals: dict[str, Any])->Any:
 	return exec_or_eval_with_linecache(code, globals, "eval")
 
 
-@define_handler
+@define_internal_handler
 def py_handler(code: str)->None:
 	pythonimmediate.run_block_finish(str(eval_with_linecache(code, user_scope))+"%")
 
-@define_handler
-def pyc_handler(code: str)->None:
+def print_TeX(*args, **kwargs)->None:
+	if not hasattr(pythonimmediate, "file"):
+		raise RuntimeError("Internal error: attempt to print to TeX outside any environment!")
+	if pythonimmediate.file is not None:
+		functools.partial(print, file=pythonimmediate.file)(*args, **kwargs)  # allow user to override `file` kwarg
+pythonimmediate.print=print_TeX
+
+class RedirectPrintTeX:
+	def __init__(self, t)->None:
+		self.t=t
+
+	def __enter__(self)->None:
+		if hasattr(pythonimmediate, "file"):
+			self.old=pythonimmediate.file
+		pythonimmediate.file=self.t
+
+	def __exit__(self, exc_type, exc_value, tb)->None:
+		if hasattr(self, "old"):
+			pythonimmediate.file=self.old
+		else:
+			del pythonimmediate.file
+
+def run_code_redirect_print_TeX(f: Callable[[], Any])->None:
 	with io.StringIO() as t:
-		with contextlib.redirect_stdout(t):
-			exec_with_linecache(code, user_scope)
+		with RedirectPrintTeX(t):
+			result=f()
+			if result is not None:
+				t.write(str(result)+"%")
 		content=t.getvalue()
 		if content.endswith("\n"):
 			content=content[:-1]
@@ -461,19 +506,27 @@ def pyc_handler(code: str)->None:
 			content+="%"
 		pythonimmediate.run_block_finish(content)
 
-@define_handler
+@define_internal_handler
+def pyc_handler(code: str)->None:
+	run_code_redirect_print_TeX(lambda: exec_with_linecache(code, user_scope))
+
+@define_internal_handler
 def pycq_handler(code: str)->None:
-	with contextlib.redirect_stdout(None):
+	with RedirectPrintTeX(None):
 		exec_with_linecache(code, user_scope)
 	run_none_finish()
 
+mark_bootstrap(
+r"""
+\NewDocumentCommand\pyv{v}{\py{#1}}
+""")
 
 # ======== implementation of |pycode| environment
 mark_bootstrap(
 r"""
 \NewDocumentEnvironment{pycode}{}{
 	\saveenvreinsert \__code {
-		\exp_last_unbraced:Nx \pycodex {{\__code} {\the\inputlineno} {
+		\exp_last_unbraced:Nx \pycodex {{\__code ^^J} {\the\inputlineno} {
 			\ifdefined\currfilename \currfilename \fi
 		} {
 			\ifdefined\currfileabspath \currfileabspath \fi
@@ -487,30 +540,41 @@ r"""
 def normalize_lines(lines: list[str])->list[str]:
 	return [line.rstrip() for line in lines]
 
-@define_handler
+@define_internal_handler
 def pycodex_handler(code: str, lineno_: str, filename: str, fileabspath: str)->None:
 	lineno=int(lineno_)
 	# find where the code comes from... (for easy meaningful traceback)
 	target_filename: Optional[str] = None
 
-	code_lines_normalized=normalize_lines(code.splitlines())
+	code_lines_normalized=normalize_lines(code.splitlines(keepends=True))
 
 	for f in (fileabspath, filename):
 		if not f: continue
 		p=Path(f)
 		if not p.is_file(): continue
-		file_lines=p.read_text().splitlines()[lineno-len(code_lines_normalized)-1:lineno-1]
+		file_lines=p.read_text().splitlines(keepends=True)[lineno-len(code_lines_normalized)-1:lineno-1]
+		#print()
+		#print()
+		#print("========")
+		#for line in normalize_lines(file_lines): print(line)
+		#print("========")
+		#for line in code_lines_normalized: print(line)
+		#print(repr(code))
+		#print("========")
+		#print(lineno)
+		#print()
+		#print()
 		if normalize_lines(file_lines)==code_lines_normalized:
 			target_filename=f
 			break
 
 	if not target_filename:
-		raise RuntimeError("Source file not found!")
+		raise RuntimeError("Source file not found! (attempted {})".format((fileabspath, filename)))
 
 	with io.StringIO() as t:
-		with contextlib.redirect_stdout(t):
+		with RedirectPrintTeX(t):
 			if target_filename:
-				code='\n'.join(file_lines)  # restore missing trailing spaces
+				code=''.join(file_lines)  # restore missing trailing spaces
 			code="\n"*(lineno-len(code_lines_normalized)-1)+code
 			if target_filename:
 				compiled_code=compile(code, target_filename, "exec")
@@ -518,8 +582,196 @@ def pycodex_handler(code: str, lineno_: str, filename: str, fileabspath: str)->N
 			else:
 				exec(code, user_scope)
 		pythonimmediate.run_block_finish(t.getvalue())
+
+# ======== additional functions...
+
+user_documentation(
+r"""
+These functions get an argument in the input stream and returns it detokenized.
+
+Which means, for example, |#| are doubled, multiple spaces might be collapsed into one, spaces might be introduced
+after a control sequence.
+
+It's undefined behavior if the message's "string representation" contains a "newline character".
+""")
+
+
+mark_bootstrap(
+r"""
+\cs_new_protected:Npn \__run_getargd: #1 {
+	\pythonimmediatecontinue {\unexpanded{#1}}
+}
+""")
+@export_function_to_module
+@user_documentation
+def get_argument_detokenized()->str:
+	"""
+	Get a mandatory argument.
+	"""
+	check_not_finished()
+	send_raw("getargd\n")
+	return run_main_loop_get_return_one()
+
+mark_bootstrap(
+r"""
+\NewDocumentCommand \__run_getargod: {o} {
+	\IfNoValueTF {#1} {
+		\pythonimmediatecontinue {0}
+	} {
+		\pythonimmediatecontinue {1\unexpanded{#1}}
+	}
+}
+""")
+@export_function_to_module
+@user_documentation
+def get_optional_argument_detokenized()->Optional[str]:
+	"""
+	Get an optional argument.
+	"""
+	check_not_finished()
+	send_raw("getargod\n")
+	result=run_main_loop_get_return_one()
+	if result=="0": return None
+	assert result[0]=="1"
+	return result[1:]
+
+
+mark_bootstrap(
+r"""
+\NewDocumentCommand \__run_getargv: {v} {
+	\pythonimmediatecontinue {\unexpanded{#1}}
+}
+""")
+@export_function_to_module
+@user_documentation
+def get_verbatim_argument()->str:
+	"""
+	Get a verbatim argument. Since it's verbatim, there's no worry of |#| being doubled,
+	but it can only be used at top level.
+	"""
+	check_not_finished()
+	send_raw("getargv\n")
+	return run_main_loop_get_return_one()
+
+mark_bootstrap(
+r"""
+\NewDocumentCommand \__run_getarglv: {+v} {
+	\begingroup
+		\newlinechar=13~  % this is what +v argument type in xparse uses
+		\__send_block:n { #1 }
+	\endgroup
+	\__read_do_one_command:
+}
+""")
+@export_function_to_module
+@user_documentation
+def get_multiline_verbatim_argument()->str:
+	"""
+	Get a multi-line verbatim argument.
+	"""
+	check_not_finished()
+	send_raw("getarglv\n")
+	return read_block()
+
+if 0:
+	#  ++ it could be implemented like this but this waits for the execution to finish, which is unnecessary ++
+	mark_bootstrap(
+	r"""
+	\cs_new_protected:Npn \__run_newc: {
+		\begingroup
+			\endlinechar=-1~
+			\readline \__read_file to \__line
+			\cs_new_protected:cpx {\__line} {
+				\pretty:n{here}
+				\unexpanded{\immediate\write \__write_file} { i u \__line }
+				\unexpanded{\__read_do_one_command:}
+			}
+		\endgroup
+		\pythonimmediatecontinue {}
+	}
+	""")
+	def newcommand_(name: str, f: Callable)->Callable:
+		assert re.fullmatch("[A-Za-z]+", name) or (len(name)==1 and ord(name)<=0x7f), "Invalid function name: "+name
+		check_not_finished()
+		send_raw("newc\n" + name + "\n")
+		define_user_handler(f, "u"+name)
+		content=run_main_loop()
+		assert content==""
+		return f
+
+else:
+	#  ++ instead we do this ++
+	mark_bootstrap(
+	r"""
+	\cs_new_protected:Npn \__run_newc: {
+		\begingroup
+			\endlinechar=-1~
+			\readline \__read_file to \__line
+			\cs_new_protected:cpx {\__line} {
+				\unexpanded{\immediate\write \__write_file} { i u \__line }
+				\unexpanded{\__read_do_one_command:}
+			}
+		\endgroup
+		\__read_do_one_command:
+	}
+
+	\cs_new_protected:Npn \__run_renewc: {
+		\begingroup
+			\endlinechar=-1~
+			\readline \__read_file to \__line
+			\exp_args:Ncx \renewcommand {\__line} {
+				\unexpanded{\immediate\write \__write_file} { i u \__line }
+				\unexpanded{\__read_do_one_command:}
+			}
+			\exp_args:Nc \MakeRobust {\__line}
+		\endgroup
+		\__read_do_one_command:
+	}
+	""")
+	def new_or_renew_command_(name: str, f: Callable, cmd: str="new")->Callable:
+		assert re.fullmatch("[A-Za-z]+", name) or (len(name)==1 and ord(name)<=0x7f), "Invalid function name: "+name
+		check_not_finished()
+		assert cmd in ("new", "renew")
+		send_raw(cmd + "c\n" + name + "\n")
+		g=lambda: run_code_redirect_print_TeX(f)
+		if cmd=="renew":
+			try: del TeX_handlers["u"+name]
+			except KeyError: pass
+		define_user_handler(g, "u"+name)
+		return f
+
+	newcommand_=new_or_renew_command_
+	renewcommand_=functools.partial(new_or_renew_command_, cmd="renew")
 	
+
+@export_function_to_module
+def newcommand(x: Union[str, Callable]=None, f: Callable=None)->Callable:
+	"""
+	Define a new \TeX\ command.
+	If name is not provided, it's automatically deduced from the function.
+	"""
+	if f is not None: return newcommand(x)(f)
+	if x is None: return newcommand  # weird design but okay (allow |@newcommand()| as well as |@newcommand|)
+	if isinstance(x, str): return functools.partial(newcommand_, x)
+	return newcommand_(x.__name__, x)
+
+@export_function_to_module
+def renewcommand(x: Union[str, Callable]=None, f: Callable=None)->Callable:
+	"""
+	Redefine a \TeX\ command.
+	If name is not provided, it's automatically deduced from the function.
+	"""
+	if f is not None: return newcommand(x)(f)
+	if x is None: return newcommand  # weird design but okay (allow |@newcommand()| as well as |@newcommand|)
+	if isinstance(x, str): return functools.partial(renewcommand_, x)
+	return renewcommand_(x.__name__, x)
+
+
+
+
+# ========
 
 send_bootstrap_code()
 run_main_loop()  # if this returns cleanly TeX has no error. Otherwise some readline() will reach eof and print out a stack trace
 
+assert readline(allow_nothing=True)==None, "Internal error: TeX sends extra line"

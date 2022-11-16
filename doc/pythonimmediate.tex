@@ -1,5 +1,6 @@
 
 \newcommand\DescribeOption{\DescribeMacro}  % hack
+\newcommand\DescribePython{\DescribeMacro}  % hack
 
 
 
@@ -29,6 +30,25 @@ Method to communicate between \TeX\ and Python. Usually the method will be autom
 
 The interface mimics those in popular packages such as \pkg{Python\TeX} or \pkg{PyLua\TeX}.
 
+\subsubsection{Print to \TeX}\label{print-to-TeX}
+
+\DescribePython{pythonimmediate.print()}
+\DescribePython{pythonimmediate.file}
+
+These functions are used in |\pyc| command or |pycode| environment.
+
+Using |print()| function in Python will print to the console (\TeX\ standard output).
+In order to print \TeX\ code to be executed, you can do one of
+\begin{verbatim}
+pythonimmediate.print(...)
+print(..., file=pythonimmediate.file)  # note that in quiet environments, pythonimmediate.file is None, this will print to stdout instead of suppress output
+with contextlib.redirect_stdout(pythonimmediate.file):
+	print(...)
+\end{verbatim}
+
+All output will be buffered until the whole Python code finishes executing.
+In order to typeset the text immediately use one of the advanced commands.
+
 \subsubsection{Inline commands}
 
 \DescribeMacro{\py}
@@ -52,7 +72,7 @@ Execute some Python code.
 
 The macro is not expandable -- roughly speaking, you can only use this at "top level".
 
-Output will be typesetted as \LaTeX.
+Any output (as described in \ref{print-to-TeX}) will be typesetted.
 
 The code will be tokenized.
 
@@ -75,9 +95,46 @@ Performs "string interpolation", the same way as \pkg{Python\TeX}.
 
 Special note: white spaces at the end of lines are preserved.
 
+Any output (as described in \ref{print-to-TeX}) will be typesetted.
+
 \DescribeEnv{pycodeq}
 
 \DescribeEnv{pysub}
+
+
+\subsubsection{Python interface}
+
+There are a lot of Python commands provided.
+
+\DescribePython{pythonimmediate.print()}
+\DescribePython{pythonimmediate.file}
+Described above.
+
+\DescribePython{pythonimmediate.newcommand()}
+\DescribePython{pythonimmediate.renewcommand()}
+
+Same as \LaTeX's |\newcommand| and |\renewcommand|. Can be used as follows:
+
+\begin{verbatim}
+@newcommand
+def function():
+	...
+# define |\function| in TeX
+
+@newcommand("controlsequencename")
+def function():
+	...
+# define |\controlsequencename| in TeX
+
+def function():
+	...
+newcommand("controlsequencename", function)
+\end{verbatim}
+
+\DescribePython{pythonimmediate.get_argument_detokenized()}
+\DescribePython{pythonimmediate.get_optional_argument_detokenized()}
+\DescribePython{pythonimmediate.get_verbatim_argument_detokenized()}
+\DescribePython{pythonimmediate.get_multiline_verbatim_argument_detokenized()}
 
 \section{Implementation note}
 

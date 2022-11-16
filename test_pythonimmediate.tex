@@ -9,15 +9,25 @@
 \usepackage[mode=multiprocessing_network]{pythonimmediate}
 %\usepackage[mode=unnamed_pipe]{pythonimmediate}
 
+
+
+
+
+
+
+
 \ExplSyntaxOn
 \pretty:n{1.start}
 
 \begin{pythonimmediateenv}
 import pythonimmediate
+
 x="xxx"
 import sys
 print("======== test stdout ========")
 print("======== test stderr ========", file=sys.stderr)
+
+print=pythonimmediate.print
 pythonimmediate.run_tokenized_line_finish(r'\pretty:n {2.a}')
 \end{pythonimmediateenv}
 
@@ -56,6 +66,10 @@ r'\pretty:n{9.}'
 
 
 \begin{document}
+
+
+
+
 1+1=\py{1+1}.
 
 \pyc{x=3}
@@ -74,17 +88,99 @@ x=\pyc{print(str(x))}.  % there's an extra space.
 % values are not expanded before being passed to Python.
 \def\myvalue{123}
 \py{len(r"\myvalue")}  % 9, which is the string
-\py{r"\verb|\myvalue|"}  % print "\myvalue" verbatim
+
+\py{r"\verb|\myvalue |"}% print "\myvalue" verbatim (because of tokenization a space will be added)
+\py{r"\myvalue"}  % print "\myvalue" to TeX, however TeX will execute \myvalue and typeset 123
+
+\verb|\myvalue|\myvalue
+
+\begin{pycode}
+@pythonimmediate.newcommand
+def pyvmanual():
+	return eval(pythonimmediate.get_verbatim_argument())
+\end{pycode}
+
+
+
+\pyv{r"\verb|\myvalue|"}%
+\pyv{r"\myvalue"}  %  use pyv to avoid tokenization
+
+\pyvmanual{r"\verb|\myvalue|"}%
+\pyvmanual{r"\myvalue"}  %  use pyv to avoid tokenization
+
+\begin{pycode}
+import pythonimmediate
+import sys
+
+
+print("======== before", file=sys.stderr, flush=True)
+#pythonimmediate.run_tokenized_line_peek(r'\def\test{\test}\test   \prettyN {123} \pythonimmediatecontinue')
+print("======== after", file=sys.stderr, flush=True)
+\end{pycode}
+
 
 \begin{pycode}
 assert ("""
    
 """).count(' ')==3
+
+
+x=1
+
+@pythonimmediate.newcommand
+def testa():
+	global x
+	x=2
+
+assert x==1
+pythonimmediate.run_tokenized_line_local(r'\testa')
+assert x==2
+
+@pythonimmediate.renewcommand
+def testa():
+	global x, y
+	x=pythonimmediate.get_argument_detokenized()
+	y=pythonimmediate.get_argument_detokenized()
+
+
+pythonimmediate.run_tokenized_line_local(r'\testa {123} {456}')
+assert x=="123"
+assert y=="456"
+
+
+# ======== test: renewcommand on non-Python-defined command
+pythonimmediate.run_tokenized_line_local(r'\def \testb {}')
+
+@pythonimmediate.renewcommand
+def testb(): pass
+
+
+def assertEqual(x, y):
+	assert x==y, (x, y)
+
+@pythonimmediate.newcommand
+def testc():
+	assertEqual(pythonimmediate.get_argument_detokenized(), "ab")
+	assertEqual(pythonimmediate.get_optional_argument_detokenized(), "cd")
+	assertEqual(pythonimmediate.get_optional_argument_detokenized(), None)
+	assertEqual(pythonimmediate.get_verbatim_argument(), "ef")
+	assertEqual(pythonimmediate.get_optional_argument_detokenized(), None)
+	assertEqual(pythonimmediate.get_verbatim_argument(), "gh")
+	assertEqual(pythonimmediate.get_multiline_verbatim_argument(), "ijk\nlm")
+	print("123", end="")
+	return "456"
+
+pythonimmediate.run_tokenized_line_local("789%")
+pythonimmediate.run_tokenized_line_local("789%")
+
+pythonimmediate.run_block_local(r'''\testc {ab} [cd]|ef|{gh}|ijk
+lm|%''')
+
+pythonimmediate.run_tokenized_line_local("789%")
+
 \end{pycode}
 
-\begin{pycode}
-print(r"\verb*|%  %|")
-print(1/0)
-\end{pycode}
+
+
 
 \end{document}
