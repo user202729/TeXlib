@@ -68,7 +68,8 @@ debug))
 \iow_open:Nn \__resulting_code_u { utf8y-u.sty }
 
 \iow_now:Nn \__resulting_code_a {  % NOTE the code below must be tokenizable in @-catcode-regime!
-	\cO\%~This~file~is~automatically~generated.
+	\cO\%~This~file~is~automatically~generated.^^J
+	\protected\def\cO\\protected@empty {}^^J
 }
 \iow_now:Nn \__resulting_code_u {  % NOTE the code below must be tokenizable in @-catcode-regime!
 	\cO\%~This~file~is~automatically~generated.^^J
@@ -171,7 +172,7 @@ debug))
 						\assigno #\oldcontent {#\utfseq}
 						\ucalllocal{
 							\__execute_code
-								\def #\utfseq {\relax \ifmmode #\body \else #\oldcontent \fi}  % unfortunately this is not peek-safe for oldcontent. #\body does not need to be peek-safe though
+								\def #\utfseq {\protected@empty \ifmmode #\body \else #\oldcontent \fi}  % unfortunately this is not peek-safe for oldcontent. #\body does not need to be peek-safe though
 						}
 					} {
 						% then do nothing, keep the old definition
