@@ -94,59 +94,65 @@
 	}
 \endgroup
 
-% e.g. if `block' is read from the communication channel, run \__run_block:
-\cs_new_protected:Npn \__read_do_one_command: {
-	\begingroup
-		\endlinechar=-1~
-		\global\readline \__read_file to \__line
-	\endgroup
-	\begingroup\expandafter\endgroup  % give an error instead of silently do nothing when command is invalid
-		\csname __run_ \__line :\endcsname
-}
 
-\cs_new_protected:Npn \pythonimmediatecontinue {
-	\immediate\write \__write_file {r}
-	\__read_do_one_command:
-}
-
-\cs_new_protected:Npn \__run_tokl: {
-	\ifeof \__read_file
-		\msg_error:nn {pythonimmediate} {internal-error}
-	\fi
-	\global \read \__read_file to \__line  % note that this uses \read to tokenize instead of \readline
-	\__line
-}
-
-\cs_new_protected:Npn \__run_toklcont: {
-	\__run_tokl:
-	\pythonimmediatecontinue
-}
-
-\cs_new_eq:NN \__run_none: \relax
-
+% read one block of \TeX\ code from Python and |\scantokens|-run it
+% the block is delimited using |surround_delimiter()| in Python i.e. the first and last line are identical,
+% and the content inside is the actual TeX code to be executed
 \cs_new_protected:Npn \__run_block: {
-	\readline \__read_file to \__delimiter
+	\begingroup
+		\endlinechar=10~  % affect \readline
+		\readline \__read_file to \__delimiter
 
-	\tl_build_begin:N \__code
-	\global \readline \__read_file to \__line
-	\bool_do_until:nn {\tl_if_eq_p:NN \__delimiter \__line} {
-		\tl_build_put_right:NV \__code \__line
-		\ifeof \__read_file
-			\msg_error:nn {pythonimmediate} {internal-error}
-		\fi
-		\global \readline \__read_file to \__line
-	}
-	\tl_build_end:N \__code
+		\tl_build_begin:N \__code
+		\readline \__read_file to \__line
+		\bool_do_until:nn {\tl_if_eq_p:NN \__delimiter \__line} {
+			\tl_build_put_right:NV \__code \__line
+			\ifeof \__read_file
+				\msg_error:nn {pythonimmediate} {internal-error}
+			\fi
+			\readline \__read_file to \__line
+		}
+		\tl_build_end:N \__code
 
+		\newlinechar=10~  % affect \scantokens
+	\expandafter  % expand the \scantokens once before resetting \newlinechar and \__code
+	\endgroup
 	\scantokens \expandafter{\__code}
 }
 
-\cs_new_protected:Npn \__run_blockcont: {
-	\__run_block:
-	\pythonimmediatecontinue
+% bootstrap code
+\__run_block:
+
+% as the name implies, this reads one "command" from Python side and execute it.
+% the command might do additional tasks e.g. read more \TeX\ code.
+%
+% e.g. if `block' is read from the communication channel, run |\__run_block:|.
+\cs_new_protected:Npn \__read_do_one_command: {
+	\begingroup
+		\endlinechar=-1~
+		\readline \__read_file to \__line
+		\expandafter
+	\endgroup % also this will give an error instead of silently do nothing when command is invalid
+		\csname __run_ \__line :\endcsname
 }
 
-% first arg is the code
+% read documentation of |_peek| commands for details what this command does.
+\cs_new_protected:Npn \pythonimmediatecontinue #1 {
+	\immediate\write \__write_file {r #1}
+	\__read_do_one_command:
+}
+
+% internal function. Just send an arbitrary block of data to Python.
+% the block itself will not be expanded.
+\cs_new_protected:Npn \__send_block:n #1 {
+	\immediate\write \__write_file {\unexpanded{
+		#1 ^^J
+		pythonimm?"""?'''?  % following character will be newline
+	}}
+}
+
+% execute some Python code.
+% first arg is the code.
 \cs_new_protected:Npn \pythonimmediate:n #1  {
 	\immediate\write \__write_file {\unexpanded{
 		i ^^J

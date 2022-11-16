@@ -54,6 +54,8 @@ give the wrong result.
 If unrestricted |-shell-escape| is enabled, the output directory value is double-checked if |-recorder| is used.
 In other words, it will never give wrong result, but might fail to determine the output directory if |-recorder| is disabled.
 
+TODO: add feature to use |ps| for output directory detection if |-shell-escape| is enabled.
+
 The limitation of |-recorder| method is the same as \pkg{currfile-abspath} package. As mentioned in that documentation,
 on Mik\TeX\ the output directory value is only available since the second run.
 

@@ -1,0 +1,152 @@
+
+\newcommand\DescribeOption{\DescribeMacro}  % hack
+
+
+
+You need to install Python \pkg{daemoniker} and \pkg{psutil} package.
+
+Just like \pkg{Perl\TeX} or \pkg{PyLua\TeX}, this only requires a single run, and variables are persistent throughout the run.
+
+Unlike \pkg{Perl\TeX} or \pkg{PyLua\TeX}, there's no restriction on compiler or script required to run the code.
+
+\section{Usage}
+
+\subsection{Package options}
+
+\DescribeOption{outputdir=}
+
+Specify the output directory if it's not the default value.
+
+The value will be x-expanded.
+
+Using the \pkg{outputdir} package, it's possible to determine the output directory automatically, subject to restrictions.
+
+\DescribeOption{mode=}
+
+Method to communicate between \TeX\ and Python. Usually the method will be automatically detected.
+
+\subsection{Commands and environments}
+
+The interface mimics those in popular packages such as \pkg{Python\TeX} or \pkg{PyLua\TeX}.
+
+\subsubsection{Inline commands}
+
+\DescribeMacro{\py}
+
+Evaluate some Python expression, and typesets the result as a string.
+
+The value can only be used to typeset text, it must not be used to pass "values" to other \LaTeX\ commands.
+
+The code will be tokenized.
+
+Example:
+\begin{verbatim}
+The value of $1+1$ is $\py{1+1}$.
+
+\setcounter{abc}{\py{1+1}}  % illegal, the result (2) can only be used to typeset text
+\end{verbatim}
+
+\DescribeMacro{\pyc}
+
+Execute some Python code.
+
+The macro is not expandable -- roughly speaking, you can only use this at "top level".
+
+Output will be typesetted as \LaTeX.
+
+The code will be tokenized.
+
+\DescribeMacro{\pycq}
+
+Same as above, but output will not be typesetted.
+
+\DescribeMacro{\pyfile}
+\DescribeMacro{\pyfileq}
+
+Same as above.
+
+\DescribeMacro{\pys}
+
+Performs "string interpolation", the same way as \pkg{Python\TeX}.
+
+\subsubsection{Environments}
+
+\DescribeEnv{pycode}
+
+Special note: white spaces at the end of lines are preserved.
+
+\DescribeEnv{pycodeq}
+
+\DescribeEnv{pysub}
+
+\section{Implementation note}
+
+Communication between \TeX\ and Python are done by opening two pseudo-files from the output of a Python process |textopy|
+(similar to |\ior_shell_open:Nn|)
+and to the input of another Python process |pytotex| (this would be |\iow_shell_open:Nn|, if \LaTeX3 have such a function).
+
+There are various methods for the 2 Python child processes to communicate with each other.
+After some initial bootstrapping to setup the communication, we can consider only the |textopy| script, the other
+merely serves as the bridge to send input to \TeX.
+
+The communication protocol is a little complicated, since it must support nesting bidirectional execution of \TeX\ and Python.
+
+Besides, I believe it's not possible to make a "background listener" on the \TeX\ side, so it must keep track of whether a command should be read from Python and executed.
+
+We have the following 3 internal macros/environments to execute Python code at the lowest level.
+\DescribeMacro{\pythonimmediateverb}
+\DescribeMacro{\pythonimmediate:n}
+\DescribeEnv{pythonimmediateenv}
+Each of them sends the code to the Python side, then listen for \emph{one} \TeX\ command and execute it
+using \cs{__read_do_one_command:}.
+
+
+\right{execute Python code: print(1)}
+\left{execute TeX code: 1}
+
+
+\right{execute Python code: print(var(a)*2)}
+\left{execute TeX code: sendtopy(a); execute another command}
+\right{123}
+\left{execute TeX code: 123123}
+
+
+\right{execute Python code: tex.exec(a=456); print(var(a)*2)}
+\left{execute TeX code: a=456; sendtopy(done); execute another command}
+\right{done}
+\left{execute TeX code: sendtopy(a); execute another command}
+\right{456}
+\left{456456}
+
+
+An example where the commands are nested follows. It shows that the Python side must not just listen for "done"
+command back, but must potentially call a nested loop.
+
+The exact protocol is:
+\begin{itemize}
+	\item "execute Python code" sends from \TeX\ to Python has the format:
+\begin{verbatim}
+i
+multiple lines of
+Python code
+here...
+pythonimm?"""?'''?
+\end{verbatim}
+
+		This can be done by \cs{pythonimmediate:n} or other user interface as listed above.
+
+	\item "done" sends from \TeX\ to Python has the format "|r|\meta{optional return value as a string in a single line}".
+
+		This is sent by executing \TeX\ command |\pythonimmediatecontinue|, which takes a single argument to be e-expanded using |\write|
+		as the "return value".
+
+	\item "execute \TeX\ code" sends from Python to \TeX\ must only be sent when the \TeX\ side listens for a command.
+		It consist of a single line specify the "command name", which \TeX\ will
+		execute the command named
+		|\__run_|\meta{command name}|:|
+		which must already be defined on the \TeX\ side.
+
+		The command itself might contain additional code to execute more code, e.g. by reading more lines from Python.
+\end{itemize}
+
+

@@ -1,12 +1,13 @@
 %! TEX program = pdflatex
-\documentclass{article}
+\documentclass[a5paper]{article}
 \errorcontextlines=5
 \usepackage{prettytok}
 \prettyinitterm
 \ExplSyntaxOn
 \pretty:n{going to load}
 \ExplSyntaxOff
-\usepackage[mode=unnamed_pipe]{pythonimmediate}
+\usepackage[mode=multiprocessing_network]{pythonimmediate}
+%\usepackage[mode=unnamed_pipe]{pythonimmediate}
 
 \ExplSyntaxOn
 \pretty:n{1.start}
@@ -35,10 +36,13 @@ pythonimmediate.run_block_finish(r'''
 x=123
 
 pythonimmediate.run_tokenized_line_peek(
-r'\pretty:n{7.} \pythonimmediate:n{x=456} \pretty:n{8.} \pythonimmediatecontinue'
+r'\pretty:n{7.} \pythonimmediate:n{x=456} \pretty:n{8.} \pythonimmediatecontinue {}'
 )
 
 assert x==456
+
+content=pythonimmediate.run_tokenized_line_peek(r'\pythonimmediatecontinue {abc~~def}')
+assert "abc def"==content, content
 
 pythonimmediate.run_tokenized_line_finish(
 r'\pretty:n{9.}'
@@ -52,7 +56,35 @@ r'\pretty:n{9.}'
 
 
 \begin{document}
+1+1=\py{1+1}.
 
+\pyc{x=3}
 
+x=\py{x}.
+
+% \pyc{print("%")}  % ← error!
+
+x=\pyc{print(str(x), end="")}.  % without trailing space. Note that this requires % to have the "comment" catcode.
+
+x=\pyc{print(str(x))}.  % there's an extra space.
+
+% "escaped" things are passed "verbatim" to Python. There's no way to pass a single backslash to it.
+\py{len(r"\\")}=2.
+
+% values are not expanded before being passed to Python.
+\def\myvalue{123}
+\py{len(r"\myvalue")}  % 9, which is the string
+\py{r"\verb|\myvalue|"}  % print "\myvalue" verbatim
+
+\begin{pycode}
+assert ("""
+   
+""").count(' ')==3
+\end{pycode}
+
+\begin{pycode}
+print(r"\verb*|%  %|")
+print(1/0)
+\end{pycode}
 
 \end{document}
