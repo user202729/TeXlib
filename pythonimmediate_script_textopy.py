@@ -12,13 +12,18 @@ import inspect
 import contextlib
 import io
 import functools
-from typing import Optional, Union, Callable, Any
+from typing import Optional, Union, Callable, Any, Iterator, Protocol
+import typing
+from abc import ABC, abstractmethod
 from pathlib import Path
+from dataclasses import dataclass
 import tempfile
 import signal
 import traceback
 import time
 import re
+import collections
+import enum
 
 
 def user_documentation(x: Union[Callable, str])->Any:
@@ -83,6 +88,7 @@ pythonimmediate=ModuleType("pythonimmediate")
 pythonimmediate.__file__="pythonimmediate.py"
 sys.modules["pythonimmediate"]=pythonimmediate
 
+pythonimmediate.debugging=True  # type: ignore
 
 def export_function_to_module(f: Callable)->Callable:
 	"""
@@ -123,11 +129,25 @@ def surround_delimiter(block: str)->str:
 		if delimiter not in block: break
 	return delimiter + "\n" + block + "\n" + delimiter + "\n"
 
-bootstrap_code: str=""
+bootstrap_code: Optional[str]=""
 def mark_bootstrap(code: str)->None:
 	global bootstrap_code
+	assert bootstrap_code is not None
 	bootstrap_code+=code
 
+def substitute_private(code: str)->str:
+	return (code
+		  #.replace("\n", ' ')  # because there are comments in code, cannot
+		  .replace("__", "_" + "pythonimmediate" + "_")
+		 )
+
+def send_bootstrap_code()->None:
+	global bootstrap_code
+	assert bootstrap_code is not None
+	send_raw(surround_delimiter(substitute_private(bootstrap_code)))
+	bootstrap_code = None
+
+# ========
 
 # when 'i⟨string⟩' is sent from TeX to Python, the function with index ⟨string⟩ in this dict is called
 TeX_handlers: dict[str, Callable[[], None]]={}
@@ -295,17 +315,17 @@ def run_error_finish()->None:
 
 
 
-#def on_signal_function(signal_number, stack_frame)->None:
-#	debug("======== signal")
-#	traceback.print_stack(file=sys.stderr)
-#	
-#signal.signal(signal.SIGHUP, on_signal_function)
+def on_signal_function(signal_number, stack_frame)->None:
+	debug("======== signal")
+	traceback.print_stack(file=sys.stderr)
+	
+signal.signal(signal.SIGHUP, on_signal_function)
 
 
-if 0:
+if 1:
 	import atexit
 	def atexit_function()->None:
-		debug("======== die")
+		debug("======== exit ========")
 		traceback.print_stack(file=sys.stderr)
 	atexit.register(atexit_function)
 
@@ -355,6 +375,180 @@ def read_block()->str:
 		else:
 			lines.append(line)
 
+
+class Token(ABC):
+	@abstractmethod
+	def __str__(self)->str:
+		...
+	@abstractmethod
+	def serialize(self)->str:
+		pass
+
+@dataclass
+class ControlSequenceToken(Token):
+	csname: str
+	def __str__(self)->str:
+		if self.csname=="": return r"\csname\endcsname"
+		return "\\"+self.csname
+	def serialize(self)->str:
+		return "0"+self.csname+"/"
+
+class Catcode(enum.Enum):
+	begin_group=bgroup=1
+	end_group=egroup=2
+	math_toggle=math=3
+	alignment=4
+	parameter=param=6
+	math_superscript=superscript=7
+	math_subscript=subscript=8
+	space=10
+	letter=11
+	other=12
+	active=13
+
+	escape=0
+	end_of_line=paragraph=line=5
+	ignored=9
+	comment=14
+	invalid=15
+
+	@property
+	def for_token(self)->bool:
+		"""
+		Return whether a token may have this catcode.
+		"""
+		return self not in (Catcode.escape, Catcode.line, Catcode.ignored, Catcode.comment, Catcode.invalid)
+
+@dataclass
+class CharacterToken(Token):
+	index: int
+	catcode: Catcode
+	@property
+	def chr(self)->str:
+		return chr(self.index)
+	def __post_init__(self)->None:
+		assert self.catcode.for_token
+	def __str__(self)->str:
+		return self.chr
+	def serialize(self)->str:
+		return f"{self.catcode.value:X}\\{self.chr}"
+
+class FrozenRelaxToken(Token):
+	def __str__(self)->str:
+		return r"\relax"
+	def serialize(self)->str:
+		return "R"
+
+frozen_relax_token=FrozenRelaxToken()
+
+# other special tokens later...
+
+class TokenList(collections.UserList[Token]):
+	def serialize(self)->str:
+		return "".join(t.serialize() for t in self)
+	@staticmethod
+	def deserialize(data: str)->"TokenList":
+		result=TokenList()
+		for match_ in re.finditer(r'0(.*?)/|(R)|(.)(\\?.)', data):
+			groups=match_.groups()
+			i=0
+			while groups[i] is None: i+=1
+			if i==0:
+				result.append(ControlSequenceToken(groups[0]))
+			elif i==1:
+				result.append(frozen_relax_token)
+			elif i==2:
+				result.append(CharacterToken(index=ord(groups[3]), catcode=Catcode(int(groups[3], 16))))
+			else:
+				assert False
+		return result
+
+
+
+
+class TeXToPyData(ABC):
+	@staticmethod
+	@abstractmethod
+	def read()->"TeXToPyData":
+		...
+	@staticmethod
+	@abstractmethod
+	def send_code(arg: str)->str:
+		pass
+
+# tried and failed
+#@typing.runtime_checkable
+#class TeXToPyData(Protocol):
+#	@staticmethod
+#	def read()->"TeXToPyData":
+#		...
+#
+#	#send_code: str
+#
+#	#@staticmethod
+#	#@property
+#	#def send_code()->str:
+#	#	...
+	
+
+class TTPLine(TeXToPyData, str):
+	send_code=r"\immediate \write \__write_file {{ {} }}".format
+	@staticmethod
+	def read()->"TTPLine":
+		line=readline()
+		assert line is not None
+		return TTPLine(line)
+
+class TTPBlock(TeXToPyData, str):
+	send_code=r"\__send_block:n {{ {} }}".format
+	@staticmethod
+	def read()->"TTPBlock":
+		return TTPBlock(read_block())
+
+class TTPTokenList(TeXToPyData, TokenList):
+	send_code=r"\tlserializeb:Nn \__tmp {{ {} }} \immediate \write \__write_file {{\__tmp}}".format
+	@staticmethod
+	def read()->"TTPTokenList":
+		line=readline()
+		assert line is not None
+		return TTPTokenList(TokenList.deserialize(line))
+
+
+class PyToTeXData(ABC):
+	@abstractmethod
+	def write(self)->None:
+		...
+
+@dataclass
+class PTTVerbatimLine(PyToTeXData):
+	data: str
+	read_code=r"\readline \__read_file to {target}"
+	def write(self)->None:
+		assert "\n" not in self.data
+		send_raw(self.data+"\n")
+
+@dataclass
+class PTTTeXLine(PyToTeXData):
+	data: str
+	read_code=r"\read \__read_file to {target}"
+	def write(self)->None:
+		assert "\n" not in self.data
+		send_raw(self.data)
+
+@dataclass
+class PTTBlock(PyToTeXData):
+	data: str
+	read_code=r"\__read_block:n {target}"
+	def write(self)->None:
+		send_raw(surround_delimiter(self.data))
+
+@dataclass
+class PTTTokenList(PyToTeXData):
+	data: TokenList
+	def write(self)->None:
+		send_raw(self.data.serialize())
+
+
 def wrap_executor(f: Callable[..., None])->Callable:
 	"""
 	some internal function. I don't know how to explain this but it works.
@@ -397,48 +591,74 @@ def run_python_block()->None:
 assert "" not in TeX_handlers
 TeX_handlers[""]=run_python_block
 
-def send_bootstrap_code()->None:
-	global bootstrap_code
-	code = (bootstrap_code
-		  #.replace("\n", ' ')
-		  .replace("__", "_" + "pythonimmediate" + "_")
-		 )
-	send_raw(surround_delimiter(code))
 
+# ======== define TeX functions that execute Python code ========
 # ======== implementation of |\py| etc. Doesn't support verbatim argument yet. ========
 
-def define_generic_handler(user: bool, f: Callable, name: str=None)->Callable:
-	num_arg = len(inspect.signature(f).parameters)
-	if name is None:
-		assert f.__name__.endswith("_handler")
-		name = f.__name__.removesuffix("_handler")
+import itertools
+import string
 
-	assert name not in TeX_handlers
-	assert name.startswith("u") == user
+def random_identifiers()->Iterator[str]:  # do this to avoid TeX hash collision while keeping the length short
+	for len_ in itertools.count(0):
+		for value in range(1<<len_):
+			for initial in string.ascii_letters:
+				yield initial + f"{value:0{len_}b}".translate({ord("0"): "a", ord("1"): "b"})
 
-	TeX_send_block_commands = ""
-	TeX_argspec = ""
-	for i in range(1, num_arg+1):
-		TeX_send_block_commands += r"\__send_block:n {#" + str(i) + r"}"
-		TeX_argspec += "#" + str(i)
+random_identifier_iterable=random_identifiers()
 
-	mark_bootstrap(
+def get_random_identifier()->str:
+	return next(random_identifier_iterable)
+
+
+def define_TeX_call_Python(f: Callable[..., None], name: str=None, argtypes: list[type[TeXToPyData]]=None, identifier: str=None)->str:
 	"""
+	This function setups some internal data structure, and
+	returns the \TeX\ code to be executed on the \TeX\ side to define the macro.
+
+	f: the Python function to be executed.
+	It should take some arguments and eventually (optionally) call one of the |_finish| functions.
+
+	name: the macro name on the \TeX\ side. This should only consist of letter characters in |expl3| catcode regime.
+
+	argtypes: list of argument types. If it's None it will be automatically deduced from the function |f|'s signature.
+
+	Returns: some code (to be executed in |expl3| catcode regime) as explained above.
+	"""
+	if argtypes is None: argtypes=[p.annotation for p in inspect.signature(f).parameters.values()]
+	if name is None: name=f.__name__
+
+	if identifier is None: identifier=get_random_identifier()
+	assert identifier not in TeX_handlers
+
+	@functools.wraps(f)
+	def g()->None:
+		assert argtypes is not None
+		args=[argtype.read() for argtype in argtypes]
+		wrap_executor(f)(*args)
+	TeX_handlers[identifier]=g
+
+	TeX_argspec = ""
+	TeX_send_input_commands = ""
+	for i, argtype in enumerate(argtypes):
+		if not issubclass(argtype, TeXToPyData):
+			raise RuntimeError(f"Argument type {argtype} is incorrect, should be a subclass of TeXToPyData")
+		arg = f"#{i+1}"
+		TeX_send_input_commands += argtype.send_code(arg)
+		TeX_argspec += arg
+
+	return """
 	\\cs_new_protected:Npn \\""" + name + TeX_argspec + """ {
-		\immediate \write \__write_file { i """ + name + """ }
-		""" + TeX_send_block_commands + """
+		\immediate \write \__write_file { i """ + identifier + """ }
+		""" + TeX_send_input_commands + """
 		\__read_do_one_command:
 	}
-	""")
-	@functools.wraps(f)
-	def result()->Callable:
-		args=[read_block() for _ in range(num_arg)]
-		return wrap_executor(f)(*args)
-	TeX_handlers[name]=result
-	return result
+	"""
 
-define_internal_handler=functools.partial(define_generic_handler, False)
-define_user_handler=functools.partial(define_generic_handler, True)
+
+def define_internal_handler(f: Callable)->Callable:
+	mark_bootstrap(define_TeX_call_Python(f))
+	return f
+
 
 import linecache
 
@@ -467,7 +687,7 @@ def eval_with_linecache(code: str, globals: dict[str, Any])->Any:
 
 
 @define_internal_handler
-def py_handler(code: str)->None:
+def py(code: TTPBlock)->None:
 	pythonimmediate.run_block_finish(str(eval_with_linecache(code, user_scope))+"%")
 
 def print_TeX(*args, **kwargs)->None:
@@ -475,7 +695,7 @@ def print_TeX(*args, **kwargs)->None:
 		raise RuntimeError("Internal error: attempt to print to TeX outside any environment!")
 	if pythonimmediate.file is not None:
 		functools.partial(print, file=pythonimmediate.file)(*args, **kwargs)  # allow user to override `file` kwarg
-pythonimmediate.print=print_TeX
+pythonimmediate.print=print_TeX  # type: ignore
 
 class RedirectPrintTeX:
 	def __init__(self, t)->None:
@@ -484,11 +704,11 @@ class RedirectPrintTeX:
 	def __enter__(self)->None:
 		if hasattr(pythonimmediate, "file"):
 			self.old=pythonimmediate.file
-		pythonimmediate.file=self.t
+		pythonimmediate.file=self.t  # type: ignore
 
 	def __exit__(self, exc_type, exc_value, tb)->None:
 		if hasattr(self, "old"):
-			pythonimmediate.file=self.old
+			pythonimmediate.file=self.old  # type: ignore
 		else:
 			del pythonimmediate.file
 
@@ -507,11 +727,11 @@ def run_code_redirect_print_TeX(f: Callable[[], Any])->None:
 		pythonimmediate.run_block_finish(content)
 
 @define_internal_handler
-def pyc_handler(code: str)->None:
+def pyc(code: TTPBlock)->None:
 	run_code_redirect_print_TeX(lambda: exec_with_linecache(code, user_scope))
 
 @define_internal_handler
-def pycq_handler(code: str)->None:
+def pycq(code: TTPBlock)->None:
 	with RedirectPrintTeX(None):
 		exec_with_linecache(code, user_scope)
 	run_none_finish()
@@ -526,7 +746,7 @@ mark_bootstrap(
 r"""
 \NewDocumentEnvironment{pycode}{}{
 	\saveenvreinsert \__code {
-		\exp_last_unbraced:Nx \pycodex {{\__code ^^J} {\the\inputlineno} {
+		\exp_last_unbraced:Nx \__pycodex {{\__code ^^J} {\the\inputlineno} {
 			\ifdefined\currfilename \currfilename \fi
 		} {
 			\ifdefined\currfileabspath \currfileabspath \fi
@@ -541,7 +761,7 @@ def normalize_lines(lines: list[str])->list[str]:
 	return [line.rstrip() for line in lines]
 
 @define_internal_handler
-def pycodex_handler(code: str, lineno_: str, filename: str, fileabspath: str)->None:
+def __pycodex(code: TTPBlock, lineno_: TTPLine, filename: TTPLine, fileabspath: TTPLine)->None:
 	lineno=int(lineno_)
 	# find where the code comes from... (for easy meaningful traceback)
 	target_filename: Optional[str] = None
@@ -574,15 +794,16 @@ def pycodex_handler(code: str, lineno_: str, filename: str, fileabspath: str)->N
 	with io.StringIO() as t:
 		with RedirectPrintTeX(t):
 			if target_filename:
-				code=''.join(file_lines)  # restore missing trailing spaces
-			code="\n"*(lineno-len(code_lines_normalized)-1)+code
+				code_=''.join(file_lines)  # restore missing trailing spaces
+			code_="\n"*(lineno-len(code_lines_normalized)-1)+code_
 			if target_filename:
-				compiled_code=compile(code, target_filename, "exec")
+				compiled_code=compile(code_, target_filename, "exec")
 				exec(compiled_code, user_scope)
 			else:
-				exec(code, user_scope)
+				exec(code_, user_scope)
 		pythonimmediate.run_block_finish(t.getvalue())
 
+# ======== Python-call-TeX functions
 # ======== additional functions...
 
 user_documentation(
@@ -595,53 +816,160 @@ after a control sequence.
 It's undefined behavior if the message's "string representation" contains a "newline character".
 """)
 
+def template_substitute(template: str, pattern: str, substitute: str, optional: bool=False)->str:
+	if not optional:
+		assert template.count(pattern)==1
+	return template.replace(pattern, substitute)
 
-mark_bootstrap(
+#typing.TypeVarTuple(PyToTeXData)
+
+#PythonCallTeXFunctionType=Callable[[PyToTeXData], Optional[tuple[TeXToPyData, ...]]]
+
+class PythonCallTeXFunctionType(Protocol):  # https://stackoverflow.com/questions/57658879/python-type-hint-for-callable-with-variable-number-of-str-same-type-arguments
+	def __call__(self, *args: PyToTeXData)->Optional[tuple[TeXToPyData, ...]]: ...
+
+class PythonCallTeXSyncFunctionType(PythonCallTeXFunctionType):  # https://stackoverflow.com/questions/57658879/python-type-hint-for-callable-with-variable-number-of-str-same-type-arguments
+	def __call__(self, *args: PyToTeXData)->tuple[TeXToPyData, ...]: ...
+
+def define_Python_call_TeX(TeX_code: str, ptt_argtypes: list[type[PyToTeXData]], ttp_argtypes: list[type[TeXToPyData]],
+						   *,
+						   recursive: bool=True,
+						   sync: bool=None,
+						   )->tuple[str, PythonCallTeXFunctionType]:
+	"""
+	|TeX_code| should be some expl3 code that defines a function with name |%name%| that when called should:
+		* run some \TeX\ code
+		* do the following if |sync|:
+			* send |r| to Python
+			* send whatever needed for the output (as in |ttp_argtypes|)
+		* call |\__read_do_one_command:|
+
+	ptt_argtypes: list of argument types to be sent from Python to TeX (i.e. input of the TeX function)
+
+	ttp_argtypes: list of argument types to be sent from TeX to Python (i.e. output of the TeX function)
+
+	recursive: whether the TeX_code might call another Python function. Default to True.
+		It does not hurt to always specify True, but performance would be a bit slower.
+
+	sync: whether the Python function need to wait for the TeX function to finish. Default to true.
+		Required if |ttp_argtypes| is not empty.
+		This should be left to be the default None most of the time. (which will make it always sync if |debugging|,
+		otherwise only sync if needed i.e. there's some output)
+
+	Return some TeX_code to be executed, and a Python function object that when called will call the TeX function
+	and return the result.
+
+	Possible optimizations:
+		* the |r| is not needed if not recursive and |ttp_argtypes| is nonempty
+			(the output itself tells Python when the \TeX\ code finished)
+		* the first line of the output may be on the same line as the |r| itself
+	"""
+	if sync is None:
+		if pythonimmediate.debugging: sync=True
+		else: sync=ttp_argtypes!=[]
+
+		TeX_code=template_substitute(TeX_code, "%optional_sync%",
+							   r'\immediate\write\__write_file { r }' if sync else '',)
+
+	assert sync is not None
+	if ttp_argtypes: assert sync
+	identifier=get_random_identifier()  # TODO to be fair it isn't necessary to make the identifier both ways distinct, can reuse
+
+	TeX_code=template_substitute(TeX_code, "%name%", r"\__run_" + identifier + ":")
+
+	def f(*args)->Optional[tuple[TeXToPyData, ...]]:
+		debug("here")
+		assert len(args)==len(ptt_argtypes)
+
+		# send function header
+		check_not_finished()
+		send_raw(identifier+"\n")
+
+		# send function args
+		for arg, argtype in zip(args, ptt_argtypes):
+			assert isinstance(arg, argtype)
+			arg.write()
+
+		if not sync: return None
+
+		# wait for the result
+		if recursive:
+			result_=run_main_loop()
+		else:
+			result_=run_main_loop_get_return_one()
+		assert not result_
+
+		result=[]
+		for argtype_ in ttp_argtypes:
+			result.append(argtype_.read())
+		return tuple(result)
+
+	
+	return TeX_code, f
+
+def define_Python_call_TeX_local(*args, **kwargs)->PythonCallTeXFunctionType:
+	code, result=define_Python_call_TeX(*args, **kwargs)
+	mark_bootstrap(code)
+	return result
+
+def define_Python_call_TeX_local_sync(*args, **kwargs)->PythonCallTeXSyncFunctionType:
+	return define_Python_call_TeX_local(*args, **kwargs, sync=True)  # type: ignore
+
+get_argument_detokenized_=define_Python_call_TeX_local_sync(
 r"""
-\cs_new_protected:Npn \__run_getargd: #1 {
-	\pythonimmediatecontinue {\unexpanded{#1}}
+\cs_new_protected:Npn %name% #1 {
+	\immediate\write\__write_file { \unexpanded {
+		r ^^J
+		#1
+	}}
+	\__read_do_one_command:
 }
-""")
+""", [], [TTPLine], recursive=False)
 @export_function_to_module
 @user_documentation
 def get_argument_detokenized()->str:
 	"""
 	Get a mandatory argument.
 	"""
-	check_not_finished()
-	send_raw("getargd\n")
-	return run_main_loop_get_return_one()
+	return str(get_argument_detokenized_()[0])
 
-mark_bootstrap(
+get_optional_argument_detokenized_=define_Python_call_TeX_local_sync(
 r"""
-\NewDocumentCommand \__run_getargod: {o} {
-	\IfNoValueTF {#1} {
-		\pythonimmediatecontinue {0}
-	} {
-		\pythonimmediatecontinue {1\unexpanded{#1}}
+\NewDocumentCommand %name% {o} {
+	\immediate\write \__write_file {
+		r ^^J
+		\IfNoValueTF {#1} {
+			0
+		} {
+			\unexpanded{1 #1}
+		}
 	}
+	\__read_do_one_command:
 }
-""")
+""", [], [TTPLine], recursive=False)
 @export_function_to_module
 @user_documentation
 def get_optional_argument_detokenized()->Optional[str]:
 	"""
 	Get an optional argument.
 	"""
-	check_not_finished()
-	send_raw("getargod\n")
-	result=run_main_loop_get_return_one()
-	if result=="0": return None
-	assert result[0]=="1"
-	return result[1:]
+	[result]=get_optional_argument_detokenized_()
+	result_=str(result)
+	if result_=="0": return None
+	assert result_[0]=="1", result_
+	return result_[1:]
 
 
-mark_bootstrap(
+get_verbatim_argument_=define_Python_call_TeX_local_sync(
 r"""
-\NewDocumentCommand \__run_getargv: {v} {
-	\pythonimmediatecontinue {\unexpanded{#1}}
+\NewDocumentCommand %name% {v} {
+	\immediate\write\__write_file { \unexpanded {
+		r ^^J
+		#1
+	}}
+	\__read_do_one_command:
 }
-""")
+""", [], [TTPLine], recursive=False)
 @export_function_to_module
 @user_documentation
 def get_verbatim_argument()->str:
@@ -649,99 +977,91 @@ def get_verbatim_argument()->str:
 	Get a verbatim argument. Since it's verbatim, there's no worry of |#| being doubled,
 	but it can only be used at top level.
 	"""
-	check_not_finished()
-	send_raw("getargv\n")
-	return run_main_loop_get_return_one()
+	return str(get_verbatim_argument_()[0])
 
-mark_bootstrap(
+get_multiline_verbatim_argument_=define_Python_call_TeX_local_sync(
 r"""
-\NewDocumentCommand \__run_getarglv: {+v} {
+\NewDocumentCommand %name% {+v} {
+	\immediate\write\__write_file { r }
 	\begingroup
 		\newlinechar=13~  % this is what +v argument type in xparse uses
 		\__send_block:n { #1 }
 	\endgroup
 	\__read_do_one_command:
 }
-""")
+""", [], [TTPBlock], recursive=False)
 @export_function_to_module
 @user_documentation
 def get_multiline_verbatim_argument()->str:
 	"""
 	Get a multi-line verbatim argument.
 	"""
-	check_not_finished()
-	send_raw("getarglv\n")
-	return read_block()
+	return str(get_multiline_verbatim_argument_()[0])
 
-if 0:
-	#  ++ it could be implemented like this but this waits for the execution to finish, which is unnecessary ++
-	mark_bootstrap(
-	r"""
-	\cs_new_protected:Npn \__run_newc: {
-		\begingroup
-			\endlinechar=-1~
-			\readline \__read_file to \__line
-			\cs_new_protected:cpx {\__line} {
-				\pretty:n{here}
-				\unexpanded{\immediate\write \__write_file} { i u \__line }
-				\unexpanded{\__read_do_one_command:}
-			}
-		\endgroup
-		\pythonimmediatecontinue {}
-	}
-	""")
-	def newcommand_(name: str, f: Callable)->Callable:
-		assert re.fullmatch("[A-Za-z]+", name) or (len(name)==1 and ord(name)<=0x7f), "Invalid function name: "+name
-		check_not_finished()
-		send_raw("newc\n" + name + "\n")
-		define_user_handler(f, "u"+name)
-		content=run_main_loop()
-		assert content==""
-		return f
+newcommand2=define_Python_call_TeX_local(
+r"""
+\cs_new_protected:Npn %name% {
+	\begingroup
+		\endlinechar=-1~
+		\readline \__read_file to \__line
+		\readline \__read_file to \__identifier
+		\cs_new_protected:cpx {\__line} {
+			\unexpanded{\immediate\write \__write_file} { i \__identifier }
+			\unexpanded{\__read_do_one_command:}
+		}
+	\endgroup
+	%optional_sync%
+	\__read_do_one_command:
+}
+""", [PTTVerbatimLine, PTTVerbatimLine], [], recursive=False)
 
-else:
-	#  ++ instead we do this ++
-	mark_bootstrap(
-	r"""
-	\cs_new_protected:Npn \__run_newc: {
-		\begingroup
-			\endlinechar=-1~
-			\readline \__read_file to \__line
-			\cs_new_protected:cpx {\__line} {
-				\unexpanded{\immediate\write \__write_file} { i u \__line }
-				\unexpanded{\__read_do_one_command:}
-			}
-		\endgroup
-		\__read_do_one_command:
-	}
+renewcommand2=define_Python_call_TeX_local(
+r"""
+\cs_new_protected:Npn %name% {
+	\begingroup
+		\endlinechar=-1~
+		\readline \__read_file to \__line
+		\readline \__read_file to \__identifier
+		\exp_args:Ncx \renewcommand {\__line} {
+			\unexpanded{\immediate\write \__write_file} { i \__identifier }
+			\unexpanded{\__read_do_one_command:}
+		}
+		\exp_args:Nc \MakeRobust {\__line}
+	\endgroup
+	%optional_sync%
+	\__read_do_one_command:
+}
+""", [PTTVerbatimLine, PTTVerbatimLine], [], recursive=False)
 
-	\cs_new_protected:Npn \__run_renewc: {
-		\begingroup
-			\endlinechar=-1~
-			\readline \__read_file to \__line
-			\exp_args:Ncx \renewcommand {\__line} {
-				\unexpanded{\immediate\write \__write_file} { i u \__line }
-				\unexpanded{\__read_do_one_command:}
-			}
-			\exp_args:Nc \MakeRobust {\__line}
-		\endgroup
-		\__read_do_one_command:
-	}
-	""")
-	def new_or_renew_command_(name: str, f: Callable, cmd: str="new")->Callable:
-		assert re.fullmatch("[A-Za-z]+", name) or (len(name)==1 and ord(name)<=0x7f), "Invalid function name: "+name
-		check_not_finished()
-		assert cmd in ("new", "renew")
-		send_raw(cmd + "c\n" + name + "\n")
-		g=lambda: run_code_redirect_print_TeX(f)
-		if cmd=="renew":
-			try: del TeX_handlers["u"+name]
-			except KeyError: pass
-		define_user_handler(g, "u"+name)
-		return f
+def check_function_name(name: str)->None:
+	if not re.fullmatch("[A-Za-z]+", name) or (len(name)==1 and ord(name)<=0x7f):
+		raise RuntimeError("Invalid function name: "+name)
 
-	newcommand_=new_or_renew_command_
-	renewcommand_=functools.partial(new_or_renew_command_, cmd="renew")
+def newcommand_(name: str, f: Callable)->Callable:
+	identifier=get_random_identifier()
+
+	newcommand2(PTTVerbatimLine(name), PTTVerbatimLine(identifier))
+
+	_code=define_TeX_call_Python(
+			lambda: run_code_redirect_print_TeX(f),
+			name, argtypes=[], identifier=identifier)
+	# ignore _code, already executed something equivalent in \__run_[re]newc:
+	return f
+
+def renewcommand_(name: str, f: Callable)->Callable:
+	identifier=get_random_identifier()
+
+	renewcommand2(PTTVerbatimLine(name), PTTVerbatimLine(identifier))
+	# TODO remove the redundant entry from TeX_handlers (although technically is not very necessary, just cause slight memory leak)
+	#try: del TeX_handlers["u"+name]
+	#except KeyError: pass
+
+	_code=define_TeX_call_Python(
+			lambda: run_code_redirect_print_TeX(f),
+			name, argtypes=[], identifier=identifier)
+	# ignore _code, already executed something equivalent in \__run_[re]newc:
+	return f
+
 	
 
 @export_function_to_module
@@ -765,6 +1085,10 @@ def renewcommand(x: Union[str, Callable]=None, f: Callable=None)->Callable:
 	if x is None: return newcommand  # weird design but okay (allow |@newcommand()| as well as |@newcommand|)
 	if isinstance(x, str): return functools.partial(renewcommand_, x)
 	return renewcommand_(x.__name__, x)
+
+
+# ========
+
 
 
 

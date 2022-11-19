@@ -1,5 +1,5 @@
 %! TEX program = lualatex
-\errorcontextlines=100
+\errorcontextlines=3
 \documentclass{article}
 \usepackage{prettytok}
 \prettyinitterm
@@ -16,35 +16,63 @@
 	{\relax}
 	{\cFrozenRelax}
 	{\tenrm}
+	{\undefinedtest}
 	{ \} }
 	{ \{ }
 	{~A\cL\:\cO\:\cB\x\cS\ \cS\w\cE\y12#^$^_${}\cA\x\cA\& &\test\\\-\>\S\C\T\?}
 } {
-	\pretty:n{processing~token~list→#1}
-	\tlserialize:NnTF \__tmp {#1} {} {
-		\testfail:n{direct serialize fail}
-	}
+	\tl_set:Nn \__tmpcode {
+		\assertmeaning:NN \undefinedtest \undefined
 
-	
-	\tlserialize:NnTF \__tmp {\edef \__tmpa {\unexpanded{#1}}} {} {\testfail:n{indirect serialize fail}}
+		\pretty:n{processing~token~list→#1}
+		\tlserialize:NnTF \__tmp {#1} {} {
+			\testfail:n{direct serialize fail}
+		}
 
+		\tldeserialize:NV \__deserialized \__tmp
+		\tl_if_eq:VnF \__deserialized {#1} {
+			\testfail:n {reconstruction fail!}
+		}
 
-	\let \__tmpa \empty
-	\scantokens\expandafter{\__tmp}
-	\tl_if_eq:NnTF \__tmpa {#1} {} {\testfail:n {reconstruct fail}}
+		\tlserialize:NnTF \__tmp {\edef \__tmpa {\unexpanded{#1}}} {} {\testfail:n{indirect serialize fail}}
 
+		\assertmeaning:NN \undefinedtest \undefined
 
-	\tl_map_variable:nNn {{\ExplSyntaxOn\makeatletter} {\ExplSyntaxOff\makeatletter} {\ExplSyntaxOn\makeatother} {\ExplSyntaxOff\makeatother}} \__setup_cat {
 		\let \__tmpa \empty
-		\tlserialize:Nn \__tmp {\edef \__tmpa {\unexpanded{#1}}}
-		\tl_rescan:nV {\__setup_cat} \__tmp
-		\testname:n{reconstruct special catcode}
-		\assertequal:Vn \__tmpa {#1}
+
+		\unless \ifx \tlserialize:Nn \tlserializeb:Nn
+
+			\scantokens\expandafter{\__tmp}
+			\tl_if_eq:NnTF \__tmpa {#1} {} {\testfail:n {reconstruct fail}}
+
+
+			\tl_map_variable:nNn {{\ExplSyntaxOn\makeatletter} {\ExplSyntaxOff\makeatletter} {\ExplSyntaxOn\makeatother} {\ExplSyntaxOff\makeatother}} \__setup_cat {
+				\let \__tmpa \empty
+				\tlserialize:Nn \__tmp {\edef \__tmpa {\unexpanded{#1}}}
+				\tl_rescan:nV {\__setup_cat} \__tmp
+				\testname:n{reconstruct special catcode}
+				\assertequal:Vn \__tmpa {#1}
+			}
+
+		\fi
+
+		\assertmeaning:NN \undefinedtest \undefined
 	}
+
+	\__tmpcode
+
+	\begingroup
+		\prettyshow:N \tlserializeb:Nn
+		\let \tlserialize:NnTF \tlserializeb:NnTF 
+		\let \tlserialize:Nn \tlserializeb:Nn 
+		\let \tldeserialize:Nn \tldeserializeb:Nn
+		\__tmpcode
+	\endgroup
 }
 }
 
 \exp_args:NNo \tlserialize:NnTF \__tmp {\the\font} {\testfail:n{the font should not be serializable!}} {}
+%\exp_args:NNo \tlserialize:NnTF \__tmp {\the\font} {\testfail:n{the font should not be serializable!}} {}
 
 \prettystop
 

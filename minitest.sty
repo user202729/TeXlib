@@ -45,6 +45,18 @@
 	}
 }
 
+\cs_new_protected:Npn \assertmeaning:NN #1 #2 {
+	\tl_if_single_token:nF {#1} { \testfail:n {{#1}~not~single~token!} }
+	\tl_if_single_token:nF {#2} { \testfail:n {{#2}~not~single~token!} }
+	\token_if_eq_meaning:NNF #1 #2 {
+		\testfail:nn {Meaning~not~equal!} {
+			\pretty:x {The~input~tokens~are:}
+			\pretty:n {#1}
+			\pretty:n {#2}
+		}
+	}
+}
+
 \AtEndDocument{\pretty:n
 	{All~tests~passed!}
 }

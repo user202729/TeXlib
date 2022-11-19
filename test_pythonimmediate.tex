@@ -95,6 +95,11 @@ x=\pyc{print(str(x))}.  % there's an extra space.
 \verb|\myvalue|\myvalue
 
 \begin{pycode}
+print("11.\n", file=sys.stderr)
+\end{pycode}
+
+
+\begin{pycode}
 @pythonimmediate.newcommand
 def pyvmanual():
 	return eval(pythonimmediate.get_verbatim_argument())
@@ -108,25 +113,15 @@ def pyvmanual():
 \pyvmanual{r"\verb|\myvalue|"}%
 \pyvmanual{r"\myvalue"}  %  use pyv to avoid tokenization
 
-\begin{pycode}
-import pythonimmediate
-import sys
-
-
-print("======== before", file=sys.stderr, flush=True)
-#pythonimmediate.run_tokenized_line_peek(r'\def\test{\test}\test   \prettyN {123} \pythonimmediatecontinue')
-print("======== after", file=sys.stderr, flush=True)
-\end{pycode}
-
 
 \begin{pycode}
 assert ("""
    
 """).count(' ')==3
 
-
 x=1
 
+# ======== test newcommand ========
 @pythonimmediate.newcommand
 def testa():
 	global x
@@ -136,6 +131,16 @@ assert x==1
 pythonimmediate.run_tokenized_line_local(r'\testa')
 assert x==2
 
+# ======== test newcommand with name provided ========
+@pythonimmediate.newcommand("testd")
+def testa():
+	global x
+	x=3
+
+assert x==2
+pythonimmediate.run_tokenized_line_local(r'\testd')
+assert x==3
+
 @pythonimmediate.renewcommand
 def testa():
 	global x, y
@@ -143,9 +148,13 @@ def testa():
 	y=pythonimmediate.get_argument_detokenized()
 
 
+def assertEqual(x, y):
+	assert x==y, (x, y)
+
+
 pythonimmediate.run_tokenized_line_local(r'\testa {123} {456}')
-assert x=="123"
-assert y=="456"
+assertEqual(x, "123")
+assertEqual(y, "456")
 
 
 # ======== test: renewcommand on non-Python-defined command
@@ -155,8 +164,6 @@ pythonimmediate.run_tokenized_line_local(r'\def \testb {}')
 def testb(): pass
 
 
-def assertEqual(x, y):
-	assert x==y, (x, y)
 
 @pythonimmediate.newcommand
 def testc():
@@ -178,9 +185,18 @@ lm|%''')
 
 pythonimmediate.run_tokenized_line_local("789%")
 
+
+
+@pythonimmediate.renewcommand
+def testd():
+	a=pythonimmediate.get_token_list_argument()
+	print(
+			a
+			, file=sys.stderr)
+
+#pythonimmediate.run_block_local(
+#r'''
+#\precattlExec{ \testd {ab} }
+#''')
 \end{pycode}
-
-
-
-
 \end{document}
