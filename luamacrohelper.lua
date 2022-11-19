@@ -80,7 +80,7 @@ luatexbase.add_to_callback("show_error_message", function()
 	--if in_runlocal and status.lasterrorstring:find "Forbidden control sequence found" then
 	--	io.write("\n[luamacrohelper predicted error] Content inside runlocal are not local.\n")
 	--end
-	io.write("\n" .. status.lasterrorstring)
+	texio.write(-1, "\n" .. status.lasterrorstring)  -- use texio.write instead of io.write to also write to .log file
 end, callback_name)
 
 
