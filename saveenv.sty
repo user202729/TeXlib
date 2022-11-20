@@ -57,7 +57,9 @@
 \NewDocumentEnvironment {saveenvkeeplastreinsert} {mm} {
 	\begingroup
 	\edef \_senv_old_endlinechar {\the\endlinechar}
+	%\bench before cctab.
 	\cctab_select:N \c_other_cctab  % note that this changes the value of \endlinechar as well
+	%\bench after cctab.
 	\int_compare:nNnTF {\_senv_old_endlinechar} < {0} {
 		\_senv_start_get_body:N #1
 	} {
@@ -88,11 +90,16 @@
 % #4 content to be inserted after the \end
 \cs_new_protected:Npn \_senv_helper:Nnnn #1 #2 #3 #4 {
 	\cs_set_protected:cpn {[saveenv]~verbatim~body~scanner~for~#2} ##1 \cO{ \\end\{ } #2 \cO\} {
+		%\bench X3.
 		% ##1: the body
 		\peek_meaning_remove:NTF \cO\^^J {
+			%\bench inside peek.
 			\endgroup
+			%\bench after endgroup.
 			\str_gset:Nn #1 {##1}
+			%\bench X5.
 			\end{#3}
+			%\bench X6.
 			#4
 		} {
 			\msg_error:nn {saveenv} {trailing-content-end-line}
@@ -150,7 +157,10 @@
 % set variable #1 to have content of #2, but with last line dropped.
 % lines are separated by \^^J.
 
+\cs_new:Npn \_senv_prepend_newline:n #1 { \cO\^^J #1 }
+
 \cs_new_protected:Npn \saveenv_set_drop_last:Nn #1 #2 {
+	%\bench A.
 	\tl_set:Nn \_senv_body {#2}
 	\tl_replace_all:Nnn \_senv_body {~} {\cO\  }  % keep spaces in seq_set_split (support older expl3 versions)
 	\seq_set_split:NnV \_senv_lines {\cO\^^J} \_senv_body
@@ -164,7 +174,11 @@
 			\msg_error:nnoVV {saveenv} {leading-content-last-line} {\number`##1} \_senv_lastline \@currenvir
 		}
 	}
-	\str_gset:Nx #1 {\seq_use:Nn \_senv_lines {\cO\^^J}}
+	%\bench B.
+	%\str_gset:Nx #1 {\seq_use:Nn \_senv_lines {\cO\^^J}}  % this is extremely slow because \seq_use:Nn is ⋆-expandable
+	\str_gset:Nx #1 {\seq_map_function:NN \_senv_lines \_senv_prepend_newline:n }
+	\str_gset:Nx #1 {\str_tail:N #1}
+	%\bench C.
 }
 
 \cs_generate_variant:Nn \saveenv_set_drop_last:Nn {NV}
