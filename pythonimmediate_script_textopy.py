@@ -20,7 +20,6 @@ from dataclasses import dataclass
 import tempfile
 import signal
 import traceback
-import time
 import re
 import collections
 import enum
@@ -84,11 +83,11 @@ else:
 
 # https://stackoverflow.com/questions/5122465/can-i-fake-a-package-or-at-least-a-module-in-python-for-testing-purposes
 from types import ModuleType
-pythonimmediate=ModuleType("pythonimmediate")
+pythonimmediate: Any=ModuleType("pythonimmediate")
 pythonimmediate.__file__="pythonimmediate.py"
 sys.modules["pythonimmediate"]=pythonimmediate
 
-pythonimmediate.debugging=True  # type: ignore
+pythonimmediate.debugging=True
 
 def export_function_to_module(f: Callable)->Callable:
 	"""
@@ -310,23 +309,30 @@ r"""
 }
 """)
 def run_error_finish()->None:
+	"""
+	this function is fatal to TeX, so we only run it when it's fatal to Python.
+	Which we use atexit_function above.
+
+	TODO what to do if the error is caught?
+
+	Also we want to make sure the Python traceback is printed strictly before run_error_finish() is called.
+	(thus atexit is used for now)
+	"""
 	check_not_finished()
 	send_raw("err\n")
 
 
-
-def on_signal_function(signal_number, stack_frame)->None:
-	debug("======== signal")
-	traceback.print_stack(file=sys.stderr)
-	
-signal.signal(signal.SIGHUP, on_signal_function)
-
+do_run_error_finish=True
 
 if 1:
 	import atexit
 	def atexit_function()->None:
-		debug("======== exit ========")
-		traceback.print_stack(file=sys.stderr)
+		global action_done
+		#debug("======== exit ========")
+		#traceback.print_stack(file=sys.stderr)
+		if do_run_error_finish:
+			action_done=False
+			run_error_finish()
 	atexit.register(atexit_function)
 
 
@@ -376,15 +382,23 @@ def read_block()->str:
 			lines.append(line)
 
 
+@export_function_to_module
 class Token(ABC):
 	@abstractmethod
 	def __str__(self)->str:
 		...
 	@abstractmethod
 	def serialize(self)->str:
-		pass
+		...
+	@abstractmethod
+	def repr1(self)->str:
+		...
 
-@dataclass
+	def __repr__(self)->str:
+		return f"<Token: {self.repr1()}>"
+
+@export_function_to_module
+@dataclass(repr=False)
 class ControlSequenceToken(Token):
 	csname: str
 	def __str__(self)->str:
@@ -392,7 +406,10 @@ class ControlSequenceToken(Token):
 		return "\\"+self.csname
 	def serialize(self)->str:
 		return "0"+self.csname+"/"
+	def repr1(self)->str:
+		return f"\\{self.csname}"
 
+@export_function_to_module
 class Catcode(enum.Enum):
 	begin_group=bgroup=1
 	end_group=egroup=2
@@ -419,7 +436,8 @@ class Catcode(enum.Enum):
 		"""
 		return self not in (Catcode.escape, Catcode.line, Catcode.ignored, Catcode.comment, Catcode.invalid)
 
-@dataclass
+@export_function_to_module
+@dataclass(repr=False)
 class CharacterToken(Token):
 	index: int
 	catcode: Catcode
@@ -431,25 +449,32 @@ class CharacterToken(Token):
 	def __str__(self)->str:
 		return self.chr
 	def serialize(self)->str:
-		return f"{self.catcode.value:X}\\{self.chr}"
+		return f"{self.catcode.value:X}{self.chr}"
+	def repr1(self)->str:
+		cat=str(self.catcode.value).translate(str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉"))
+		return f"{self.chr}{cat}"
 
 class FrozenRelaxToken(Token):
 	def __str__(self)->str:
 		return r"\relax"
 	def serialize(self)->str:
 		return "R"
+	def repr1(self)->str:
+		return r"[frozen]\relax"
 
 frozen_relax_token=FrozenRelaxToken()
+pythonimmediate.frozen_relax_token=frozen_relax_token
 
 # other special tokens later...
 
+@export_function_to_module
 class TokenList(collections.UserList[Token]):
 	def serialize(self)->str:
 		return "".join(t.serialize() for t in self)
 	@staticmethod
 	def deserialize(data: str)->"TokenList":
 		result=TokenList()
-		for match_ in re.finditer(r'0(.*?)/|(R)|(.)(\\?.)', data):
+		for match_ in re.finditer(r'0(.*?)/|(R)|(.)\\?(.) ?', data):
 			groups=match_.groups()
 			i=0
 			while groups[i] is None: i+=1
@@ -458,10 +483,12 @@ class TokenList(collections.UserList[Token]):
 			elif i==1:
 				result.append(frozen_relax_token)
 			elif i==2:
-				result.append(CharacterToken(index=ord(groups[3]), catcode=Catcode(int(groups[3], 16))))
+				result.append(CharacterToken(index=ord(groups[3]), catcode=Catcode(int(groups[2], 16))))
 			else:
 				assert False
 		return result
+	def __repr__(self)->str:
+		return '<TokenList: ' + ' '.join(t.repr1() for t in self) + '>'
 
 
 
@@ -474,6 +501,10 @@ class TeXToPyData(ABC):
 	@staticmethod
 	@abstractmethod
 	def send_code(arg: str)->str:
+		pass
+	@staticmethod
+	@abstractmethod
+	def send_code_var(var: str)->str:
 		pass
 
 # tried and failed
@@ -492,7 +523,8 @@ class TeXToPyData(ABC):
 	
 
 class TTPLine(TeXToPyData, str):
-	send_code=r"\immediate \write \__write_file {{ {} }}".format
+	send_code=r"\immediate \write \__write_file {{\unexpanded{{ {} }}}}".format
+	send_code_var=r"\immediate \write \__write_file {{\unexpanded{{ {} }}}}".format
 	@staticmethod
 	def read()->"TTPLine":
 		line=readline()
@@ -501,20 +533,27 @@ class TTPLine(TeXToPyData, str):
 
 class TTPBlock(TeXToPyData, str):
 	send_code=r"\__send_block:n {{ {} }}".format
+	send_code_var=r"\__send_block:V {}".format
 	@staticmethod
 	def read()->"TTPBlock":
 		return TTPBlock(read_block())
 
 class TTPTokenList(TeXToPyData, TokenList):
-	send_code=r"\tlserializeb:Nn \__tmp {{ {} }} \immediate \write \__write_file {{\__tmp}}".format
+	send_code=r"\tlserializeb:Nn \__tmp {{ {} }} \immediate \write \__write_file {{\unexpanded\expandafter{{ \__tmp }}}}".format
+	send_code_var=r"\tlserializeb:NV \__tmp {} \immediate \write \__write_file {{\unexpanded\expandafter{{ \__tmp }}}}".format
 	@staticmethod
 	def read()->"TTPTokenList":
 		line=readline()
 		assert line is not None
+		debug(line)
 		return TTPTokenList(TokenList.deserialize(line))
 
 
 class PyToTeXData(ABC):
+	@staticmethod
+	@abstractmethod
+	def read_code(var: str)->str:
+		...
 	@abstractmethod
 	def write(self)->None:
 		...
@@ -522,7 +561,7 @@ class PyToTeXData(ABC):
 @dataclass
 class PTTVerbatimLine(PyToTeXData):
 	data: str
-	read_code=r"\readline \__read_file to {target}"
+	read_code=r"\ior_str_get:NN \__read_file {} ".format
 	def write(self)->None:
 		assert "\n" not in self.data
 		send_raw(self.data+"\n")
@@ -530,23 +569,24 @@ class PTTVerbatimLine(PyToTeXData):
 @dataclass
 class PTTTeXLine(PyToTeXData):
 	data: str
-	read_code=r"\read \__read_file to {target}"
+	read_code=r"\ior_get:NN \__read_file {} ".format
 	def write(self)->None:
 		assert "\n" not in self.data
-		send_raw(self.data)
+		send_raw(self.data+"\n")
 
 @dataclass
 class PTTBlock(PyToTeXData):
 	data: str
-	read_code=r"\__read_block:n {target}"
+	read_code=r"\__read_block:n {}".format
 	def write(self)->None:
 		send_raw(surround_delimiter(self.data))
 
 @dataclass
 class PTTTokenList(PyToTeXData):
 	data: TokenList
+	read_code=r"\ior_str_get:NN \__read_file {0}  \tldeserializeb:NV {0} {0}".format
 	def write(self)->None:
-		send_raw(self.data.serialize())
+		send_raw(self.data.serialize()+"\n")
 
 
 def wrap_executor(f: Callable[..., None])->Callable:
@@ -569,8 +609,10 @@ def wrap_executor(f: Callable[..., None])->Callable:
 				# error occurred after 'finish' is called, cannot signal the error to TeX, will just ignore (after printing out the traceback)...
 				pass
 			else:
-				run_error_finish()
-			traceback.print_exc()
+				# TODO what should be done here? What if the error raised below is caught
+				action_done=True
+				#do_run_error_finish=True  # it already is
+			raise
 		finally:
 			if not action_done:
 				run_none_finish()
@@ -695,7 +737,7 @@ def print_TeX(*args, **kwargs)->None:
 		raise RuntimeError("Internal error: attempt to print to TeX outside any environment!")
 	if pythonimmediate.file is not None:
 		functools.partial(print, file=pythonimmediate.file)(*args, **kwargs)  # allow user to override `file` kwarg
-pythonimmediate.print=print_TeX  # type: ignore
+pythonimmediate.print=print_TeX
 
 class RedirectPrintTeX:
 	def __init__(self, t)->None:
@@ -704,11 +746,11 @@ class RedirectPrintTeX:
 	def __enter__(self)->None:
 		if hasattr(pythonimmediate, "file"):
 			self.old=pythonimmediate.file
-		pythonimmediate.file=self.t  # type: ignore
+		pythonimmediate.file=self.t
 
 	def __exit__(self, exc_type, exc_value, tb)->None:
 		if hasattr(self, "old"):
-			pythonimmediate.file=self.old  # type: ignore
+			pythonimmediate.file=self.old
 		else:
 			del pythonimmediate.file
 
@@ -816,10 +858,14 @@ after a control sequence.
 It's undefined behavior if the message's "string representation" contains a "newline character".
 """)
 
-def template_substitute(template: str, pattern: str, substitute: str, optional: bool=False)->str:
+def template_substitute(template: str, pattern: str, substitute: Union[str, Callable[[re.Match], str]], optional: bool=False)->str:
+	"""
+	pattern is a regex
+	"""
 	if not optional:
-		assert template.count(pattern)==1
-	return template.replace(pattern, substitute)
+		#assert template.count(pattern)==1
+		assert len(re.findall(pattern, template))==1
+	return re.sub(pattern, substitute, template)
 
 #typing.TypeVarTuple(PyToTeXData)
 
@@ -843,6 +889,13 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: list[type[PyToTeXData]],
 			* send |r| to Python
 			* send whatever needed for the output (as in |ttp_argtypes|)
 		* call |\__read_do_one_command:|
+
+		This is allowed to contain the following:
+		* %name%: the name of the function to be defined as explained above.
+		* %read_arg0(...)%, %read_arg1(...)%: will be expanded to code that reads the input.
+		* %send_arg0(...)%, %send_arg1(...)%: will be expanded to code that sends the content.
+		* %send_arg0_var(...)%, %send_arg1_var(...)%: will be expanded to code that sends the content in the variable.
+		* %optional_sync%: expanded to code that writes |r| (to sync), if |sync| is True.
 
 	ptt_argtypes: list of argument types to be sent from Python to TeX (i.e. input of the TeX function)
 
@@ -869,16 +922,33 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: list[type[PyToTeXData]],
 		else: sync=ttp_argtypes!=[]
 
 		TeX_code=template_substitute(TeX_code, "%optional_sync%",
-							   r'\immediate\write\__write_file { r }' if sync else '',)
+							   lambda _: r'\immediate\write\__write_file { r }' if sync else '',)
+
+	TeX_code=template_substitute(TeX_code, "%sync%",
+						   lambda _: r'\immediate\write\__write_file { r }' if sync else '', optional=True)
 
 	assert sync is not None
 	if ttp_argtypes: assert sync
 	identifier=get_random_identifier()  # TODO to be fair it isn't necessary to make the identifier both ways distinct, can reuse
 
-	TeX_code=template_substitute(TeX_code, "%name%", r"\__run_" + identifier + ":")
+	TeX_code=template_substitute(TeX_code, "%name%", lambda _: r"\__run_" + identifier + ":")
+
+	for i, argtype_ in enumerate(ptt_argtypes):
+		TeX_code=template_substitute(TeX_code, r"%read_arg" + str(i) + r"\(([^)]*)\)%",
+							   lambda match: argtype_.read_code(match[1]),
+							   optional=True)
+
+	for i, argtype in enumerate(ttp_argtypes):
+		TeX_code=template_substitute(TeX_code, r"%send_arg" + str(i) + r"\(([^)]*)\)%",
+							   lambda match: argtype.send_code(match[1]),
+							   optional=True)
+
+	for i, argtype in enumerate(ttp_argtypes):
+		TeX_code=template_substitute(TeX_code, r"%send_arg" + str(i) + r"_var\(([^)]*)\)%",
+							   lambda match: argtype.send_code_var(match[1]),
+							   optional=True)
 
 	def f(*args)->Optional[tuple[TeXToPyData, ...]]:
-		debug("here")
 		assert len(args)==len(ptt_argtypes)
 
 		# send function header
@@ -932,6 +1002,22 @@ def get_argument_detokenized()->str:
 	Get a mandatory argument.
 	"""
 	return str(get_argument_detokenized_()[0])
+
+get_argument_tokenlist_=define_Python_call_TeX_local_sync(
+r"""
+\cs_new_protected:Npn %name% #1 {
+	%sync%
+	%send_arg0(#1)%
+	\__read_do_one_command:
+}
+""", [], [TTPTokenList], recursive=False)
+@export_function_to_module
+@user_documentation
+def get_argument_tokenlist()->TokenList:
+	"""
+	Get a mandatory argument as a TokenList
+	"""
+	return TokenList(get_argument_tokenlist_()[0])  # type: ignore
 
 get_optional_argument_detokenized_=define_Python_call_TeX_local_sync(
 r"""
@@ -1089,8 +1175,138 @@ def renewcommand(x: Union[str, Callable]=None, f: Callable=None)->Callable:
 
 # ========
 
+put_next_tokenlist=define_Python_call_TeX_local(
+r"""
+\tl_gset:Nn \__put_next_tmp {
+	%optional_sync%
+	\__read_do_one_command:
+}
+\cs_new_protected:Npn %name% {
+	%read_arg0(\__target)%
+	\expandafter \__put_next_tmp \__target
+}
+"""
+		, [PTTTokenList], [], recursive=False)
+put_next_TeX_line=define_Python_call_TeX_local(
+r"""
+\tl_gset:Nn \__put_next_tmpa {
+	%optional_sync%
+	\__read_do_one_command:
+}
+\cs_new_protected:Npn %name% {
+	%read_arg0(\__target)%
+	\expandafter \__put_next_tmpa \__target
+}
+"""
+		, [PTTTeXLine], [], recursive=False)
+
+@export_function_to_module
+@user_documentation
+def put_next(arg: Union[str, Token, TokenList])->None:
+	"""
+	Put some content forward in the input stream.
+
+	arg: has type |str| (will be tokenized in the current catcode regime, must be a single line),
+	or |TokenList|.
+	"""
+	if isinstance(arg, Token): arg=TokenList([arg])
+	if isinstance(arg, str): put_next_TeX_line(PTTTeXLine(arg))
+	else: put_next_tokenlist(PTTTokenList(arg))
+
+get_next_=define_Python_call_TeX_local_sync(
+r"""
+\cs_new_protected:Npn \__get_next_callback: #1 {
+	\immediate\write \__write_file { r^^J #1 }
+	\__read_do_one_command:
+}
+
+\cs_new_protected:Npn %name% {
+	\peek_analysis_map_inline:n {
+		\peek_analysis_map_break:n {
+			\tlserializeb_char_unchecked:nnNN {##1}{##2}##3 \__get_next_callback:
+		}
+	}
+}
+""", [], [TTPLine], recursive=False)
+
+@export_function_to_module
+@user_documentation
+def get_next_token()->Token:
+	"""
+	Get the following token.
+
+	Note: in LaTeX3 versions without the commit |https://github.com/latex3/latex3/commit/24f7188904d6|
+	sometimes this may error out.
+
+	Note: because of the internal implementation of |\peek_analysis_map_inline:n|, this may
+	tokenize up to 2 tokens ahead (including the returned token),
+	as well as occasionally return the wrong token in unavoidable cases.
+	"""
+	line=str(get_next_()[0])
+	t=TokenList.deserialize(line)
+	assert len(t)==1
+	return t[0]
 
 
+peek_next_=define_Python_call_TeX_local_sync(
+r"""
+\cs_new_protected:Npn \__peek_next_callback: #1 {
+	\immediate\write \__write_file { r^^J #1 }
+	\expandafter  % expand the ##1 in (*)
+		\__read_do_one_command:
+}
+
+\cs_new_protected:Npn %name% {
+	\peek_analysis_map_inline:n {
+		\peek_analysis_map_break:n {
+			\tlserializeb_char_unchecked:nnNN {##1}{##2}##3 \__peek_next_callback: ##1 % (*)
+		}
+	}
+}
+""", [], [TTPLine], recursive=False)
+
+@export_function_to_module
+@user_documentation
+def peek_next_token()->Token:
+	"""
+	Get the following token without removing it from the input stream.
+
+	Note: in LaTeX3 versions without the commit |https://github.com/latex3/latex3/commit/24f7188904d6|
+	sometimes this may error out.
+
+	Note: because of the internal implementation of |\peek_analysis_map_inline:n|, this may
+	tokenize up to 2 tokens ahead (including the returned token),
+	as well as occasionally return the wrong token in unavoidable cases.
+	"""
+	line=str(peek_next_()[0])
+	t=TokenList.deserialize(line)
+	assert len(t)==1, (line, t)
+	return t[0]
+
+
+peek_next_meaning_=define_Python_call_TeX_local_sync(
+r"""
+\cs_new_protected:Npn \__peek_next_meaning_callback: {
+	\edef \__tmp {\meaning \__tmp}  % just in case |\__tmp| is outer, |\write| will not be able to handle it
+	\immediate\write \__write_file { r^^J \__tmp }
+	\__read_do_one_command:
+}
+\cs_new_protected:Npn %name% {
+	\futurelet \__tmp \__peek_next_meaning_callback:
+}
+""", [], [TTPLine], recursive=False)
+@export_function_to_module
+@user_documentation
+def peek_next_meaning()->str:
+	"""
+	Get the meaning of the following token, as a string, using the current |\escapechar|.
+	
+	This is recommended over |peek_next_token()| as it will not tokenize an extra token.
+
+	It's undefined behavior if there's a newline (|\newlinechar| or |^^J|, the latter is OS-specific)
+	in the meaning string.
+	"""
+	return str(peek_next_meaning_()[0])
 
 
 # ========
@@ -1099,3 +1315,6 @@ send_bootstrap_code()
 run_main_loop()  # if this returns cleanly TeX has no error. Otherwise some readline() will reach eof and print out a stack trace
 
 assert readline(allow_nothing=True)==None, "Internal error: TeX sends extra line"
+do_run_error_finish=False
+
+

@@ -189,14 +189,39 @@ pythonimmediate.run_tokenized_line_local("789%")
 
 @pythonimmediate.renewcommand
 def testd():
-	a=pythonimmediate.get_token_list_argument()
-	print(
-			a
-			, file=sys.stderr)
+	a=pythonimmediate.get_argument_tokenlist()
+	print(f"{a=}", file=sys.stderr)
 
-#pythonimmediate.run_block_local(
-#r'''
-#\precattlExec{ \testd {ab} }
-#''')
+	pythonimmediate.put_next(r'{123}')
+	b=pythonimmediate.get_argument_tokenlist()
+	print(f"{b=}", file=sys.stderr)
+
+	pythonimmediate.put_next(r'{1 a\relax}')
+	for t, meaning in [
+			(pythonimmediate.CharacterToken(ord('{'), pythonimmediate.Catcode.bgroup), "begin-group character {"),
+			(pythonimmediate.CharacterToken(ord('1'), pythonimmediate.Catcode.other), "the character 1"),
+			(pythonimmediate.CharacterToken(ord(' '), pythonimmediate.Catcode.space), "blank space  "),
+			(pythonimmediate.CharacterToken(ord('a'), pythonimmediate.Catcode.letter), "the letter a"),
+			(pythonimmediate.ControlSequenceToken('relax'), r"\relax"),
+			(pythonimmediate.CharacterToken(ord('}'), pythonimmediate.Catcode.egroup), "end-group character }"),
+			]:
+		assertEqual(pythonimmediate.peek_next_meaning(), meaning)
+		assertEqual(pythonimmediate.peek_next_token(), t)
+		assertEqual(pythonimmediate.get_next_token(), t)
+
+	pythonimmediate.put_next(pythonimmediate.frozen_relax_token)
+	assertEqual(pythonimmediate.peek_next_token(), pythonimmediate.frozen_relax_token)
+	assertEqual(pythonimmediate.get_next_token(), pythonimmediate.frozen_relax_token)
+
+	pythonimmediate.put_next(a)
+	c=pythonimmediate.get_argument_tokenlist()
+	print(f"{c=}", file=sys.stderr)
+
+	assert c==a[1:-1]
+
+pythonimmediate.run_block_local(
+r'''
+\precattlExec{ \testd {{ab\cC {}\cC{123}\relax\cFrozenRelax {}\cP*$^_ \cS\a}} }
+''')
 \end{pycode}
 \end{document}
