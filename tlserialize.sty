@@ -24,8 +24,11 @@
 }
 
 
+%\bench start.
 \begin{rescansyncRewriteenv}{ \str_replace_all:Nnn #1 {__} {_tlser_} }
+%\bench rescanned.
 \begin{precattlenv}
+%\bench precatted.
 
 \cs_new:Npn \__process_char #1 #2 {
 	%\prettye:n{{#1}{#2}}
@@ -136,6 +139,8 @@
 	}
 }
 
+%\bench end B block.
+
 \end{precattlenv}
 \end{rescansyncRewriteenv}
 
@@ -158,7 +163,9 @@
 }
 
 
+%\bench before rescan 2.
 \begin{rescansyncRewriteenv}{ \str_replace_all:Nnn #1 {__} {_tlser_} }
+%\bench after rescan 2.
 
 
 \NewDocumentCommand\__set_str{mv}{
@@ -183,7 +190,9 @@
 \__set_str   \__alt_finale |}\expandafter}\csname __result:n\expandafter\endcsname\expandafter{\T}%|
 
 
+%\bench before precat2.
 \begin{precattlenv}
+	%\bench after precat2.
 \cs_new_protected:Npn \tlserialize_unchecked:Nn #1 #2{
 	\tl_build_begin:N #1
 	\tl_build_put_right:NV #1 \__preamble

@@ -273,6 +273,7 @@
 
 
 \cs_new_protected:Npn \precattl_prepare:n #1 {
+	%\bench start~prepare.
 	\begingroup
 		\let \EIhandler_EIexpand \undefined
 		\let \EIhandler_EIexecute \undefined
@@ -295,6 +296,7 @@
 		\let \EIhandler_cInnerEndtemplate \_prctl_do_inner_endtemplate
 		\execinside_gset:Nn \_prctl_valueg {#1}
 	\endgroup
+	%\bench done~prepare.
 }
 
 \cs_new_protected:Npn \precattl_set:Nn #1 #2 {

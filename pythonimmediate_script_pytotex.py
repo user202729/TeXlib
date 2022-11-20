@@ -11,13 +11,10 @@ user code are not executed here.
 """
 
 import sys
-import functools
-import time
-from pathlib import Path
-import tempfile
 
-debug_file=open(Path(tempfile.gettempdir())/"pythonimmediate_debug_pytotex.txt", "w", encoding='u8', buffering=2)
-debug=functools.partial(print, file=debug_file, flush=True)
+#debug_file=open(Path(tempfile.gettempdir())/"pythonimmediate_debug_pytotex.txt", "w", encoding='u8', buffering=2)
+#debug=functools.partial(print, file=debug_file, flush=True)
+debug=lambda *args, **kwargs: None
 
 import argparse
 parser=argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)

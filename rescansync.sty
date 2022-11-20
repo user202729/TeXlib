@@ -105,11 +105,14 @@
 }
 
 \NewDocumentEnvironment {rescansyncRewriteenv} {m} {
+	%\bench rescan~start.
 	\global\def \_RS_tmp_function:N ##1 {#1}
 	\global\edef \_RS_lineno {\the\inputlineno}
 	\_RS_check_saveenv: \_RS_check_currfile:
 	\saveenvreinsert \_RS_body {
+		%\bench reinsert~code~done.
 		\_RS_tmp_function:N \_RS_body
+		%\bench apply~function~done.
 		\rescansync:Vxx \_RS_body {\_RS_lineno} {\currfilename}
 	}
 } {
