@@ -133,8 +133,15 @@
 	\GenerateVariantsTL:N #1
 }
 
+\def \_GV_Normal:n #1 {
+	\wlog {\detokenize{#1}}
+	#1
+}
+
 \cs_set_protected:Npn \GenerateVariantsFile:n #1 {
-	\GenerateVariantsFile:Nn \use:n {#1}
+	\wlog {========start}
+	\GenerateVariantsFile:Nn \_GV_Normal:n {#1}
+	\wlog {========end}
 }
 
 \def \_GV_LogDetokenized:n #1 {
