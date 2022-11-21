@@ -29,18 +29,20 @@
 %\GenerateVariantsFile:n{\rescansynclastfilename}
 
 \str_set:Nn \__outputdir{.}
+\tl_set:Nn \__textopy_script_path{}
 \str_set:Nn \__mode{multiprocessing_network}
 \keys_define:nn{pythonimmediate}{
 	outputdir.tl_set_x:N=\__outputdir,
 	%outputdir.default:n={.},  % huh does not work?
 
 	mode.tl_set:N=\__mode,
+	scriptpath.tl_set_x:N=\__textopy_script_path,
 }
 \ProcessKeysOptions{pythonimmediate}
 
 \str_set:NV \__outputdir \__outputdir
 \str_set:NV \__mode \__mode
-
+\str_set:NV \__textopy_script_path \__textopy_script_path
 
 \msg_new:nnn {pythonimmediate} {shell-fail} {Shell~command~execution~failed!}
 \msg_new:nnn {pythonimmediate} {cannot-determine-script-path} {Cannot~determine~script~path!}
@@ -61,20 +63,22 @@
 \newread \__read_file
 
 
-% ======== first use kpsewhich to get the __script_path here ========
-% (abuse \__read_file variable for this purpose)
-\openin \__read_file=|"kpsewhich~ pythonimmediate_script_textopy.py"~
 
 
 %\bench before~setup.
 
 \begingroup
 	\endlinechar=-1~
-	\readline \__read_file to \__textopy_script_path
-	%\bench after~get~textopy~path.
-	\ifeof \__read_file
-		\msg_error:nn {pythonimmediate} {cannot-determine-script-path}
-	\fi
+	\tl_if_empty:NT \__textopy_script_path {
+		% ======== first use kpsewhich to get the __script_path here ========
+		% (abuse \__read_file variable for this purpose)
+		\openin \__read_file=|"kpsewhich~ pythonimmediate_script_textopy.py"~
+		\readline \__read_file to \__textopy_script_path
+		%\bench after~get~textopy~path.
+		\ifeof \__read_file
+			\msg_error:nn {pythonimmediate} {cannot-determine-script-path}
+		\fi
+	}
 
 	\str_if_eq:xnF {\str_range:Vnn \__textopy_script_path {-10} {-1}} {textopy.py} {
 		\msg_error:nn {pythonimmediate} {cannot-determine-script-path}
@@ -93,6 +97,11 @@
 
 	%\bench after~openin.
 
+	%\bench before~openout.
+	\immediate\openout \__write_file=|"python3~ \__textopy_script_path \space \__mode"~
+	% both processes must be before the \readline above so that the 2 Python processes are started "in parallel"
+	%\bench after~openout.
+
 	\readline \__read_file to \__dummy_line  % endlinechar still -1
 	%\bench after~read~line.
 	\bool_if:NT \__mode_multiprocessing_network {
@@ -105,9 +114,6 @@
 			\msg_error:nn {pythonimmediate} {cannot-read-line}
 		}
 	}
-	%\bench before~openout.
-	\immediate\openout \__write_file=|"python3~ \__textopy_script_path \space \__mode"~
-	%\bench after~openout.
 	\bool_if:NT \__mode_unnamed_pipe {
 		\immediate\write\__write_file {\__dummy_line}  % which contains pytotex's pid
 	}
