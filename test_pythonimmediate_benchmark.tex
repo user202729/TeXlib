@@ -40,21 +40,28 @@
 import pythonimmediate
 import timeit
 
+def assertEqual(x, y):
+	assert x==y, (x, y)
+
 pythonimmediate.run_tokenized_line_local(r'\newcount\counta \counta=-1 ')
 i=-1
 def f():
 	global i
 	i=i+1
 	s=pythonimmediate.run_tokenized_line_peek(r'\advance\counta by 1 \pythonimmediatecontinue{\the\counta}%')
-	assert s==str(i)
+	assertEqual(s, str(i))
 print("run_tokenized_line_local:", timeit.timeit(f, number=10000))
 
 pythonimmediate.put_next(r"a")
 def f():
 	s=pythonimmediate.peek_next_meaning()
-	assert s=="the letter a"
+	assertEqual(s, "the letter a")
 print("peek_next_meaning:", timeit.timeit(f, number=20000))
 
+def f():
+	s=pythonimmediate.peek_next_char()
+	assertEqual(s, "a")
+print("peek_next_char:", timeit.timeit(f, number=20000))
 
 \end{pycode}
 

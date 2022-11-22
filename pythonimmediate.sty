@@ -90,7 +90,10 @@
 
 	% ======== open persistent pipes to the child processes
 	\bool_if:NTF \__mode_unnamed_pipe {  % in this case make sure the pipe remains open...
-		\openin \__read_file=|"sleep~ infinity|python3~ \str_range:Vnn \__textopy_script_path {1} {-11} pytotex.py \space \__mode"~  % we must use the primitive here to use the pipe file path
+		\openin \__read_file=|"sleep~ 0.5s|python3~ \str_range:Vnn \__textopy_script_path {1} {-11} pytotex.py \space \__mode"~  % we must use the primitive here to use the pipe file path
+		% TODO sleep infinity causes some resource leak (the process will not exit after TeX exits). Need to fix
+		% but sleep too little might be problematic that it exits before the setup is done
+		% we can just assume machines are not that slow
 	} {
 		\openin \__read_file=|"python3~ \str_range:Vnn \__textopy_script_path {1} {-11} pytotex.py \space \__mode"~  % we must use the primitive here to use the pipe file path
 	}

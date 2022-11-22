@@ -226,5 +226,25 @@ pythonimmediate.run_block_local(
 r'''
 \precattlExec{ \testd {{ab\cC {}\cC{123}\relax\cFrozenRelax {}\cP*$^_ \cS\a}} }
 ''')
+
+pythonimmediate.put_next("a")
+assertEqual(pythonimmediate.peek_next_char(), "a")
+
+pythonimmediate.put_next(r"\a")
+assertEqual(pythonimmediate.peek_next_char(), "")
+pythonimmediate.get_next_token()
+
+pythonimmediate.put_next(pythonimmediate.CharacterToken(ord(' '), pythonimmediate.Catcode.space))
+assertEqual(pythonimmediate.peek_next_char(), " ")
+
+pythonimmediate.put_next(r"\relax")
+assertEqual(pythonimmediate.peek_next_char(), "")
+
+pythonimmediate.put_next(r"\begingroup\endgroup")
+assertEqual(pythonimmediate.peek_next_char(), "")
+
+pythonimmediate.put_next(r"\bgroup\egroup")
+assertEqual(pythonimmediate.peek_next_char(), "{")
+
 \end{pycode}
 \end{document}

@@ -550,6 +550,18 @@ class TTPLine(TeXToPyData, str):
 		assert line is not None
 		return TTPLine(line)
 
+class TTPEmbeddedLine(TeXToPyData, str):
+	@staticmethod
+	def send_code(self):
+		raise RuntimeError("Must be manually handled")
+	@staticmethod
+	def send_code_var(self):
+		raise RuntimeError("Must be manually handled")
+	@staticmethod
+	def read()->"TTPEmbeddedLine":
+		raise RuntimeError("Must be manually handled")
+
+
 class TTPBlock(TeXToPyData, str):
 	send_code=r"\__send_block:n {{ {} }}".format
 	send_code_var=r"\__send_block:V {}".format
@@ -580,14 +592,14 @@ class PyToTeXData(ABC):
 @dataclass
 class PTTVerbatimLine(PyToTeXData):
 	"""
-	Represents a line to be tokenized verbatim. Internally the |\readline| primitive is used.
+	Represents a line to be tokenized verbatim. Internally the |\readline| primitive is used, as such, any trailing spaces are stripped.
 	The trailing newline is not included, i.e. it's read under |\endlinechar=-1|.
 	"""
-	# TODO add test for PTTVerbatimLine that has trailing spaces
 	data: str
 	read_code=r"\ior_str_get:NN \__read_file {} ".format
 	def write(self)->None:
 		assert "\n" not in self.data
+		assert self.data.rstrip()==self.data, "Cannot send verbatim line with trailing spaces!"
 		send_raw(self.data+"\n")
 
 @dataclass
@@ -612,9 +624,9 @@ class PTTBlock(PyToTeXData):
 @dataclass
 class PTTTokenList(PyToTeXData):
 	data: TokenList
-	read_code=r"\ior_str_get:NN \__read_file {0}  \tldeserializeb:NV {0} {0}".format
+	read_code=r"\ior_str_get:NN \__read_file {0}  \tldeserializeb_terminated:NV {0} {0}".format
 	def write(self)->None:
-		send_raw(self.data.serialize()+"\n")
+		PTTVerbatimLine(self.data.serialize()+".").write()
 
 
 def wrap_executor(f: Callable[..., None])->Callable:
@@ -945,7 +957,7 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: list[type[PyToTeXData]],
 	Possible optimizations:
 		* the |r| is not needed if not recursive and |ttp_argtypes| is nonempty
 			(the output itself tells Python when the \TeX\ code finished)
-		* the first line of the output may be on the same line as the |r| itself
+		* the first line of the output may be on the same line as the |r| itself (done, use TTPEmbeddedLine type, although a bit hacky)
 	"""
 	if sync is None:
 		if pythonimmediate.debugging: sync=True
@@ -959,6 +971,7 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: list[type[PyToTeXData]],
 
 	assert sync is not None
 	if ttp_argtypes: assert sync
+	assert ttp_argtypes.count(TTPEmbeddedLine)<=1
 	identifier=get_random_identifier()  # TODO to be fair it isn't necessary to make the identifier both ways distinct, can reuse
 
 	TeX_code=template_substitute(TeX_code, "%name%", lambda _: r"\__run_" + identifier + ":")
@@ -995,11 +1008,15 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: list[type[PyToTeXData]],
 			result_=run_main_loop()
 		else:
 			result_=run_main_loop_get_return_one()
-		assert not result_
 
-		result=[]
+		result: list[TeXToPyData]=[]
+		if TTPEmbeddedLine not in ttp_argtypes:
+			assert not result_
 		for argtype_ in ttp_argtypes:
-			result.append(argtype_.read())
+			if argtype_==TTPEmbeddedLine:
+				result.append(TTPEmbeddedLine(result_))
+			else:
+				result.append(argtype_.read())
 		return tuple(result)
 
 	
@@ -1315,15 +1332,17 @@ def peek_next_token()->Token:
 peek_next_meaning_=define_Python_call_TeX_local_sync(
 r"""
 \cs_new_protected:Npn \__peek_next_meaning_callback: {
+
 	\edef \__tmp {\meaning \__tmp}  % just in case |\__tmp| is outer, |\write| will not be able to handle it
-	%\immediate\write \__write_file { r^^J \unexpanded\expandafter{\__tmp} }
-	\immediate\write \__write_file { r^^J \__tmp }
+	%\immediate\write \__write_file { r \unexpanded\expandafter{\__tmp} }
+	\immediate\write \__write_file { r \__tmp }
+
 	\__read_do_one_command:
 }
 \cs_new_protected:Npn %name% {
 	\futurelet \__tmp \__peek_next_meaning_callback:
 }
-""", [], [TTPLine], recursive=False)
+""", [], [TTPEmbeddedLine], recursive=False)
 # TODO I wonder which one is faster. Need to benchmark...
 @export_function_to_module
 @user_documentation
@@ -1339,33 +1358,81 @@ def peek_next_meaning()->str:
 	return str(peek_next_meaning_()[0])
 
 
-peek_next_char_=define_Python_call_TeX_local_sync(
-r"""
-\cs_new_protected:Npn \__peek_next_char_callback: {
-	\edef \__tmpb { \expandafter\str_item:nn\expandafter{\meaning \__tmp} {-1} }  % \expandafter just in case \__tmp is \outer
-	\if \__tmp \__tmpb  % is a character
-		\immediate\write \__write_file { r^^J \__tmp }
-	\else  % is not?
-		\immediate\write \__write_file { r^^J }
-	\fi
-	\__read_do_one_command:
-}
-\cs_new_protected:Npn %name% {
-	\futurelet \__tmp \__peek_next_char_callback:
-}
-""", [], [TTPLine], recursive=False)
+if 0:
+	peek_next_char_=define_Python_call_TeX_local_sync(
+
+	# first attempt. Slower than peek_next_meaning.
+	r"""
+	\cs_new_protected:Npn \__peek_next_char_callback: {
+		\edef \__tmpb { \expandafter\str_item:nn\expandafter{\meaning \__tmp} {-1} }  % \expandafter just in case \__tmp is \outer
+		\if \noexpand\__tmp \__tmpb  % is a character
+			\immediate\write \__write_file { r^^J \__tmpb }
+		\else  % is not?
+			\immediate\write \__write_file { r^^J }
+		\fi
+		\__read_do_one_command:
+	}
+	\cs_new_protected:Npn %name% {
+		\futurelet \__tmp \__peek_next_char_callback:
+	}
+	"""
+
+	# second attempt. Faster than before but still slower than peek_next_meaning.
+	#r"""
+	#\cs_new_protected:Npn %name% {
+	#	\futurelet \__tmp \__peek_next_char_callback:
+	#}
+	#
+	#\cs_new_protected:Npn \__peek_next_char_callback: {
+	#	%\if \noexpand\__tmp \c_space_token  % there's also this case and that \__tmp is some TeX primitive conditional...
+	#	\expandafter \__peek_next_char_callback_b: \meaning \__tmp \relax
+	#}
+	#
+	#\cs_new_protected:Npn \__peek_next_char_callback_b: #1 #2 {
+	#	\ifx #2 \relax
+	#		\if \noexpand\__tmp #1  % is a character
+	#			\immediate\write \__write_file { r^^J #1 }
+	#		\else  % is not?
+	#			\immediate\write \__write_file { r^^J }
+	#		\fi
+	#		\expandafter \__read_do_one_command:
+	#	\else
+	#		\expandafter \__peek_next_char_callback_b: \expandafter #2
+	#	\fi
+	#}
+	#
+	#"""
+
+	, [], [TTPLine], recursive=False)
+
+
 @export_function_to_module
 @user_documentation
 def peek_next_char()->str:
 	"""
-	Get the meaning of the following token, as a string, using the current |\escapechar|.
-	
-	This is recommended over |peek_next_token()| as it will not tokenize an extra token.
+	Get the character of the following token, or empty string if it's not a character.
+	Will also return nonempty if the next token is an implicit character token.
 
-	It's undefined behavior if there's a newline (|\newlinechar| or |^^J|, the latter is OS-specific)
-	in the meaning string.
+	Uses peek_next_meaning() under the hood to get the meaning of the following token. See peek_next_meaning() for a warning on undefined behavior.
 	"""
-	return str(peek_next_meaning_()[0])
+
+	#return str(peek_next_char_()[0])
+	# too slow (marginally slower than peek_next_meaning)
+
+	s=peek_next_meaning()
+	if s and s[:-1] in [
+		"begin-group character ",
+		"end-group character ",
+		"math shift character ",
+		"alignment tab character ",
+		"macro parameter character ",
+		"superscript character ",
+		"subscript character ",
+		"blank space ",
+		"the letter ",
+		"the character ",
+		]: return s[-1]
+	return ""
 
 
 # ========
