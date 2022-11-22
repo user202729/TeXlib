@@ -54,6 +54,34 @@
 		\cO{123}
 	}
 }
+
+
+
+% ======== empty environment (actually behavior is currently a bit inconsistent)
+
+
+\begingroup
+\endlinechar=-1\relax
+\begin{saveenvghost}\data
+
+\end{saveenvghost}
+
+\begin{saveenv}\datab
+
+\end{saveenv}
+
+\begin{saveenv}\datac
+\end{saveenv}
+\endgroup
+
+\ExplSyntaxOn
+\precattl_exec:n {
+	\assertequal:Vn \data { }
+	\assertequal:Vn \datab { }
+	\assertequal:Vn \datac { }
+}
+
+
 \global\let\data\undefined
 \ExplSyntaxOff
 

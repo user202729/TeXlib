@@ -1,7 +1,7 @@
 %! TEX program = lualatex
 \documentclass{article}
-
 \usepackage{pdftexcmds}
+\errorcontextlines=5
 
 \ExplSyntaxOn
 \makeatletter
@@ -15,9 +15,7 @@
 
 \usepackage{l3benchmark}
 
-\ExplSyntaxOn
-\benchmark_tic:
-\ExplSyntaxOff
+\ExplSyntaxOn \benchmark_tic: \ExplSyntaxOff
 
 \usepackage[
 	mode=unnamed_pipe, % faster
@@ -26,11 +24,39 @@
 %\usepackage[mode=multiprocessing_network]{pythonimmediate}  % slower
 
 
-\ExplSyntaxOn
-\message{======== loading the package takes ========}
-\benchmark_toc:
-\ExplSyntaxOff
+\message{^^J^^J======== loading the package takes ========} \ExplSyntaxOn \benchmark_toc: \ExplSyntaxOff
 
 \begin{document}
 123
+
+\message{^^J^^J======== running empty takes ========}
+\ExplSyntaxOn \benchmark_tic: \ExplSyntaxOff
+\begin{pycode}
+
+\end{pycode}
+\ExplSyntaxOn \benchmark_toc: \ExplSyntaxOff
+
+\begin{pycode}
+import pythonimmediate
+import timeit
+
+pythonimmediate.run_tokenized_line_local(r'\newcount\counta \counta=-1 ')
+i=-1
+def f():
+	global i
+	i=i+1
+	s=pythonimmediate.run_tokenized_line_peek(r'\advance\counta by 1 \pythonimmediatecontinue{\the\counta}%')
+	assert s==str(i)
+print("run_tokenized_line_local:", timeit.timeit(f, number=10000))
+
+pythonimmediate.put_next(r"a")
+def f():
+	s=pythonimmediate.peek_next_meaning()
+	assert s=="the letter a"
+print("peek_next_meaning:", timeit.timeit(f, number=20000))
+
+
+\end{pycode}
+
+
 \end{document}

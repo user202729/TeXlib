@@ -89,6 +89,11 @@ sys.modules["pythonimmediate"]=pythonimmediate
 
 pythonimmediate.debugging=True
 
+def debugonly(s: str)->str:
+	if pythonimmediate.debugging: return s
+	return ""
+
+
 def export_function_to_module(f: Callable)->Callable:
 	"""
 	the functions decorated with this decorator are accessible from user code with
@@ -246,13 +251,25 @@ def check_line(line: str, *, braces: bool, newline: bool, continue_: Optional[bo
 mark_bootstrap(
 r"""
 \cs_new_protected:Npn \__run_tokl: {
+"""
++ debugonly(
+r"""
 	\ifeof \__read_file
 		\msg_error:nn {pythonimmediate} {internal-error}
 	\fi
-	\global \read \__read_file to \__line  % note that this uses \read to tokenize instead of \readline
+""") +
+r"""
+	%\begingroup
+	%	\endlinechar=-1~
+	%	\read \__read_file to \__line  % note that this uses \read to tokenize instead of \readline
+	%	\expandafter
+	%\endgroup
+	%	\__line
+
+	\ior_get:NN \__read_file \__line
 	\__line
 }
-""")
+""")  # performance about the same it seems
 
 @export_function_to_module
 def run_tokenized_line_finish(line: str, *, check_braces: bool=True, check_newline: bool=True)->None:
@@ -262,6 +279,8 @@ def run_tokenized_line_finish(line: str, *, check_braces: bool=True, check_newli
 	catcode-changing commands should not be used inside
 
 	the line must be brace-balanced and has no new line
+
+	note that the line is tokenized in the current catcode regime, but with \endlinechar set to -1, thus there's no trailing space
 	"""
 	check_line(line, braces=check_braces, newline=check_newline, continue_=False)
 	send_finish("tokl\n" + line + "\n")
@@ -560,6 +579,11 @@ class PyToTeXData(ABC):
 
 @dataclass
 class PTTVerbatimLine(PyToTeXData):
+	"""
+	Represents a line to be tokenized verbatim. Internally the |\readline| primitive is used.
+	The trailing newline is not included, i.e. it's read under |\endlinechar=-1|.
+	"""
+	# TODO add test for PTTVerbatimLine that has trailing spaces
 	data: str
 	read_code=r"\ior_str_get:NN \__read_file {} ".format
 	def write(self)->None:
@@ -568,6 +592,10 @@ class PTTVerbatimLine(PyToTeXData):
 
 @dataclass
 class PTTTeXLine(PyToTeXData):
+	"""
+	Represents a line to be tokenized in \TeX's current catcode regime.
+	The trailing newline is not included, i.e. it's tokenized under |\endlinechar=-1|.
+	"""
 	data: str
 	read_code=r"\ior_get:NN \__read_file {} ".format
 	def write(self)->None:
@@ -804,6 +832,8 @@ def normalize_lines(lines: list[str])->list[str]:
 
 @define_internal_handler
 def __pycodex(code: TTPBlock, lineno_: TTPLine, filename: TTPLine, fileabspath: TTPLine)->None:
+	if not code.strip(): return  # currently saveenv returns empty string + single newline both when there's 0 or 1 empty line between environment body. TODO later fix the bug properly
+
 	lineno=int(lineno_)
 	# find where the code comes from... (for easy meaningful traceback)
 	target_filename: Optional[str] = None
@@ -884,7 +914,7 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: list[type[PyToTeXData]],
 						   )->tuple[str, PythonCallTeXFunctionType]:
 	"""
 	|TeX_code| should be some expl3 code that defines a function with name |%name%| that when called should:
-		* run some \TeX\ code
+		* run some \TeX\ code (which includes reading the arguments, if any)
 		* do the following if |sync|:
 			* send |r| to Python
 			* send whatever needed for the output (as in |ttp_argtypes|)
@@ -939,12 +969,10 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: list[type[PyToTeXData]],
 							   optional=True)
 
 	for i, argtype in enumerate(ttp_argtypes):
-		TeX_code=template_substitute(TeX_code, r"%send_arg" + str(i) + r"\(([^)]*)\)%",
+		TeX_code=template_substitute(TeX_code, f"%send_arg{i}" + r"\(([^)]*)\)%",
 							   lambda match: argtype.send_code(match[1]),
 							   optional=True)
-
-	for i, argtype in enumerate(ttp_argtypes):
-		TeX_code=template_substitute(TeX_code, r"%send_arg" + str(i) + r"_var\(([^)]*)\)%",
+		TeX_code=template_substitute(TeX_code, f"%send_arg{i}_var" + r"\(([^)]*)\)%",
 							   lambda match: argtype.send_code_var(match[1]),
 							   optional=True)
 
@@ -1089,8 +1117,8 @@ r"""
 \cs_new_protected:Npn %name% {
 	\begingroup
 		\endlinechar=-1~
-		\readline \__read_file to \__line
-		\readline \__read_file to \__identifier
+		%read_arg0(\__line)%
+		%read_arg1(\__identifier)%
 		\cs_new_protected:cpx {\__line} {
 			\unexpanded{\immediate\write \__write_file} { i \__identifier }
 			\unexpanded{\__read_do_one_command:}
@@ -1112,7 +1140,7 @@ r"""
 			\unexpanded{\immediate\write \__write_file} { i \__identifier }
 			\unexpanded{\__read_do_one_command:}
 		}
-		\exp_args:Nc \MakeRobust {\__line}
+		\exp_args:Nc \MakeRobust {\__line}  % also make the command global
 	\endgroup
 	%optional_sync%
 	\__read_do_one_command:
@@ -1288,6 +1316,7 @@ peek_next_meaning_=define_Python_call_TeX_local_sync(
 r"""
 \cs_new_protected:Npn \__peek_next_meaning_callback: {
 	\edef \__tmp {\meaning \__tmp}  % just in case |\__tmp| is outer, |\write| will not be able to handle it
+	%\immediate\write \__write_file { r^^J \unexpanded\expandafter{\__tmp} }
 	\immediate\write \__write_file { r^^J \__tmp }
 	\__read_do_one_command:
 }
@@ -1295,9 +1324,39 @@ r"""
 	\futurelet \__tmp \__peek_next_meaning_callback:
 }
 """, [], [TTPLine], recursive=False)
+# TODO I wonder which one is faster. Need to benchmark...
 @export_function_to_module
 @user_documentation
 def peek_next_meaning()->str:
+	"""
+	Get the meaning of the following token, as a string, using the current |\escapechar|.
+	
+	This is recommended over |peek_next_token()| as it will not tokenize an extra token.
+
+	It's undefined behavior if there's a newline (|\newlinechar| or |^^J|, the latter is OS-specific)
+	in the meaning string.
+	"""
+	return str(peek_next_meaning_()[0])
+
+
+peek_next_char_=define_Python_call_TeX_local_sync(
+r"""
+\cs_new_protected:Npn \__peek_next_char_callback: {
+	\edef \__tmpb { \expandafter\str_item:nn\expandafter{\meaning \__tmp} {-1} }  % \expandafter just in case \__tmp is \outer
+	\if \__tmp \__tmpb  % is a character
+		\immediate\write \__write_file { r^^J \__tmp }
+	\else  % is not?
+		\immediate\write \__write_file { r^^J }
+	\fi
+	\__read_do_one_command:
+}
+\cs_new_protected:Npn %name% {
+	\futurelet \__tmp \__peek_next_char_callback:
+}
+""", [], [TTPLine], recursive=False)
+@export_function_to_module
+@user_documentation
+def peek_next_char()->str:
 	"""
 	Get the meaning of the following token, as a string, using the current |\escapechar|.
 	
