@@ -12,7 +12,7 @@ import inspect
 import contextlib
 import io
 import functools
-from typing import Optional, Union, Callable, Any, Iterator, Protocol
+from typing import Optional, Union, Callable, Any, Iterator, Protocol, Iterable, Sequence
 import typing
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -40,6 +40,8 @@ import argparse
 parser=argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("mode", choices=["multiprocessing_network", "unnamed_pipe"])
 args=parser.parse_args()
+
+expansion_only_can_call_Python=False  # normally. May be different in LuaTeX etc.
 
 # ======== setup communication method. Requires raw_readline() and send_raw() methods.
 
@@ -455,6 +457,14 @@ class Catcode(enum.Enum):
 		"""
 		return self not in (Catcode.escape, Catcode.line, Catcode.ignored, Catcode.comment, Catcode.invalid)
 
+	def __call__(self, ch: Union[str, int])->"CharacterToken":
+		"""
+		Shorthand:
+		Catcode.letter("a") = Catcode.letter(97) = CharacterToken(index=97, catcode=Catcode.letter)
+		"""
+		if isinstance(ch, str): ch=ord(ch)
+		return CharacterToken(ch, self)
+
 @export_function_to_module
 @dataclass(repr=False)
 class CharacterToken(Token):
@@ -486,8 +496,26 @@ pythonimmediate.frozen_relax_token=frozen_relax_token
 
 # other special tokens later...
 
+bgroup=Catcode.bgroup("{")
+egroup=Catcode.egroup("}")
+
 @export_function_to_module
 class TokenList(collections.UserList[Token]):
+	@staticmethod
+	def force_token_list(a: Iterable)->Iterable[Token]:
+		for x in a:
+			if isinstance(x, Token):
+				yield x
+			elif isinstance(x, Sequence):
+				yield bgroup
+				yield from TokenList.force_token_list(x)
+				yield egroup
+			else:
+				raise RuntimeError(f"Cannot make TokenList from object {x} of type {type(x)}")
+
+	def __init__(self, a: Iterable=())->None:
+		super().__init__(TokenList.force_token_list(a))
+
 	def serialize(self)->str:
 		return "".join(t.serialize() for t in self)
 	@staticmethod
@@ -508,6 +536,12 @@ class TokenList(collections.UserList[Token]):
 		return result
 	def __repr__(self)->str:
 		return '<TokenList: ' + ' '.join(t.repr1() for t in self) + '>'
+	def expand_o(self)->"TokenList":
+		return TokenList(expand_o_(PTTTokenList(self))[0])  # type: ignore
+	def expand_x(self)->"TokenList":
+		return TokenList(expand_x_(PTTTokenList(self))[0])  # type: ignore
+	def execute(self)->None:
+		execute_(PTTTokenList(self))
 
 
 
@@ -692,7 +726,7 @@ def get_random_identifier()->str:
 	return next(random_identifier_iterable)
 
 
-def define_TeX_call_Python(f: Callable[..., None], name: str=None, argtypes: list[type[TeXToPyData]]=None, identifier: str=None)->str:
+def define_TeX_call_Python(f: Callable[..., None], name: Optional[str]=None, argtypes: Optional[list[type[TeXToPyData]]]=None, identifier: Optional[str]=None)->str:
 	"""
 	This function setups some internal data structure, and
 	returns the \TeX\ code to be executed on the \TeX\ side to define the macro.
@@ -916,27 +950,27 @@ def template_substitute(template: str, pattern: str, substitute: Union[str, Call
 class PythonCallTeXFunctionType(Protocol):  # https://stackoverflow.com/questions/57658879/python-type-hint-for-callable-with-variable-number-of-str-same-type-arguments
 	def __call__(self, *args: PyToTeXData)->Optional[tuple[TeXToPyData, ...]]: ...
 
-class PythonCallTeXSyncFunctionType(PythonCallTeXFunctionType):  # https://stackoverflow.com/questions/57658879/python-type-hint-for-callable-with-variable-number-of-str-same-type-arguments
+class PythonCallTeXSyncFunctionType(Protocol, PythonCallTeXFunctionType):  # https://stackoverflow.com/questions/57658879/python-type-hint-for-callable-with-variable-number-of-str-same-type-arguments
 	def __call__(self, *args: PyToTeXData)->tuple[TeXToPyData, ...]: ...
 
 def define_Python_call_TeX(TeX_code: str, ptt_argtypes: list[type[PyToTeXData]], ttp_argtypes: list[type[TeXToPyData]],
 						   *,
 						   recursive: bool=True,
-						   sync: bool=None,
+						   sync: Optional[bool]=None,
 						   )->tuple[str, PythonCallTeXFunctionType]:
-	"""
+	r"""
 	|TeX_code| should be some expl3 code that defines a function with name |%name%| that when called should:
 		* run some \TeX\ code (which includes reading the arguments, if any)
 		* do the following if |sync|:
-			* send |r| to Python
+			* send |r| to Python (equivalently write %sync%)
 			* send whatever needed for the output (as in |ttp_argtypes|)
 		* call |\__read_do_one_command:|
 
 		This is allowed to contain the following:
 		* %name%: the name of the function to be defined as explained above.
-		* %read_arg0(...)%, %read_arg1(...)%: will be expanded to code that reads the input.
+		* %read_arg0(\var_name)%, %read_arg1(...)%: will be expanded to code that reads the input.
 		* %send_arg0(...)%, %send_arg1(...)%: will be expanded to code that sends the content.
-		* %send_arg0_var(...)%, %send_arg1_var(...)%: will be expanded to code that sends the content in the variable.
+		* %send_arg0_var(\var_name)%, %send_arg1_var(...)%: will be expanded to code that sends the content in the variable.
 		* %optional_sync%: expanded to code that writes |r| (to sync), if |sync| is True.
 
 	ptt_argtypes: list of argument types to be sent from Python to TeX (i.e. input of the TeX function)
@@ -946,7 +980,7 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: list[type[PyToTeXData]],
 	recursive: whether the TeX_code might call another Python function. Default to True.
 		It does not hurt to always specify True, but performance would be a bit slower.
 
-	sync: whether the Python function need to wait for the TeX function to finish. Default to true.
+	sync: whether the Python function need to wait for the TeX function to finish.
 		Required if |ttp_argtypes| is not empty.
 		This should be left to be the default None most of the time. (which will make it always sync if |debugging|,
 		otherwise only sync if needed i.e. there's some output)
@@ -959,9 +993,12 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: list[type[PyToTeXData]],
 			(the output itself tells Python when the \TeX\ code finished)
 		* the first line of the output may be on the same line as the |r| itself (done, use TTPEmbeddedLine type, although a bit hacky)
 	"""
+	if ttp_argtypes!=[]:
+		assert sync!=False
+		sync=True
+
 	if sync is None:
-		if pythonimmediate.debugging: sync=True
-		else: sync=ttp_argtypes!=[]
+		sync=pythonimmediate.debugging
 
 		TeX_code=template_substitute(TeX_code, "%optional_sync%",
 							   lambda _: r'\immediate\write\__write_file { r }' if sync else '',)
@@ -1019,7 +1056,6 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: list[type[PyToTeXData]],
 				result.append(argtype_.read())
 		return tuple(result)
 
-	
 	return TeX_code, f
 
 def define_Python_call_TeX_local(*args, **kwargs)->PythonCallTeXFunctionType:
@@ -1027,8 +1063,41 @@ def define_Python_call_TeX_local(*args, **kwargs)->PythonCallTeXFunctionType:
 	mark_bootstrap(code)
 	return result
 
+# essentially this is the same as the above, but just that the return type is guaranteed to be not None to satisfy type checkers
 def define_Python_call_TeX_local_sync(*args, **kwargs)->PythonCallTeXSyncFunctionType:
 	return define_Python_call_TeX_local(*args, **kwargs, sync=True)  # type: ignore
+
+expand_o_=define_Python_call_TeX_local_sync(
+r"""
+\cs_new_protected:Npn %name% {
+	%read_arg0(\__data)%
+	\exp_args:NNV \tl_set:No \__data \__data
+	%sync%
+	%send_arg0_var(\__data)%
+	\__read_do_one_command:
+}
+""", [PTTTokenList], [TTPTokenList], recursive=expansion_only_can_call_Python)
+
+expand_x_=define_Python_call_TeX_local_sync(
+r"""
+\cs_new_protected:Npn %name% {
+	%read_arg0(\__data)%
+	\tl_set:Nx \__data {\__data}
+	%sync%
+	%send_arg0_var(\__data)%
+	\__read_do_one_command:
+}
+""", [PTTTokenList], [TTPTokenList], recursive=expansion_only_can_call_Python)
+
+execute_=define_Python_call_TeX_local(
+r"""
+\cs_new_protected:Npn %name% {
+	%read_arg0(\__data)%
+	\__data
+	%optional_sync%
+	\__read_do_one_command:
+}
+""", [PTTTokenList], [])
 
 get_argument_detokenized_=define_Python_call_TeX_local_sync(
 r"""
@@ -1196,7 +1265,7 @@ def renewcommand_(name: str, f: Callable)->Callable:
 	
 
 @export_function_to_module
-def newcommand(x: Union[str, Callable]=None, f: Callable=None)->Callable:
+def newcommand(x: Union[str, Callable, None]=None, f: Optional[Callable]=None)->Callable:
 	"""
 	Define a new \TeX\ command.
 	If name is not provided, it's automatically deduced from the function.
@@ -1207,7 +1276,7 @@ def newcommand(x: Union[str, Callable]=None, f: Callable=None)->Callable:
 	return newcommand_(x.__name__, x)
 
 @export_function_to_module
-def renewcommand(x: Union[str, Callable]=None, f: Callable=None)->Callable:
+def renewcommand(x: Union[str, Callable, None]=None, f: Optional[Callable]=None)->Callable:
 	"""
 	Redefine a \TeX\ command.
 	If name is not provided, it's automatically deduced from the function.
