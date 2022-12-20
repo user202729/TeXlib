@@ -118,133 +118,200 @@ def pyvmanual():
 
 
 \begin{pycode}
-assert ("""
+
+
+import unittest
+from pythonimmediate import TokenList, Catcode, ControlSequenceToken
+class Test(unittest.TestCase):
+	def test_simple_run_tokenized_line_local(self)->None:
+		pythonimmediate.run_tokenized_line_local(r'\testa {123} {456}')
+		self.assertEqual(x, "123")
+		self.assertEqual(y, "456")
+
+	def test_renewcommand_non_Python_defined(self):
+		pythonimmediate.run_tokenized_line_local(r'\def \testb {}')
+
+		@pythonimmediate.renewcommand
+		def testb(): pass
+
+
+	def test_preserve_spaces(self)->None:
+		self.assertEqual("""
    
-""").count(' ')==3
+""".count(' '), 3)
 
-x=1
+	def test_newcommand(self):
+		global x
+		x=1
 
-# ======== test newcommand ========
-@pythonimmediate.newcommand
-def testa():
-	global x
-	x=2
+		@pythonimmediate.newcommand
+		def testa():
+			global x
+			x=2
 
-assert x==1
-pythonimmediate.run_tokenized_line_local(r'\testa')
-assert x==2
+		self.assertEqual(x, 1)
+		pythonimmediate.run_tokenized_line_local(r'\testa')
+		self.assertEqual(x, 2)
 
-# ======== test newcommand with name provided ========
-@pythonimmediate.newcommand("testd")
-def testa():
-	global x
-	x=3
+	def test_newcommand_with_name(self):
+		@pythonimmediate.newcommand("testd")
+		def testa():
+			global x
+			x=3
 
-assert x==2
-pythonimmediate.run_tokenized_line_local(r'\testd')
-assert x==3
+		self.assertEqual(x, 2)
+		pythonimmediate.run_tokenized_line_local(r'\testd')
+		self.assertEqual(x, 3)
 
-@pythonimmediate.renewcommand
-def testa():
-	global x, y
-	x=pythonimmediate.get_argument_detokenized()
-	y=pythonimmediate.get_argument_detokenized()
+		@pythonimmediate.renewcommand
+		def testa():
+			global x, y
+			x=pythonimmediate.get_argument_detokenized()
+			y=pythonimmediate.get_argument_detokenized()
 
+		@pythonimmediate.newcommand
+		def testc():
+			self.assertEqual(pythonimmediate.get_argument_detokenized(), "ab")
+			self.assertEqual(pythonimmediate.get_optional_argument_detokenized(), "cd")
+			self.assertEqual(pythonimmediate.get_optional_argument_detokenized(), None)
+			self.assertEqual(pythonimmediate.get_verbatim_argument(), "ef")
+			self.assertEqual(pythonimmediate.get_optional_argument_detokenized(), None)
+			self.assertEqual(pythonimmediate.get_verbatim_argument(), "gh")
+			self.assertEqual(pythonimmediate.get_multiline_verbatim_argument(), "ijk\nlm")
+			print("123", end="")
+			return "456"
 
-def assertEqual(x, y):
-	assert x==y, (x, y)
+		pythonimmediate.run_tokenized_line_local("789%")
+		pythonimmediate.run_tokenized_line_local("789%")
 
+		pythonimmediate.run_block_local(r'''\testc {ab} [cd]|ef|{gh}|ijk
+		lm|%''')
 
-pythonimmediate.run_tokenized_line_local(r'\testa {123} {456}')
-assertEqual(x, "123")
-assertEqual(y, "456")
-
-
-# ======== test: renewcommand on non-Python-defined command
-pythonimmediate.run_tokenized_line_local(r'\def \testb {}')
-
-@pythonimmediate.renewcommand
-def testb(): pass
-
-
-
-@pythonimmediate.newcommand
-def testc():
-	assertEqual(pythonimmediate.get_argument_detokenized(), "ab")
-	assertEqual(pythonimmediate.get_optional_argument_detokenized(), "cd")
-	assertEqual(pythonimmediate.get_optional_argument_detokenized(), None)
-	assertEqual(pythonimmediate.get_verbatim_argument(), "ef")
-	assertEqual(pythonimmediate.get_optional_argument_detokenized(), None)
-	assertEqual(pythonimmediate.get_verbatim_argument(), "gh")
-	assertEqual(pythonimmediate.get_multiline_verbatim_argument(), "ijk\nlm")
-	print("123", end="")
-	return "456"
-
-pythonimmediate.run_tokenized_line_local("789%")
-pythonimmediate.run_tokenized_line_local("789%")
-
-pythonimmediate.run_block_local(r'''\testc {ab} [cd]|ef|{gh}|ijk
-lm|%''')
-
-pythonimmediate.run_tokenized_line_local("789%")
+		pythonimmediate.run_tokenized_line_local("789%")
 
 
+	def test_tokens(self):
+		global x
+		x=0
 
-@pythonimmediate.renewcommand
-def testd():
-	a=pythonimmediate.get_argument_tokenlist()
-	print(f"{a=}", file=sys.stderr)
+		@pythonimmediate.renewcommand
+		def testd():
+			global x
+			x=1
 
-	pythonimmediate.put_next(r'{123}')
-	b=pythonimmediate.get_argument_tokenlist()
-	print(f"{b=}", file=sys.stderr)
+			a=pythonimmediate.get_argument_tokenlist()
+			print(f"{a=}", file=sys.stderr)
 
-	pythonimmediate.put_next(r'{1 a\relax}')
-	for t, meaning in [
-			(pythonimmediate.CharacterToken(ord('{'), pythonimmediate.Catcode.bgroup), "begin-group character {"),
-			(pythonimmediate.CharacterToken(ord('1'), pythonimmediate.Catcode.other), "the character 1"),
-			(pythonimmediate.CharacterToken(ord(' '), pythonimmediate.Catcode.space), "blank space  "),
-			(pythonimmediate.CharacterToken(ord('a'), pythonimmediate.Catcode.letter), "the letter a"),
-			(pythonimmediate.ControlSequenceToken('relax'), r"\relax"),
-			(pythonimmediate.CharacterToken(ord('}'), pythonimmediate.Catcode.egroup), "end-group character }"),
-			]:
-		assertEqual(pythonimmediate.peek_next_meaning(), meaning)
-		assertEqual(pythonimmediate.peek_next_token(), t)
-		assertEqual(pythonimmediate.get_next_token(), t)
+			pythonimmediate.put_next(r'{123}')
+			b=pythonimmediate.get_argument_tokenlist()
+			print(f"{b=}", file=sys.stderr)
 
-	pythonimmediate.put_next(pythonimmediate.frozen_relax_token)
-	assertEqual(pythonimmediate.peek_next_token(), pythonimmediate.frozen_relax_token)
-	assertEqual(pythonimmediate.get_next_token(), pythonimmediate.frozen_relax_token)
+			pythonimmediate.put_next(r'{1 a\relax}')
+			for t, meaning in [
+					(pythonimmediate.CharacterToken(ord('{'), pythonimmediate.Catcode.bgroup), "begin-group character {"),
+					(pythonimmediate.CharacterToken(ord('1'), pythonimmediate.Catcode.other), "the character 1"),
+					(pythonimmediate.CharacterToken(ord(' '), pythonimmediate.Catcode.space), "blank space  "),
+					(pythonimmediate.CharacterToken(ord('a'), pythonimmediate.Catcode.letter), "the letter a"),
+					(pythonimmediate.ControlSequenceToken('relax'), r"\relax"),
+					(pythonimmediate.CharacterToken(ord('}'), pythonimmediate.Catcode.egroup), "end-group character }"),
+					]:
+				self.assertEqual(pythonimmediate.peek_next_meaning(), meaning)
+				self.assertEqual(pythonimmediate.peek_next_token(), t)
+				self.assertEqual(pythonimmediate.get_next_token(), t)
 
-	pythonimmediate.put_next(a)
-	c=pythonimmediate.get_argument_tokenlist()
-	print(f"{c=}", file=sys.stderr)
+			pythonimmediate.put_next(pythonimmediate.frozen_relax_token)
+			self.assertEqual(pythonimmediate.peek_next_token(), pythonimmediate.frozen_relax_token)
+			self.assertEqual(pythonimmediate.get_next_token(), pythonimmediate.frozen_relax_token)
 
-	assert c==a[1:-1]
+			pythonimmediate.put_next(a)
+			c=pythonimmediate.get_argument_tokenlist()
+			print(f"{c=}", file=sys.stderr)
 
-pythonimmediate.run_block_local(
-r'''
-\precattlExec{ \testd {{ab\cC {}\cC{123}\relax\cFrozenRelax {}\cP*$^_ \cS\a}} }
-''')
+			self.assertEqual(c, a[1:-1])
 
-pythonimmediate.put_next("a")
-assertEqual(pythonimmediate.peek_next_char(), "a")
 
-pythonimmediate.put_next(r"\a")
-assertEqual(pythonimmediate.peek_next_char(), "")
-pythonimmediate.get_next_token()
+		self.assertEqual(x, 0)
+		pythonimmediate.run_block_local(
+		r'''
+		\precattlExec{ \testd {{ab\cC {}\cC{123}\relax\cFrozenRelax {}\cP*$^_ \cS\a}} }
+		''')
+		self.assertEqual(x, 1)
 
-pythonimmediate.put_next(pythonimmediate.CharacterToken(ord(' '), pythonimmediate.Catcode.space))
-assertEqual(pythonimmediate.peek_next_char(), " ")
+	def test_put_get_next(self):
+		pythonimmediate.put_next("a")
+		self.assertEqual(pythonimmediate.peek_next_char(), "a")
 
-pythonimmediate.put_next(r"\relax")
-assertEqual(pythonimmediate.peek_next_char(), "")
+		pythonimmediate.put_next(r"\a")
+		self.assertEqual(pythonimmediate.peek_next_char(), "")
+		pythonimmediate.get_next_token()
 
-pythonimmediate.put_next(r"\begingroup\endgroup")
-assertEqual(pythonimmediate.peek_next_char(), "")
+		pythonimmediate.put_next(pythonimmediate.CharacterToken(ord(' '), pythonimmediate.Catcode.space))
+		self.assertEqual(pythonimmediate.peek_next_char(), " ")
 
-pythonimmediate.put_next(r"\bgroup\egroup")
-assertEqual(pythonimmediate.peek_next_char(), "{")
+		pythonimmediate.put_next(r"\relax")
+		self.assertEqual(pythonimmediate.peek_next_char(), "")
+
+		pythonimmediate.put_next(r"\begingroup\endgroup")
+		self.assertEqual(pythonimmediate.peek_next_char(), "")
+
+		pythonimmediate.put_next(r"\bgroup\egroup")
+		self.assertEqual(pythonimmediate.peek_next_char(), "{")
+
+	def test_from_str(self):
+		from pythonimmediate import Catcode as C
+		C=Catcode
+		self.assertEqual(TokenList.doc(r'}{abc:  d?&#^_\test+\test a\##'),
+			  TokenList([
+				  C.egroup("}"),
+				  C.bgroup("{"),
+				  C.letter("a"),
+				  C.letter("b"),
+				  C.letter("c"),
+				  C.other(":"),
+				  C.space(" "),
+				  C.letter("d"),
+				  C.other("?"),
+				  C.alignment("&"),
+				  C.parameter("#"),
+				  C.superscript("^"),
+				  C.subscript("_"),
+				  ControlSequenceToken("test"),
+				  C.other("+"),
+				  ControlSequenceToken("test"),
+				  C.letter("a"),
+				  ControlSequenceToken("#"),
+				  C.parameter("#"),
+				  ]))
+		self.assertEqual(TokenList.e3(r'abc:  d~?&#^_\test+\test a'),
+			  TokenList([
+				  C.letter("a"),
+				  C.letter("b"),
+				  C.letter("c"),
+				  C.letter(":"),
+				  C.letter("d"),
+				  C.space(" "),
+				  C.other("?"),
+				  C.alignment("&"),
+				  C.parameter("#"),
+				  C.superscript("^"),
+				  C.letter("_"),
+				  ControlSequenceToken("test"),
+				  C.other("+"),
+				  ControlSequenceToken("test"),
+				  C.letter("a"),
+				  ]))
+
+	def test_expand(self):
+		TokenList.doc(r'\def\testexpand{\testexpanda}\def\testexpanda{123}').execute()
+		self.assertEqual(TokenList.doc(r'\testexpand').expand_o(), TokenList.doc(r'\testexpanda'))
+		self.assertEqual(TokenList.doc(r'\testexpand').expand_x(), TokenList.doc(r'123'))
+
+
+suite = unittest.defaultTestLoader.loadTestsFromTestCase(Test)
+unittest.TextTestRunner().run(suite)
+
+
+
 
 \end{pycode}
 \end{document}

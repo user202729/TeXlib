@@ -7,6 +7,7 @@ print() might go to TeX's stdout, or somewhere else
 """
 
 
+#from __future__ import annotations
 import sys
 import inspect
 import contextlib
@@ -419,7 +420,7 @@ class Token(ABC):
 		return f"<Token: {self.repr1()}>"
 
 @export_function_to_module
-@dataclass(repr=False)
+@dataclass(repr=False, frozen=True)
 class ControlSequenceToken(Token):
 	csname: str
 	def __str__(self)->str:
@@ -466,7 +467,7 @@ class Catcode(enum.Enum):
 		return CharacterToken(ch, self)
 
 @export_function_to_module
-@dataclass(repr=False)
+@dataclass(repr=False, frozen=True)  # must be frozen because bgroup and egroup below are reused
 class CharacterToken(Token):
 	index: int
 	catcode: Catcode
@@ -498,6 +499,30 @@ pythonimmediate.frozen_relax_token=frozen_relax_token
 
 bgroup=Catcode.bgroup("{")
 egroup=Catcode.egroup("}")
+space=Catcode.space(" ")
+
+
+doc_catcode_table: dict[int, Catcode]={}
+doc_catcode_table[ord("{")]=Catcode.begin_group
+doc_catcode_table[ord("}")]=Catcode.end_group
+doc_catcode_table[ord("$")]=Catcode.math_toggle
+doc_catcode_table[ord("&")]=Catcode.alignment
+doc_catcode_table[ord("#")]=Catcode.parameter
+doc_catcode_table[ord("^")]=Catcode.math_superscript
+doc_catcode_table[ord("_")]=Catcode.math_subscript
+doc_catcode_table[ord(" ")]=Catcode.space
+doc_catcode_table[ord("~")]=Catcode.active
+for ch in range(ord('a'), ord('z')+1): doc_catcode_table[ch]=Catcode.letter
+for ch in range(ord('A'), ord('Z')+1): doc_catcode_table[ch]=Catcode.letter
+doc_catcode_table[ord("\\")]=Catcode.escape
+doc_catcode_table[ord("%")]=Catcode.comment
+
+e3_catcode_table=dict(doc_catcode_table)
+e3_catcode_table[ord("_")]=Catcode.letter
+e3_catcode_table[ord(":")]=Catcode.letter
+e3_catcode_table[ord(" ")]=Catcode.ignored
+e3_catcode_table[ord("~")]=Catcode.space
+
 
 @export_function_to_module
 class TokenList(collections.UserList[Token]):
@@ -508,13 +533,92 @@ class TokenList(collections.UserList[Token]):
 				yield x
 			elif isinstance(x, Sequence):
 				yield bgroup
-				yield from TokenList.force_token_list(x)
+				child=TokenList(x)
+				assert child.is_balanced()
+				yield from child
 				yield egroup
 			else:
 				raise RuntimeError(f"Cannot make TokenList from object {x} of type {type(x)}")
 
+	def is_balanced(self)->bool:
+		degree=0
+		for x in self:
+			if isinstance(x, CharacterToken):
+				if x.catcode==Catcode.bgroup:
+					degree+=1
+				elif x.catcode==Catcode.egroup:
+					degree-=1
+					if degree<0: return False
+		return degree==0
+
 	def __init__(self, a: Iterable=())->None:
 		super().__init__(TokenList.force_token_list(a))
+
+	@staticmethod
+	def iterable_from_string(s: str, get_catcode: Callable[[int], Catcode])->Iterable[Token]:
+		"""
+		refer to documentation of from_string() for details.
+		"""
+		i=0
+		while i<len(s):
+			ch=s[i]
+			i+=1
+			cat=get_catcode(ord(ch))
+			if cat==Catcode.space:
+				yield space
+				# special case: collapse multiple spaces into one but only if character code is space
+				if get_catcode(32) in (Catcode.space, Catcode.ignored):
+					while i<len(s) and s[i]==' ':
+						i+=1
+			elif cat.for_token:
+				yield cat(ch)
+			elif cat==Catcode.ignored:
+				continue
+			else:
+				assert cat==Catcode.escape, f"cannot create TokenList from string containing catcode {cat}"
+				cat=get_catcode(ord(s[i]))
+				if cat!=Catcode.letter:
+					yield ControlSequenceToken(s[i])
+					i+=1
+				else:
+					csname=s[i]
+					i+=1
+					while i<len(s) and get_catcode(ord(s[i]))==Catcode.letter:
+						csname+=s[i]
+						i+=1
+					yield ControlSequenceToken(csname)
+					# special case: remove spaces after control sequence but only if character code is space
+					if get_catcode(32) in (Catcode.space, Catcode.ignored):
+						while i<len(s) and s[i]==' ':
+							i+=1
+
+	@staticmethod
+	def from_string(s: str, get_catcode: Callable[[int], Catcode])->"TokenList":
+		"""
+		convert a string to a TokenList approximately.
+		The tokenization algorithm is slightly different from TeX's in the following respect:
+
+		* multiple spaces are collapsed to one space, but only if it has character code space (32).
+		* spaces with character code different from space (32) after a control sequence is not ignored.
+		* ^^ syntax are not supported. Use Python's escape syntax as usual.
+		"""
+		return TokenList(TokenList.iterable_from_string(s, get_catcode))
+
+	@staticmethod
+	def e3(s: str)->"TokenList":
+		"""
+		approximate tokenizer in expl3 catcode, implemented in Python.
+		refer to documentation of from_string() for details.
+		"""
+		return TokenList.from_string(s, lambda x: e3_catcode_table.get(x, Catcode.other))
+
+	@staticmethod
+	def doc(s: str)->"TokenList":
+		"""
+		approximate tokenizer in document catcode, implemented in Python.
+		refer to documentation of from_string() for details.
+		"""
+		return TokenList.from_string(s, lambda x: doc_catcode_table.get(x, Catcode.other))
 
 	def serialize(self)->str:
 		return "".join(t.serialize() for t in self)
@@ -756,6 +860,8 @@ def define_TeX_call_Python(f: Callable[..., None], name: Optional[str]=None, arg
 	TeX_argspec = ""
 	TeX_send_input_commands = ""
 	for i, argtype in enumerate(argtypes):
+		if isinstance(argtype, str):
+			raise RuntimeError("string annotation or `from __future__ import annotations' not yet supported")
 		if not issubclass(argtype, TeXToPyData):
 			raise RuntimeError(f"Argument type {argtype} is incorrect, should be a subclass of TeXToPyData")
 		arg = f"#{i+1}"
@@ -950,7 +1056,7 @@ def template_substitute(template: str, pattern: str, substitute: Union[str, Call
 class PythonCallTeXFunctionType(Protocol):  # https://stackoverflow.com/questions/57658879/python-type-hint-for-callable-with-variable-number-of-str-same-type-arguments
 	def __call__(self, *args: PyToTeXData)->Optional[tuple[TeXToPyData, ...]]: ...
 
-class PythonCallTeXSyncFunctionType(Protocol, PythonCallTeXFunctionType):  # https://stackoverflow.com/questions/57658879/python-type-hint-for-callable-with-variable-number-of-str-same-type-arguments
+class PythonCallTeXSyncFunctionType(PythonCallTeXFunctionType, Protocol):  # https://stackoverflow.com/questions/57658879/python-type-hint-for-callable-with-variable-number-of-str-same-type-arguments
 	def __call__(self, *args: PyToTeXData)->tuple[TeXToPyData, ...]: ...
 
 def define_Python_call_TeX(TeX_code: str, ptt_argtypes: list[type[PyToTeXData]], ttp_argtypes: list[type[TeXToPyData]],

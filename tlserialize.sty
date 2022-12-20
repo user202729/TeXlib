@@ -79,7 +79,6 @@
 	\begingroup
 		\str_set:Nn \__tmp {#2}
 		\tl_replace_all:Nnn \__tmp {~} {\cO\ }
-		\pretty:V \__tmp
 		\exp_args:NNNx
 	\endgroup \tl_set:Nn #1 {\expandafter \__process_s \__tmp}
 }
@@ -157,6 +156,7 @@
 \cs_generate_variant:Nn \tl_build_put_right:Nn {Nx}
 \cs_generate_variant:Nn \tldeserialize:Nn {NV}
 \cs_generate_variant:Nn \tldeserializeb:Nn {NV}
+\cs_generate_variant:Nn \tlserializeb:Nn {NV}
 \cs_generate_variant:Nn \tldeserializeb_terminated:Nn {NV}
 \cs_generate_variant:Nn \str_if_eq:nnTF {xVTF}
 \cs_generate_variant:Nn \str_count:n {V}
