@@ -19,7 +19,7 @@
 \ExplSyntaxOn
 \pretty:n{1.start}
 
-\begin{pythonimmediateenv}
+\begin{pycode}
 import pythonimmediate
 
 x="xxx"
@@ -28,20 +28,20 @@ print("======== test stdout ========")
 print("======== test stderr ========", file=sys.stderr)
 
 print=pythonimmediate.print
-pythonimmediate.run_tokenized_line_finish(r'\pretty:n {2.a}')
-\end{pythonimmediateenv}
+pythonimmediate.run_tokenized_line_local(r'\pretty:n {2.a}')
+\end{pycode}
 
-\pythonimmediateverb|pythonimmediate.run_block_finish(r'\pretty:n {3.xxx~ =~ ' + x + '}')|
+\pythonimmediateverb|pythonimmediate.run_block_local(r'\pretty:n {3.xxx~ =~ ' + x + '}')|
 
-\begin{pythonimmediateenv}
-pythonimmediate.run_block_finish(r'''
+\begin{pycode}
+pythonimmediate.run_block_local(r'''
 \pretty:n {4.}
-\pythonimmediateverb|pythonimmediate.run_tokenized_line_finish(r'\pretty:n{5.}')|
+\pythonimmediateverb|pythonimmediate.run_tokenized_line_local(r'\pretty:n{5.}')|
 \pretty:n {6.}
 ''')
-\end{pythonimmediateenv}
+\end{pycode}
 
-\begin{pythonimmediateenv}
+\begin{pycode}
 
 x=123
 
@@ -54,10 +54,10 @@ assert x==456
 content=pythonimmediate.run_tokenized_line_peek(r'\pythonimmediatecontinue {abc~~def}')
 assert "abc def"==content, content
 
-pythonimmediate.run_tokenized_line_finish(
+pythonimmediate.run_tokenized_line_local(
 r'\pretty:n{9.}'
 )
-\end{pythonimmediateenv}
+\end{pycode}
 
 \pretty:n{10.}
 
@@ -310,8 +310,13 @@ class Test(unittest.TestCase):
 suite = unittest.defaultTestLoader.loadTestsFromTestCase(Test)
 unittest.TextTestRunner().run(suite)
 
-
-
-
+x=1
 \end{pycode}
+
+\pyfile{test_pythonimmediate_file.py}
+
+\begin{pycode}
+assert x==2
+\end{pycode}
+
 \end{document}

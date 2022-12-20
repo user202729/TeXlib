@@ -125,34 +125,47 @@
 %\bench after~setup.
 
 
-% read one block of \TeX\ code from Python and |\scantokens|-run it
-% the block is delimited using |surround_delimiter()| in Python i.e. the first and last line are identical,
-% and the content inside is the actual TeX code to be executed
-\cs_new_protected:Npn \__run_block: {
+% read one block of \TeX\ code from Python, store into the specified variable
+% the block is delimited using |surround_delimiter()| in Python i.e. the first and last line are identical
+% new lines are represented with ^^J
+\cs_new_protected:Npn \__gread_block:N #1 {
 	\begingroup
 		\endlinechar=10~  % affect \readline
 		\readline \__read_file to \__delimiter
 
-		\tl_build_begin:N \__code
+		\tl_build_gbegin:N #1
 		\readline \__read_file to \__line
 
 		%\bench read~first~line.
 
 		\bool_do_until:nn {\tl_if_eq_p:NN \__delimiter \__line} {
-			\tl_build_put_right:NV \__code \__line
+			\tl_build_gput_right:NV #1 \__line
 			\ifeof \__read_file
 				\msg_error:nn {pythonimmediate} {internal-error}
 			\fi
 			\readline \__read_file to \__line
 		}
-		\tl_build_end:N \__code
+		\tl_build_gend:N #1
+	\endgroup
+}
+\cs_generate_variant:Nn \tl_build_gput_right:Nn {NV}
 
-		\newlinechar=10~  % affect \scantokens
-		%\bench before~running~block.
-	\expandafter  % expand the \scantokens once before resetting \newlinechar and \__code
+\cs_new_protected:Npn \__read_block:N #1 {
+	\__gread_block:N \__block
+	\tl_set_eq:NN #1 \__block
+}
+
+
+% read one block of \TeX\ code from Python and |\scantokens|-run it
+% the content inside is the actual TeX code to be executed
+\cs_new_protected:Npn \__run_block: {
+	\__gread_block:N \__code
+	\begingroup
+		\newlinechar=10~
+		\expandafter
 	\endgroup
 	\scantokens \expandafter{\__code}
-}
+}  % trick described in https://tex.stackexchange.com/questions/640274/how-can-i-run-scantokens-with-modified-environment-but-use-the-normal-environme to scantokens the code with \newlinechar=10
 
 % bootstrap code
 %\bench before~bootstrap.

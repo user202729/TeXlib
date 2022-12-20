@@ -121,13 +121,6 @@ def send_finish(s: str)->None:
 	action_done=True
 	send_raw(s)
 
-@export_function_to_module
-def run_cmd(cmd: str)->None:
-	"""
-	run a single command e.g. cmd="relax" (actually this is not very useful)
-	"""
-	send_finish(cmd+'\n')
-
 
 import random
 def surround_delimiter(block: str)->str:
@@ -210,20 +203,6 @@ def run_block_finish(block: str)->None:
 	send_finish("block\n" + surround_delimiter(block))
 
 
-mark_bootstrap(
-r"""
-\cs_new_protected:Npn \__run_blockcont: {
-	\__run_block:
-	\pythonimmediatecontinue {}
-}
-""")
-
-@export_function_to_module
-def run_block_local(block: str)->TeXToPyObjectType:
-	check_not_finished()
-	send_raw("blockcont\n" + surround_delimiter(block))
-	return run_main_loop()
-
 @user_documentation
 @export_function_to_module
 def execute(block: str)->None:
@@ -249,70 +228,6 @@ def check_line(line: str, *, braces: bool, newline: bool, continue_: Optional[bo
 	if continue_==True: assert "pythonimmediatecontinue" in line
 	elif continue_==False: assert "pythonimmediatecontinue" not in line
 
-
-
-mark_bootstrap(
-r"""
-\cs_new_protected:Npn \__run_tokl: {
-"""
-+ debugonly(
-r"""
-	\ifeof \__read_file
-		\msg_error:nn {pythonimmediate} {internal-error}
-	\fi
-""") +
-r"""
-	%\begingroup
-	%	\endlinechar=-1~
-	%	\read \__read_file to \__line  % note that this uses \read to tokenize instead of \readline
-	%	\expandafter
-	%\endgroup
-	%	\__line
-
-	\ior_get:NN \__read_file \__line
-	\__line
-}
-""")  # performance about the same it seems
-
-@export_function_to_module
-def run_tokenized_line_finish(line: str, *, check_braces: bool=True, check_newline: bool=True)->None:
-	"""
-	tokenize the whole line then execute it. line is some TeX code
-
-	catcode-changing commands should not be used inside
-
-	the line must be brace-balanced and has no new line
-
-	note that the line is tokenized in the current catcode regime, but with \endlinechar set to -1, thus there's no trailing space
-	"""
-	check_line(line, braces=check_braces, newline=check_newline, continue_=False)
-	send_finish("tokl\n" + line + "\n")
-
-@export_function_to_module
-def run_tokenized_line_peek(line: str, *, check_braces: bool=True, check_newline: bool=True, check_continue: bool=True)->TeXToPyObjectType:
-	"""
-	"""
-	check_not_finished()
-	check_line(line, braces=check_braces, newline=check_newline, continue_=(True if check_continue else None))
-	send_raw("tokl\n" + line + "\n")
-	return run_main_loop()
-
-mark_bootstrap(
-r"""
-\cs_new_protected:Npn \__run_toklcont: {
-	\__run_tokl:
-	\pythonimmediatecontinue {}
-}
-""")
-
-@export_function_to_module
-def run_tokenized_line_local(line: str, *, check_braces: bool=True, check_newline: bool=True, check_continue: bool=True)->TeXToPyObjectType:
-	"""
-	"""
-	check_not_finished()
-	check_line(line, braces=check_braces, newline=check_newline, continue_=(False if check_continue else None))
-	send_raw("toklcont\n" + line + "\n")
-	return run_main_loop()
 
 mark_bootstrap(
 r"""
@@ -755,7 +670,7 @@ class PTTTeXLine(PyToTeXData):
 @dataclass
 class PTTBlock(PyToTeXData):
 	data: str
-	read_code=r"\__read_block:n {}".format
+	read_code=r"\__read_block:N {}".format
 	def write(self)->None:
 		send_raw(surround_delimiter(self.data))
 
@@ -911,6 +826,12 @@ def eval_with_linecache(code: str, globals: dict[str, Any])->Any:
 @define_internal_handler
 def py(code: TTPBlock)->None:
 	pythonimmediate.run_block_finish(str(eval_with_linecache(code, user_scope))+"%")
+
+@define_internal_handler
+def pyfile(filename: TTPLine)->None:
+	with open(filename, "r") as f:
+		source=f.read()
+	exec(compile(source, filename, "exec"), user_scope)
 
 def print_TeX(*args, **kwargs)->None:
 	if not hasattr(pythonimmediate, "file"):
@@ -1172,6 +1093,70 @@ def define_Python_call_TeX_local(*args, **kwargs)->PythonCallTeXFunctionType:
 # essentially this is the same as the above, but just that the return type is guaranteed to be not None to satisfy type checkers
 def define_Python_call_TeX_local_sync(*args, **kwargs)->PythonCallTeXSyncFunctionType:
 	return define_Python_call_TeX_local(*args, **kwargs, sync=True)  # type: ignore
+
+
+run_tokenized_line_local_=define_Python_call_TeX_local(
+r"""
+\cs_new_protected:Npn %name% {
+	%read_arg0(\__data)%
+	\__data
+	%optional_sync%
+	\__read_do_one_command:
+}
+""", [PTTTeXLine], [])
+
+@export_function_to_module
+def run_tokenized_line_local(line: str, *, check_braces: bool=True, check_newline: bool=True, check_continue: bool=True)->None:
+	check_line(line, braces=check_braces, newline=check_newline, continue_=(False if check_continue else None))
+	run_tokenized_line_local_(PTTTeXLine(line))
+
+
+run_tokenized_line_peek_=define_Python_call_TeX_local_sync(
+r"""
+\cs_new_protected:Npn %name% {
+	%read_arg0(\__data)%
+	\__data
+}
+""", [PTTTeXLine], [TTPEmbeddedLine])
+
+@export_function_to_module
+def run_tokenized_line_peek(line: str, *, check_braces: bool=True, check_newline: bool=True, check_continue: bool=True)->str:
+	check_line(line, braces=check_braces, newline=check_newline, continue_=(True if check_continue else None))
+	a=run_tokenized_line_peek_(PTTTeXLine(line))[0]
+	assert isinstance(a, str)
+	return str(a)
+
+
+run_block_local_=define_Python_call_TeX_local(
+r"""
+\cs_new_protected:Npn %name% {
+	%read_arg0(\__data)%
+	\begingroup \newlinechar=10~ \expandafter \endgroup
+	\scantokens \expandafter{\__data}
+	% trick described in https://tex.stackexchange.com/q/640274 to scantokens the code with \newlinechar=10
+
+	%optional_sync%
+	\__read_do_one_command:
+}
+""", [PTTBlock], [])
+
+@export_function_to_module
+def run_block_local(block: str)->None:
+	run_block_local_(PTTBlock(block))
+	
+#mark_bootstrap(
+#r"""
+#\cs_new_protected:Npn \__run_blockcont: {
+#	\__run_block:
+#	\pythonimmediatecontinue {}
+#}
+#""")
+#
+#@export_function_to_module
+#def run_block_local(block: str)->TeXToPyObjectType:
+#	check_not_finished()
+#	send_raw("blockcont\n" + surround_delimiter(block))
+#	return run_main_loop()
 
 expand_o_=define_Python_call_TeX_local_sync(
 r"""
