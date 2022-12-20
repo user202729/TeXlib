@@ -121,7 +121,7 @@ def pyvmanual():
 
 
 import unittest
-from pythonimmediate import TokenList, Catcode, ControlSequenceToken, frozen_relax_token
+from pythonimmediate import Token, TokenList, BalancedTokenList, Catcode, ControlSequenceToken, frozen_relax_token
 class Test(unittest.TestCase):
 	def test_simple_run_tokenized_line_local(self)->None:
 		pythonimmediate.run_tokenized_line_local(r'\testa {123} {456}')
@@ -199,11 +199,11 @@ class Test(unittest.TestCase):
 			global x
 			x=1
 
-			a=pythonimmediate.get_argument_tokenlist()
+			a=BalancedTokenList.get_next()
 			print(f"{a=}", file=sys.stderr)
 
 			pythonimmediate.put_next(r'{123}')
-			b=pythonimmediate.get_argument_tokenlist()
+			b=BalancedTokenList.get_next()
 			print(f"{b=}", file=sys.stderr)
 
 			pythonimmediate.put_next(r'{1 a\relax}')
@@ -217,14 +217,14 @@ class Test(unittest.TestCase):
 					]:
 				self.assertEqual(pythonimmediate.peek_next_meaning(), meaning)
 				self.assertEqual(pythonimmediate.peek_next_token(), t)
-				self.assertEqual(pythonimmediate.get_next_token(), t)
+				self.assertEqual(pythonimmediate.Token.get_next(), t)
 
-			pythonimmediate.put_next(pythonimmediate.frozen_relax_token)
+			pythonimmediate.frozen_relax_token.put_next()
 			self.assertEqual(pythonimmediate.peek_next_token(), pythonimmediate.frozen_relax_token)
-			self.assertEqual(pythonimmediate.get_next_token(), pythonimmediate.frozen_relax_token)
+			self.assertEqual(pythonimmediate.Token.get_next(), pythonimmediate.frozen_relax_token)
 
 			pythonimmediate.put_next(a)
-			c=pythonimmediate.get_argument_tokenlist()
+			c=BalancedTokenList.get_next()
 			print(f"{c=}", file=sys.stderr)
 
 			self.assertEqual(c, a[1:-1])
@@ -243,7 +243,7 @@ class Test(unittest.TestCase):
 
 		pythonimmediate.put_next(r"\a")
 		self.assertEqual(pythonimmediate.peek_next_char(), "")
-		pythonimmediate.get_next_token()
+		pythonimmediate.Token.get_next()
 
 		pythonimmediate.put_next(pythonimmediate.CharacterToken(ord(' '), pythonimmediate.Catcode.space))
 		self.assertEqual(pythonimmediate.peek_next_char(), " ")
@@ -256,6 +256,20 @@ class Test(unittest.TestCase):
 
 		pythonimmediate.put_next(r"\bgroup\egroup")
 		self.assertEqual(pythonimmediate.peek_next_char(), "{")
+
+	def test_balanced(self):
+		a=TokenList.doc(r'}{')
+		self.assertFalse(a.is_balanced())
+		with self.assertRaises(ValueError):
+			a.check_balanced()
+
+	def test_get_next_tokenlist(self):
+		t=BalancedTokenList.doc(r'{}abc:  d?&#^_\test+\test a\##') + [frozen_relax_token]
+		u=BalancedTokenList([t])
+		self.assertEqual(len(u), len(t)+2)
+		u.put_next()
+		self.assertEqual(BalancedTokenList.get_next(), t)
+
 
 	def test_from_str(self):
 		from pythonimmediate import Catcode as C
@@ -301,14 +315,35 @@ class Test(unittest.TestCase):
 				  C.letter("a"),
 				  ]))
 
+	def test_balanced_parts(self):
+		for s in [
+				r"",
+				r"}{",
+				r"ab{cd}ef}{gh}{{ij}",
+				r"}}}}}{{{",
+				r"{{{}}}}}",
+				]:
+			t=TokenList.doc(s)
+			parts=t.balanced_parts()
+			assert t==[x for part in parts for x in (part if isinstance(part, BalancedTokenList) else [part])]
+			for part in parts:
+				if isinstance(part, Token):
+					assert part.degree()!=0
+				else:
+					assert len(part)!=0
+
+			t.put_next()
+			for x in t:
+				self.assertEqual(Token.get_next(), x)
+
 	def test_expand(self):
-		TokenList.doc(r'\def\testexpand{\testexpanda}\def\testexpanda{123}').execute()
-		self.assertEqual(TokenList.doc(r'\testexpand').expand_o(), TokenList.doc(r'\testexpanda'))
-		self.assertEqual(TokenList.doc(r'\testexpand').expand_x(), TokenList.doc(r'123'))
-		self.assertEqual(TokenList.doc(' ').expand_o(), TokenList.doc(' '))
-		self.assertEqual(TokenList.doc(' ').expand_x(), TokenList.doc(' '))
-		self.assertEqual(1, len(TokenList.doc(' ')))
-		self.assertEqual(TokenList([frozen_relax_token]).expand_x(), TokenList([frozen_relax_token]))
+		BalancedTokenList.doc(r'\def\testexpand{\testexpanda}\def\testexpanda{123}').execute()
+		self.assertEqual(BalancedTokenList.doc(r'\testexpand').expand_o(), BalancedTokenList.doc(r'\testexpanda'))
+		self.assertEqual(BalancedTokenList.doc(r'\testexpand').expand_x(), BalancedTokenList.doc(r'123'))
+		self.assertEqual(BalancedTokenList.doc(' ').expand_o(), BalancedTokenList.doc(' '))
+		self.assertEqual(BalancedTokenList.doc(' ').expand_x(), BalancedTokenList.doc(' '))
+		self.assertEqual(1, len(BalancedTokenList.doc(' ')))
+		self.assertEqual(BalancedTokenList([frozen_relax_token]).expand_x(), BalancedTokenList([frozen_relax_token]))
 
 
 suite = unittest.defaultTestLoader.loadTestsFromTestCase(Test)

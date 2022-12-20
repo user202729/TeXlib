@@ -319,6 +319,8 @@ def read_block()->str:
 			lines.append(line)
 
 
+
+
 @export_function_to_module
 class Token(ABC):
 	@abstractmethod
@@ -333,6 +335,44 @@ class Token(ABC):
 
 	def __repr__(self)->str:
 		return f"<Token: {self.repr1()}>"
+
+	@staticmethod
+	def get_next()->"Token":
+		"""
+		Get the following token.
+
+		Note: in LaTeX3 versions without the commit |https://github.com/latex3/latex3/commit/24f7188904d6|
+		sometimes this may error out.
+
+		Note: because of the internal implementation of |\peek_analysis_map_inline:n|, this may
+		tokenize up to 2 tokens ahead (including the returned token),
+		as well as occasionally return the wrong token in unavoidable cases.
+		"""
+		line=str(get_next_()[0])
+		t=TokenList.deserialize(line)
+		assert len(t)==1
+		return t[0]
+
+	def put_next(self)->None:
+		d=self.degree()
+		if d==0:
+			BalancedTokenList([self]).put_next()
+		else:
+			assert isinstance(self, CharacterToken)
+			if d==1:
+				put_next_bgroup(PTTInt(self.index))
+			else:
+				assert d==-1
+				put_next_egroup(PTTInt(self.index))
+
+	def degree(self)->int:
+		if isinstance(self, CharacterToken):
+			if self.catcode==Catcode.bgroup:
+				return 1
+			elif self.catcode==Catcode.egroup:
+				return -1
+		return 0
+
 
 @export_function_to_module
 @dataclass(repr=False, frozen=True)
@@ -439,6 +479,8 @@ e3_catcode_table[ord(" ")]=Catcode.ignored
 e3_catcode_table[ord("~")]=Catcode.space
 
 
+T = typing.TypeVar("T", bound="TokenList")
+
 @export_function_to_module
 class TokenList(collections.UserList[Token]):
 	@staticmethod
@@ -448,7 +490,7 @@ class TokenList(collections.UserList[Token]):
 				yield x
 			elif isinstance(x, Sequence):
 				yield bgroup
-				child=TokenList(x)
+				child=BalancedTokenList(x)
 				assert child.is_balanced()
 				yield from child
 				yield egroup
@@ -456,15 +498,75 @@ class TokenList(collections.UserList[Token]):
 				raise RuntimeError(f"Cannot make TokenList from object {x} of type {type(x)}")
 
 	def is_balanced(self)->bool:
+		"""
+		check if this is balanced.
+		"""
 		degree=0
 		for x in self:
-			if isinstance(x, CharacterToken):
-				if x.catcode==Catcode.bgroup:
-					degree+=1
-				elif x.catcode==Catcode.egroup:
-					degree-=1
-					if degree<0: return False
+			degree+=x.degree()
+			if degree<0: return False
 		return degree==0
+
+	def check_balanced(self)->None:
+		"""
+		ensure that this is balanced.
+		"""
+		if not self.is_balanced():
+			raise ValueError("Token list is not balanced")
+
+	def balanced_parts(self)->"list[Union[BalancedTokenList, Token]]":
+		"""
+		split this TokenList into a list of balanced parts and unbalanced {/}tokens
+		"""
+		degree=0
+		min_degree=0, 0
+		for i, token in enumerate(self):
+			degree+=token.degree()
+			min_degree=min(min_degree, (degree, i+1))
+		min_degree_pos=min_degree[1]
+
+		left_half: list[Union[BalancedTokenList, Token]]=[]
+		degree=0
+		last_pos=0
+		for i in range(min_degree_pos):
+			d=self[i].degree()
+			degree+=d
+			if degree<0:
+				degree=0
+				if last_pos!=i:
+					left_half.append(BalancedTokenList(self[last_pos:i]))
+				left_half.append(self[i])
+				last_pos=i+1
+		if min_degree_pos!=last_pos:
+			left_half.append(BalancedTokenList(self[last_pos:min_degree_pos]))
+
+		right_half: list[Union[BalancedTokenList, Token]]=[]
+		degree=0
+		last_pos=len(self)
+		for i in range(len(self)-1, min_degree_pos-1, -1):
+			d=self[i].degree()
+			degree-=d
+			if degree<0:
+				degree=0
+				if i+1!=last_pos:
+					right_half.append(BalancedTokenList(self[i+1:last_pos]))
+				right_half.append(self[i])
+				last_pos=i
+		if min_degree_pos!=last_pos:
+			right_half.append(BalancedTokenList(self[min_degree_pos:last_pos]))
+
+		return left_half+right_half[::-1]
+
+	def put_next(self)->None:
+		for part in reversed(self.balanced_parts()): part.put_next()
+
+	@property
+	def balanced(self)->"BalancedTokenList":
+		"""
+		return a BalancedTokenList containing the content of this object.
+		it must be balanced.
+		"""
+		return BalancedTokenList(self)
 
 	def __init__(self, a: Iterable=())->None:
 		super().__init__(TokenList.force_token_list(a))
@@ -507,8 +609,8 @@ class TokenList(collections.UserList[Token]):
 						while i<len(s) and s[i]==' ':
 							i+=1
 
-	@staticmethod
-	def from_string(s: str, get_catcode: Callable[[int], Catcode])->"TokenList":
+	@classmethod
+	def from_string(cls: type[T], s: str, get_catcode: Callable[[int], Catcode])->T:
 		"""
 		convert a string to a TokenList approximately.
 		The tokenization algorithm is slightly different from TeX's in the following respect:
@@ -517,28 +619,29 @@ class TokenList(collections.UserList[Token]):
 		* spaces with character code different from space (32) after a control sequence is not ignored.
 		* ^^ syntax are not supported. Use Python's escape syntax as usual.
 		"""
-		return TokenList(TokenList.iterable_from_string(s, get_catcode))
+		return cls(TokenList.iterable_from_string(s, get_catcode))
 
-	@staticmethod
-	def e3(s: str)->"TokenList":
+	@classmethod
+	def e3(cls: type[T], s: str)->T:
 		"""
 		approximate tokenizer in expl3 catcode, implemented in Python.
 		refer to documentation of from_string() for details.
 		"""
-		return TokenList.from_string(s, lambda x: e3_catcode_table.get(x, Catcode.other))
+		return cls.from_string(s, lambda x: e3_catcode_table.get(x, Catcode.other))
 
-	@staticmethod
-	def doc(s: str)->"TokenList":
+	@classmethod
+	def doc(cls: type[T], s: str)->T:
 		"""
 		approximate tokenizer in document catcode, implemented in Python.
 		refer to documentation of from_string() for details.
 		"""
-		return TokenList.from_string(s, lambda x: doc_catcode_table.get(x, Catcode.other))
+		return cls.from_string(s, lambda x: doc_catcode_table.get(x, Catcode.other))
 
 	def serialize(self)->str:
 		return "".join(t.serialize() for t in self)
-	@staticmethod
-	def deserialize(data: str)->"TokenList":
+
+	@classmethod
+	def deserialize(cls: type[T], data: str)->T:
 		result=TokenList()
 		for match_ in re.finditer(r'0(.*?)/|(R)|(.)\\?(.) ?', data):
 			groups=match_.groups()
@@ -552,15 +655,44 @@ class TokenList(collections.UserList[Token]):
 				result.append(CharacterToken(index=ord(groups[3]), catcode=Catcode(int(groups[2], 16))))
 			else:
 				assert False
-		return result
+		return cls(result)
+
 	def __repr__(self)->str:
-		return '<TokenList: ' + ' '.join(t.repr1() for t in self) + '>'
+		return '<' + type(self).__name__ + ': ' + ' '.join(t.repr1() for t in self) + '>'
+
+
+@export_function_to_module
+class BalancedTokenList(TokenList):
+	"""
+	Represents a balanced token list.
+	Note that runtime checking is not strictly enforced,
+	use `is_balanced()` method explicitly if you need to check.
+	"""
+
+	def __init__(self, a: Iterable=())->None:
+		"""
+		constructor. This must check for balanced-ness as balanced() method depends on this.
+		"""
+		super().__init__(a)
+		self.check_balanced()
+
 	def expand_o(self)->"TokenList":
-		return TokenList(expand_o_(PTTTokenList(self))[0])  # type: ignore
+		return TokenList(expand_o_(PTTBalancedTokenList(self))[0])  # type: ignore
 	def expand_x(self)->"TokenList":
-		return TokenList(expand_x_(PTTTokenList(self))[0])  # type: ignore
+		return TokenList(expand_x_(PTTBalancedTokenList(self))[0])  # type: ignore
 	def execute(self)->None:
-		execute_(PTTTokenList(self))
+		execute_(PTTBalancedTokenList(self))
+
+	def put_next(self)->None:
+		put_next_tokenlist(PTTBalancedTokenList(self))
+
+	@staticmethod
+	def get_next()->"BalancedTokenList":
+		"""
+		get an (undelimited) argument from the TeX input stream.
+		"""
+		return BalancedTokenList(get_argument_tokenlist_()[0])  # type: ignore
+
 
 
 
@@ -622,15 +754,15 @@ class TTPBlock(TeXToPyData, str):
 	def read()->"TTPBlock":
 		return TTPBlock(read_block())
 
-class TTPTokenList(TeXToPyData, TokenList):
+class TTPBalancedTokenList(TeXToPyData, TokenList):
 	send_code=r"\tlserializeb:Nn \__tmp {{ {} }} \immediate \write \__write_file {{\unexpanded\expandafter{{ \__tmp }}}}".format
 	send_code_var=r"\tlserializeb:NV \__tmp {} \immediate \write \__write_file {{\unexpanded\expandafter{{ \__tmp }}}}".format
 	@staticmethod
-	def read()->"TTPTokenList":
+	def read()->"TTPBalancedTokenList":
 		line=readline()
 		assert line is not None
 		debug(line)
-		return TTPTokenList(TokenList.deserialize(line))
+		return TTPBalancedTokenList(TokenList.deserialize(line))
 
 
 class PyToTeXData(ABC):
@@ -656,6 +788,13 @@ class PTTVerbatimLine(PyToTeXData):
 		send_raw(self.data+"\n")
 
 @dataclass
+class PTTInt(PyToTeXData):
+	data: int
+	read_code=PTTVerbatimLine.read_code
+	def write(self)->None:
+		PTTVerbatimLine(str(self.data)).write()
+
+@dataclass
 class PTTTeXLine(PyToTeXData):
 	"""
 	Represents a line to be tokenized in \TeX's current catcode regime.
@@ -675,8 +814,8 @@ class PTTBlock(PyToTeXData):
 		send_raw(surround_delimiter(self.data))
 
 @dataclass
-class PTTTokenList(PyToTeXData):
-	data: TokenList
+class PTTBalancedTokenList(PyToTeXData):
+	data: BalancedTokenList
 	read_code=r"\ior_str_get:NN \__read_file {0}  \tldeserializeb_terminated:NV {0} {0}".format
 	def write(self)->None:
 		PTTVerbatimLine(self.data.serialize()+".").write()
@@ -1095,6 +1234,69 @@ def define_Python_call_TeX_local_sync(*args, **kwargs)->PythonCallTeXSyncFunctio
 	return define_Python_call_TeX_local(*args, **kwargs, sync=True)  # type: ignore
 
 
+put_next_tokenlist=define_Python_call_TeX_local(
+r"""
+\tl_gset:Nn \__put_next_tmp {
+	%optional_sync%
+	\__read_do_one_command:
+}
+\cs_new_protected:Npn %name% {
+	%read_arg0(\__target)%
+	\expandafter \__put_next_tmp \__target
+}
+"""
+		, [PTTBalancedTokenList], [], recursive=False)
+
+get_next_=define_Python_call_TeX_local_sync(
+r"""
+\cs_new_protected:Npn \__get_next_callback: #1 {
+	\immediate\write \__write_file { r^^J #1 }
+	\__read_do_one_command:
+}
+
+\cs_new_protected:Npn %name% {
+	\peek_analysis_map_inline:n {
+		\peek_analysis_map_break:n {
+			\tlserializeb_char_unchecked:nnNN {##1}{##2}##3 \__get_next_callback:
+		}
+	}
+}
+""", [], [TTPLine], recursive=False)
+
+put_next_bgroup=define_Python_call_TeX_local_sync(
+r"""
+\cs_new_protected:Npn \__put_next_char_callback: {
+	%sync%
+	\__read_do_one_command:
+}
+
+\cs_new_protected:Npn %name% {
+	%read_arg0(\__index)%
+	\expandafter \expandafter \expandafter \__put_next_char_callback:
+		\char_generate:nn {\__index} {1}
+}
+""", [PTTInt], [], recursive=False)
+
+put_next_egroup=define_Python_call_TeX_local_sync(
+r"""
+\cs_new_protected:Npn %name% {
+	%read_arg0(\__index)%
+	\expandafter \expandafter \expandafter \__put_next_char_callback:
+		\char_generate:nn {\__index} {2}
+}
+""", [PTTInt], [], recursive=False)
+
+
+get_argument_tokenlist_=define_Python_call_TeX_local_sync(
+r"""
+\cs_new_protected:Npn %name% #1 {
+	%sync%
+	%send_arg0(#1)%
+	\__read_do_one_command:
+}
+""", [], [TTPBalancedTokenList], recursive=False)
+
+
 run_tokenized_line_local_=define_Python_call_TeX_local(
 r"""
 \cs_new_protected:Npn %name% {
@@ -1167,7 +1369,7 @@ r"""
 	%send_arg0_var(\__data)%
 	\__read_do_one_command:
 }
-""", [PTTTokenList], [TTPTokenList], recursive=expansion_only_can_call_Python)
+""", [PTTBalancedTokenList], [TTPBalancedTokenList], recursive=expansion_only_can_call_Python)
 
 expand_x_=define_Python_call_TeX_local_sync(
 r"""
@@ -1178,7 +1380,7 @@ r"""
 	%send_arg0_var(\__data)%
 	\__read_do_one_command:
 }
-""", [PTTTokenList], [TTPTokenList], recursive=expansion_only_can_call_Python)
+""", [PTTBalancedTokenList], [TTPBalancedTokenList], recursive=expansion_only_can_call_Python)
 
 execute_=define_Python_call_TeX_local(
 r"""
@@ -1188,7 +1390,7 @@ r"""
 	%optional_sync%
 	\__read_do_one_command:
 }
-""", [PTTTokenList], [])
+""", [PTTBalancedTokenList], [])
 
 get_argument_detokenized_=define_Python_call_TeX_local_sync(
 r"""
@@ -1207,22 +1409,6 @@ def get_argument_detokenized()->str:
 	Get a mandatory argument.
 	"""
 	return str(get_argument_detokenized_()[0])
-
-get_argument_tokenlist_=define_Python_call_TeX_local_sync(
-r"""
-\cs_new_protected:Npn %name% #1 {
-	%sync%
-	%send_arg0(#1)%
-	\__read_do_one_command:
-}
-""", [], [TTPTokenList], recursive=False)
-@export_function_to_module
-@user_documentation
-def get_argument_tokenlist()->TokenList:
-	"""
-	Get a mandatory argument as a TokenList
-	"""
-	return TokenList(get_argument_tokenlist_()[0])  # type: ignore
 
 get_optional_argument_detokenized_=define_Python_call_TeX_local_sync(
 r"""
@@ -1380,18 +1566,6 @@ def renewcommand(x: Union[str, Callable, None]=None, f: Optional[Callable]=None)
 
 # ========
 
-put_next_tokenlist=define_Python_call_TeX_local(
-r"""
-\tl_gset:Nn \__put_next_tmp {
-	%optional_sync%
-	\__read_do_one_command:
-}
-\cs_new_protected:Npn %name% {
-	%read_arg0(\__target)%
-	\expandafter \__put_next_tmp \__target
-}
-"""
-		, [PTTTokenList], [], recursive=False)
 put_next_TeX_line=define_Python_call_TeX_local(
 r"""
 \tl_gset:Nn \__put_next_tmpa {
@@ -1407,50 +1581,17 @@ r"""
 
 @export_function_to_module
 @user_documentation
-def put_next(arg: Union[str, Token, TokenList])->None:
+def put_next(arg: Union[str, Token, BalancedTokenList])->None:
 	"""
 	Put some content forward in the input stream.
 
 	arg: has type |str| (will be tokenized in the current catcode regime, must be a single line),
-	or |TokenList|.
+	or |BalancedTokenList|.
 	"""
-	if isinstance(arg, Token): arg=TokenList([arg])
 	if isinstance(arg, str): put_next_TeX_line(PTTTeXLine(arg))
-	else: put_next_tokenlist(PTTTokenList(arg))
+	else: arg.put_next()
 
-get_next_=define_Python_call_TeX_local_sync(
-r"""
-\cs_new_protected:Npn \__get_next_callback: #1 {
-	\immediate\write \__write_file { r^^J #1 }
-	\__read_do_one_command:
-}
 
-\cs_new_protected:Npn %name% {
-	\peek_analysis_map_inline:n {
-		\peek_analysis_map_break:n {
-			\tlserializeb_char_unchecked:nnNN {##1}{##2}##3 \__get_next_callback:
-		}
-	}
-}
-""", [], [TTPLine], recursive=False)
-
-@export_function_to_module
-@user_documentation
-def get_next_token()->Token:
-	"""
-	Get the following token.
-
-	Note: in LaTeX3 versions without the commit |https://github.com/latex3/latex3/commit/24f7188904d6|
-	sometimes this may error out.
-
-	Note: because of the internal implementation of |\peek_analysis_map_inline:n|, this may
-	tokenize up to 2 tokens ahead (including the returned token),
-	as well as occasionally return the wrong token in unavoidable cases.
-	"""
-	line=str(get_next_()[0])
-	t=TokenList.deserialize(line)
-	assert len(t)==1
-	return t[0]
 
 
 peek_next_=define_Python_call_TeX_local_sync(
