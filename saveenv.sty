@@ -116,44 +116,6 @@
 	\endsaveenvkeeplastreinsert
 }
 
-\iffalse
-======== future note, maybe I want to write code like this some day ========
-(although what about lualib?)
-
-\cs_new_eq:NN \__start_get_body:N \zfunction_protected #\store_target {
-	\assigno #\env_name {\@currenvir}
-	\ucalllocal {
-		\endlinechar=10~
-		\str_set:Nn \__env_name_other_cat {#\env_name}
-		\tl_replace_all:Nnn \__env_name_other_cat {~} {\cO\  }
-	}
-	\assigno #\env_name_other_cat {\__env_name_other_cat}
-	\assignc #\body_grabber_cs { [saveenv]~verbatim~body~scanner~for~#\env_name_other_cat }
-	\ucallpeek {
-		\cs_set_protected:Npx
-			#\body_grabber_cs
-				##1
-				\cO{ \\end } \cO\{ #\env_name_other_cat \cO\}  % this is the delimiter
-		{
-			\unexpanded{\continuetl} {##1 \cO{ \\end } \cO\{ #\env_name_other_cat \cO\}}
-		}
-		#\body_grabber_cs
-	}
-   	\matchrm{#\body}  % #\body consist of tokens inbetween and the delimiter e.g. 'abc ^^J \end{name}'
-	\ucalllocal{
-		\peek_meaning_remove:NTF \cO\^^J {
-			\endgroup
-			\str_gset:Nn #\store_target {#\body}
-			\end{#\env_name}
-		} {
-			\msg_error:nn {saveenv} {trailing-content-end-line}
-		}
-	}
-}
-
-========
-\fi
-
 % set variable #1 to have content of #2, but with last line dropped.
 % lines are separated by \^^J.
 

@@ -150,6 +150,46 @@ def send_bootstrap_code()->None:
 
 # ========
 
+
+# as the name implies, this reads one "command" from Python side and execute it.
+# the command might do additional tasks e.g. read more \TeX\ code.
+#
+# e.g. if `block' is read from the communication channel, run |\__run_block:|.
+
+mark_bootstrap(
+r"""
+\cs_new_protected:Npn \__read_do_one_command: {
+	\begingroup
+		\endlinechar=-1~
+		\readline \__read_file to \__line
+		\expandafter
+	\endgroup % also this will give an error instead of silently do nothing when command is invalid
+		\csname __run_ \__line :\endcsname
+}
+
+% read documentation of |_peek| commands for details what this command does.
+\cs_new_protected:Npn \pythonimmediatecontinue #1 {
+	\immediate\write \__write_file {r #1}
+	\__read_do_one_command:
+}
+
+% internal function. Just send an arbitrary block of data to Python.
+% the block itself will not be expanded.
+\cs_new_protected:Npn \__send_block:n #1 {
+	\immediate\write \__write_file {\unexpanded{
+		#1 ^^J
+		pythonimm?""" + '"""' + """?'''?  % following character will be newline
+	}}
+}
+
+\AtEndDocument{
+	\immediate\write \__write_file {r}
+}
+""")
+
+
+# ========
+
 # when 'i⟨string⟩' is sent from TeX to Python, the function with index ⟨string⟩ in this dict is called
 TeX_handlers: dict[str, Callable[[], None]]={}
 
@@ -875,6 +915,8 @@ class TTPEmbeddedLine(TeXToPyData, str):
 		raise RuntimeError("Must be manually handled")
 
 
+
+
 class TTPBlock(TeXToPyData, str):
 	send_code=r"\__send_block:n {{ {} }}".format
 	send_code_var=r"\__send_block:V {}".format
@@ -1149,6 +1191,7 @@ def pycq(code: TTPBlock)->None:
 mark_bootstrap(
 r"""
 \NewDocumentCommand\pyv{v}{\py{#1}}
+\NewDocumentCommand\pycv{v}{\pyc{#1}}
 """)
 
 # ======== implementation of |pycode| environment

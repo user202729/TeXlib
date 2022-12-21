@@ -1,12 +1,7 @@
-%\@@input failed-namedpipe-pythonimmediate.sty
-%\endinput
-
 \ProvidesExplPackage{pythonimmediate}{2022/08/05}{0.0.0}{Execute Python code from TeX immediately}
 
-%\RequirePackage{genvar}
 \RequirePackage{saveenv}
 \RequirePackage{currfile}
-\RequirePackage{rescansync}
 \RequirePackage{l3keys2e}
 
 
@@ -18,31 +13,30 @@
 \cs_generate_variant:Nn \str_if_eq:nnF {VnF}
 \cs_generate_variant:Nn \str_if_in:nnF {VnF}
 \cs_generate_variant:Nn \tl_build_put_right:Nn {NV}
-\cs_generate_variant:Nn \pythonimmediate:n {V}
 
 %\bench before~rescan.
-
-\begin{rescansyncRewriteenv}{ \str_replace_all:Nnn #1 {__} {_pythonimmediate_} }
-
 %\bench after~rescan.
 
 %\GenerateVariantsFile:n{\rescansynclastfilename}
 
-\str_set:Nn \__outputdir{.}
-\tl_set:Nn \__textopy_script_path{}
-\str_set:Nn \__mode{multiprocessing_network}
+\str_set:Nn \_pythonimmediate_outputdir{.}
+\tl_set:Nn \_pythonimmediate_textopy_script_path{}
+\str_set:Nn \_pythonimmediate_mode{multiprocessing_network}
+\str_set:Nn \_pythonimmediate_python_executable{python3}
 \keys_define:nn{pythonimmediate}{
-	outputdir.tl_set_x:N=\__outputdir,
+	outputdir.tl_set_x:N=\_pythonimmediate_outputdir,
 	%outputdir.default:n={.},  % huh does not work?
 
-	mode.tl_set:N=\__mode,
-	scriptpath.tl_set_x:N=\__textopy_script_path,
+	mode.tl_set:N=\_pythonimmediate_mode,
+	scriptpath.tl_set_x:N=\_pythonimmediate_textopy_script_path,
+
+	python-executable.tl_set:N=\_pythonimmediate_python_executable,
 }
 \ProcessKeysOptions{pythonimmediate}
 
-\str_set:NV \__outputdir \__outputdir
-\str_set:NV \__mode \__mode
-\str_set:NV \__textopy_script_path \__textopy_script_path
+\str_set:NV \_pythonimmediate_outputdir \_pythonimmediate_outputdir
+\str_set:NV \_pythonimmediate_mode \_pythonimmediate_mode
+\str_set:NV \_pythonimmediate_textopy_script_path \_pythonimmediate_textopy_script_path
 
 \msg_new:nnn {pythonimmediate} {shell-fail} {Shell~command~execution~failed!}
 \msg_new:nnn {pythonimmediate} {cannot-determine-script-path} {Cannot~determine~script~path!}
@@ -51,16 +45,16 @@
 \msg_new:nnn {pythonimmediate} {invalid-mode} {Invalid~mode:~'#1'.}
 
 
-\bool_new:N \__mode_multiprocessing_network
-\bool_new:N \__mode_unnamed_pipe
-\str_if_eq:VnT \__mode {multiprocessing_network} {\bool_set_true:N \__mode_multiprocessing_network}
-\str_if_eq:VnT \__mode {unnamed_pipe} {\bool_set_true:N \__mode_unnamed_pipe}
-\bool_if:nF {\__mode_multiprocessing_network || \__mode_unnamed_pipe} {
-    \msg_error:nnV {pythonimmediate} {invalid-mode} \__mode
+\bool_new:N \_pythonimmediate_mode_multiprocessing_network
+\bool_new:N \_pythonimmediate_mode_unnamed_pipe
+\str_if_eq:VnT \_pythonimmediate_mode {multiprocessing_network} {\bool_set_true:N \_pythonimmediate_mode_multiprocessing_network}
+\str_if_eq:VnT \_pythonimmediate_mode {unnamed_pipe} {\bool_set_true:N \_pythonimmediate_mode_unnamed_pipe}
+\bool_if:nF {\_pythonimmediate_mode_multiprocessing_network || \_pythonimmediate_mode_unnamed_pipe} {
+    \msg_error:nnV {pythonimmediate} {invalid-mode} \_pythonimmediate_mode
 }
 
 % we need to persistently open the file anyway, so using LaTeX3 stream reference counting doesn't help
-\newread \__read_file
+\newread \_pythonimmediate_read_file
 
 
 
@@ -69,56 +63,56 @@
 
 \begingroup
 	\endlinechar=-1~
-	\tl_if_empty:NT \__textopy_script_path {
-		% ======== first use kpsewhich to get the __script_path here ========
-		% (abuse \__read_file variable for this purpose)
-		\openin \__read_file=|"kpsewhich~ pythonimmediate_script_textopy.py"~
-		\readline \__read_file to \__textopy_script_path
+	\tl_if_empty:NT \_pythonimmediate_textopy_script_path {
+		% ======== first use kpsewhich to get the _pythonimmediate_script_path here ========
+		% (abuse \_pythonimmediate_read_file variable for this purpose)
+		\openin \_pythonimmediate_read_file=|"kpsewhich~ pythonimmediate_script_textopy.py"~
+		\readline \_pythonimmediate_read_file to \_pythonimmediate_textopy_script_path
 		%\bench after~get~textopy~path.
-		\ifeof \__read_file
+		\ifeof \_pythonimmediate_read_file
 			\msg_error:nn {pythonimmediate} {cannot-determine-script-path}
 		\fi
 	}
 
-	\str_if_eq:xnF {\str_range:Vnn \__textopy_script_path {-10} {-1}} {textopy.py} {
+	\str_if_eq:xnF {\str_range:Vnn \_pythonimmediate_textopy_script_path {-10} {-1}} {textopy.py} {
 		\msg_error:nn {pythonimmediate} {cannot-determine-script-path}
 	}
 
-	\newwrite \__write_file
+	\newwrite \_pythonimmediate_write_file
 
 	%\bench before~openin.
 
 	% ======== open persistent pipes to the child processes
-	\bool_if:NTF \__mode_unnamed_pipe {  % in this case make sure the pipe remains open...
-		\openin \__read_file=|"sleep~ 0.5s|python3~ \str_range:Vnn \__textopy_script_path {1} {-11} pytotex.py \space \__mode"~  % we must use the primitive here to use the pipe file path
+	\bool_if:NTF \_pythonimmediate_mode_unnamed_pipe {  % in this case make sure the pipe remains open...
+		\openin \_pythonimmediate_read_file=|"sleep~ 0.5s|\_pythonimmediate_python_executable \space \str_range:Vnn \_pythonimmediate_textopy_script_path {1} {-11} pytotex.py \space \_pythonimmediate_mode"~  % we must use the primitive here to use the pipe file path
 		% TODO sleep infinity causes some resource leak (the process will not exit after TeX exits). Need to fix
 		% but sleep too little might be problematic that it exits before the setup is done
 		% we can just assume machines are not that slow
 	} {
-		\openin \__read_file=|"python3~ \str_range:Vnn \__textopy_script_path {1} {-11} pytotex.py \space \__mode"~  % we must use the primitive here to use the pipe file path
+		\openin \_pythonimmediate_read_file=|"\_pythonimmediate_python_executable \space \str_range:Vnn \_pythonimmediate_textopy_script_path {1} {-11} pytotex.py \space \_pythonimmediate_mode"~  % we must use the primitive here to use the pipe file path
 	}
 
 	%\bench after~openin.
 
 	%\bench before~openout.
-	\immediate\openout \__write_file=|"python3~ \__textopy_script_path \space \__mode"~
+	\immediate\openout \_pythonimmediate_write_file=|"\_pythonimmediate_python_executable \space \_pythonimmediate_textopy_script_path \space \_pythonimmediate_mode"~
 	% both processes must be before the \readline above so that the 2 Python processes are started "in parallel"
 	%\bench after~openout.
 
-	\readline \__read_file to \__dummy_line  % endlinechar still -1
+	\readline \_pythonimmediate_read_file to \_pythonimmediate_dummy_line  % endlinechar still -1
 	%\bench after~read~line.
-	\bool_if:NT \__mode_multiprocessing_network {
-		\str_if_eq:VnF \__dummy_line {listener-setup-done} {
+	\bool_if:NT \_pythonimmediate_mode_multiprocessing_network {
+		\str_if_eq:VnF \_pythonimmediate_dummy_line {listener-setup-done} {
 			\msg_error:nn {pythonimmediate} {cannot-read-line}
 		}
 	}
-	\bool_if:NT \__mode_unnamed_pipe {
-		\str_if_in:VnF \__dummy_line {pytotex_pid=} {
+	\bool_if:NT \_pythonimmediate_mode_unnamed_pipe {
+		\str_if_in:VnF \_pythonimmediate_dummy_line {pytotex_pid=} {
 			\msg_error:nn {pythonimmediate} {cannot-read-line}
 		}
 	}
-	\bool_if:NT \__mode_unnamed_pipe {
-		\immediate\write\__write_file {\__dummy_line}  % which contains pytotex's pid
+	\bool_if:NT \_pythonimmediate_mode_unnamed_pipe {
+		\immediate\write\_pythonimmediate_write_file {\_pythonimmediate_dummy_line}  % which contains pytotex's pid
 	}
 \endgroup
 
@@ -128,103 +122,47 @@
 % read one block of \TeX\ code from Python, store into the specified variable
 % the block is delimited using |surround_delimiter()| in Python i.e. the first and last line are identical
 % new lines are represented with ^^J
-\cs_new_protected:Npn \__gread_block:N #1 {
+\cs_new_protected:Npn \_pythonimmediate_gread_block:N #1 {
 	\begingroup
 		\endlinechar=10~  % affect \readline
-		\readline \__read_file to \__delimiter
+		\readline \_pythonimmediate_read_file to \_pythonimmediate_delimiter
 
 		\tl_build_gbegin:N #1
-		\readline \__read_file to \__line
+		\readline \_pythonimmediate_read_file to \_pythonimmediate_line
 
 		%\bench read~first~line.
 
-		\bool_do_until:nn {\tl_if_eq_p:NN \__delimiter \__line} {
-			\tl_build_gput_right:NV #1 \__line
-			\ifeof \__read_file
+		\bool_do_until:nn {\tl_if_eq_p:NN \_pythonimmediate_delimiter \_pythonimmediate_line} {
+			\tl_build_gput_right:NV #1 \_pythonimmediate_line
+			\ifeof \_pythonimmediate_read_file
 				\msg_error:nn {pythonimmediate} {internal-error}
 			\fi
-			\readline \__read_file to \__line
+			\readline \_pythonimmediate_read_file to \_pythonimmediate_line
 		}
 		\tl_build_gend:N #1
 	\endgroup
 }
 \cs_generate_variant:Nn \tl_build_gput_right:Nn {NV}
 
-\cs_new_protected:Npn \__read_block:N #1 {
-	\__gread_block:N \__block
-	\tl_set_eq:NN #1 \__block
+\cs_new_protected:Npn \_pythonimmediate_read_block:N #1 {
+	\_pythonimmediate_gread_block:N \_pythonimmediate_block
+	\tl_set_eq:NN #1 \_pythonimmediate_block
 }
 
 
 % read one block of \TeX\ code from Python and |\scantokens|-run it
 % the content inside is the actual TeX code to be executed
-\cs_new_protected:Npn \__run_block: {
-	\__gread_block:N \__code
+\cs_new_protected:Npn \_pythonimmediate_run_block: {
+	\_pythonimmediate_gread_block:N \_pythonimmediate_code
 	\begingroup
 		\newlinechar=10~
 		\expandafter
 	\endgroup
-	\scantokens \expandafter{\__code}
+	\scantokens \expandafter{\_pythonimmediate_code}
 }  % trick described in https://tex.stackexchange.com/q/640274 to scantokens the code with \newlinechar=10
 
 % bootstrap code
 %\bench before~bootstrap.
-\__run_block:
+\_pythonimmediate_run_block:
 %\bench after~bootstrap.
 
-% as the name implies, this reads one "command" from Python side and execute it.
-% the command might do additional tasks e.g. read more \TeX\ code.
-%
-% e.g. if `block' is read from the communication channel, run |\__run_block:|.
-\cs_new_protected:Npn \__read_do_one_command: {
-	\begingroup
-		\endlinechar=-1~
-		\readline \__read_file to \__line
-		\expandafter
-	\endgroup % also this will give an error instead of silently do nothing when command is invalid
-		\csname __run_ \__line :\endcsname
-}
-
-% read documentation of |_peek| commands for details what this command does.
-\cs_new_protected:Npn \pythonimmediatecontinue #1 {
-	\immediate\write \__write_file {r #1}
-	\__read_do_one_command:
-}
-
-% internal function. Just send an arbitrary block of data to Python.
-% the block itself will not be expanded.
-\cs_new_protected:Npn \__send_block:n #1 {
-	\immediate\write \__write_file {\unexpanded{
-		#1 ^^J
-		pythonimm?"""?'''?  % following character will be newline
-	}}
-}
-
-% execute some Python code.
-% first arg is the code.
-\cs_new_protected:Npn \pythonimmediate:n #1  {
-	\immediate\write \__write_file {\unexpanded{
-		i ^^J
-		#1 ^^J
-		pythonimm?"""?'''?  % following character will be newline
-	}}
-	\__read_do_one_command:
-}
-
-\NewDocumentCommand\pythonimmediateverb{v}{
-	\pythonimmediate:n {#1}
-}
-
-\NewDocumentEnvironment{pythonimmediateenv}{}{
-	\saveenvreinsert \__code {
-		\pythonimmediate:V \__code  % outside the group.
-	}
-}{
-	\endsaveenvreinsert
-}
-
-\AtEndDocument{
-	\immediate\write \__write_file {r}
-}
-
-\end{rescansyncRewriteenv}

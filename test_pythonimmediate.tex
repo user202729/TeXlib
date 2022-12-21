@@ -6,7 +6,7 @@
 \ExplSyntaxOn
 \pretty:n{going to load}
 \ExplSyntaxOff
-\usepackage[mode=multiprocessing_network]{pythonimmediate}
+\usepackage[mode=multiprocessing_network,python-executable=python3.10]{pythonimmediate}
 %\usepackage[mode=unnamed_pipe]{pythonimmediate}
 
 
@@ -31,12 +31,12 @@ print=pythonimmediate.print
 pythonimmediate.run_tokenized_line_local(r'\pretty:n {2.a}')
 \end{pycode}
 
-\pythonimmediateverb|pythonimmediate.run_block_local(r'\pretty:n {3.xxx~ =~ ' + x + '}')|
+\pycv|pythonimmediate.run_block_local(r'\pretty:n {3.xxx~ =~ ' + x + '}')|
 
 \begin{pycode}
 pythonimmediate.run_block_local(r'''
 \pretty:n {4.}
-\pythonimmediateverb|pythonimmediate.run_tokenized_line_local(r'\pretty:n{5.}')|
+\pycv|pythonimmediate.run_tokenized_line_local(r'\pretty:n{5.}')|
 \pretty:n {6.}
 ''')
 \end{pycode}
@@ -46,7 +46,7 @@ pythonimmediate.run_block_local(r'''
 x=123
 
 pythonimmediate.run_tokenized_line_peek(
-r'\pretty:n{7.} \pythonimmediate:n{x=456} \pretty:n{8.} \pythonimmediatecontinue {}'
+r'\pretty:n{7.} \pyc{x=456} \pretty:n{8.} \pythonimmediatecontinue {}'
 )
 
 assert x==456
