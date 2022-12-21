@@ -105,7 +105,7 @@ print("11.\n", file=sys.stderr)
 \begin{pycode}
 @pythonimmediate.newcommand
 def pyvmanual():
-	return eval(pythonimmediate.get_verbatim_argument())
+	return eval(pythonimmediate.get_verb_arg())
 \end{pycode}
 
 
@@ -166,18 +166,18 @@ class Test(unittest.TestCase):
 		@pythonimmediate.renewcommand
 		def testa():
 			global x, y
-			x=pythonimmediate.get_argument_detokenized()
-			y=pythonimmediate.get_argument_detokenized()
+			x=pythonimmediate.get_arg_str()
+			y=pythonimmediate.get_arg_str()
 
 		@pythonimmediate.newcommand
 		def testc():
-			self.assertEqual(pythonimmediate.get_argument_detokenized(), "ab")
-			self.assertEqual(pythonimmediate.get_optional_argument_detokenized(), "cd")
-			self.assertEqual(pythonimmediate.get_optional_argument_detokenized(), None)
-			self.assertEqual(pythonimmediate.get_verbatim_argument(), "ef")
-			self.assertEqual(pythonimmediate.get_optional_argument_detokenized(), None)
-			self.assertEqual(pythonimmediate.get_verbatim_argument(), "gh")
-			self.assertEqual(pythonimmediate.get_multiline_verbatim_argument(), "ijk\nlm")
+			self.assertEqual(pythonimmediate.get_arg_str(), "ab")
+			self.assertEqual(pythonimmediate.get_optional_arg_str(), "cd")
+			self.assertEqual(pythonimmediate.get_optional_arg_str(), None)
+			self.assertEqual(pythonimmediate.get_verb_arg(), "ef")
+			self.assertEqual(pythonimmediate.get_optional_arg_str(), None)
+			self.assertEqual(pythonimmediate.get_verb_arg(), "gh")
+			self.assertEqual(pythonimmediate.get_multiline_verb_arg(), "ijk\nlm")
 			print("123", end="")
 			return "456"
 
@@ -208,20 +208,17 @@ class Test(unittest.TestCase):
 
 			pythonimmediate.put_next(r'{1 a\relax}')
 			for t, meaning in [
-					(pythonimmediate.CharacterToken(ord('{'), pythonimmediate.Catcode.bgroup), "begin-group character {"),
-					(pythonimmediate.CharacterToken(ord('1'), pythonimmediate.Catcode.other), "the character 1"),
-					(pythonimmediate.CharacterToken(ord(' '), pythonimmediate.Catcode.space), "blank space  "),
-					(pythonimmediate.CharacterToken(ord('a'), pythonimmediate.Catcode.letter), "the letter a"),
-					(pythonimmediate.ControlSequenceToken('relax'), r"\relax"),
-					(pythonimmediate.CharacterToken(ord('}'), pythonimmediate.Catcode.egroup), "end-group character }"),
+					(Catcode.bgroup('{'), "begin-group character {"),
+					(Catcode.other ('1'), "the character 1"),
+					(Catcode.space (' '), "blank space  "),
+					(Catcode.letter('a'), "the letter a"),
+					(ControlSequenceToken('relax'), r"\relax"),
+					(Catcode.egroup('}'), "end-group character }"),
 					]:
 				self.assertEqual(pythonimmediate.peek_next_meaning(), meaning)
-				self.assertEqual(pythonimmediate.peek_next_token(), t)
+				self.assertEqual(pythonimmediate.Token.peek_next(), t)
 				self.assertEqual(pythonimmediate.Token.get_next(), t)
 
-			pythonimmediate.frozen_relax_token.put_next()
-			self.assertEqual(pythonimmediate.peek_next_token(), pythonimmediate.frozen_relax_token)
-			self.assertEqual(pythonimmediate.Token.get_next(), pythonimmediate.frozen_relax_token)
 
 			pythonimmediate.put_next(a)
 			c=BalancedTokenList.get_next()
@@ -236,6 +233,27 @@ class Test(unittest.TestCase):
 		\precattlExec{ \testd {{ab\cC {}\cC{123}\relax\cFrozenRelax {}\cP*$^_ \cS\a}} }
 		''')
 		self.assertEqual(x, 1)
+
+	def test_tokens2(self):
+		for t in [
+				frozen_relax_token,
+				ControlSequenceToken(">>"),
+				ControlSequenceToken(""),
+				ControlSequenceToken("  "),
+				ControlSequenceToken(" > a b>\\> "),
+				Catcode.space(' '),
+				Catcode.other(' '),
+				Catcode.letter(' '),
+				Catcode.space('\\'),
+				Catcode.other('\\'),
+				Catcode.letter('\\'),
+				Catcode.bgroup(' '),
+				Catcode.egroup(' '),
+				]:
+			with self.subTest(t=t):
+				t.put_next()
+				self.assertEqual(Token.peek_next(), t)
+				self.assertEqual(Token.get_next(), t)
 
 	def test_put_get_next(self):
 		pythonimmediate.put_next("a")

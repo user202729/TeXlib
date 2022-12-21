@@ -1,74 +1,135 @@
+\ProvidesFile{pythonimmediate.tex}[2022/12/21 0.0.0 Library to run Python code]
+\RequirePackage{fvextra}
+\documentclass{l3doc}
+\usepackage{tikz}
+\usetikzlibrary{calc}
+\usetikzlibrary{arrows.meta}
+\EnableCrossrefs
+\CodelineIndex
+\fvset{breaklines=true,gobble=0,tabsize=4,frame=single,numbers=left,numbersep=3pt}
 
-\newcommand\DescribeOption{\DescribeMacro}  % hack
+\AtBeginDocument{\DeleteShortVerb\"}  % https://tex.stackexchange.com/a/650966/250119
+\MakeOuterQuote{"}
+
+\newcommand\reg{régime}
 \newcommand\DescribePython{\DescribeMacro}  % hack
 
 
+\begin{document}
 
-You need to install Python \pkg{daemoniker} and \pkg{psutil} package.
 
-Just like \pkg{Perl\TeX} or \pkg{PyLua\TeX}, this only requires a single run, and variables are persistent throughout the run.
+% hack to make quotes inside |...| straight
+\edef\temp{\def\noexpand|{\noexpand\Verb\string|}}\temp
+% basically execute \def| { \Verb ⟨catcode other |⟩ }
+
+\GetFileInfo{\jobname.tex}
+
+\title{\pkg{\jobname} --- \fileinfo
+\thanks{This file describes version \fileversion, last revised \filedate.}
+}
+\author{user202729}
+\date{Released \filedate}
+
+\maketitle
+
+\begin{abstract}
+	\fileinfo.
+\end{abstract}
+
+\section{Motivation}
+
+Just like \pkg{Perl\TeX} or \pkg{PyLua\TeX} (and unlike \pkg{Python\TeX} or \pkg{lt3luabridge}),
+this only requires a single run, and variables are persistent throughout the run.
 
 Unlike \pkg{Perl\TeX} or \pkg{PyLua\TeX}, there's no restriction on compiler or script required to run the code.
+
+There's also debugging functionalities -- \TeX\ errors results in Python traceback, and Python error results in \TeX\ traceback.
+Errors in code executed with the |pycode| environment gives the correct traceback point to the Python line of code in the \TeX\ file.
+
+For advanced users, this package allows the user to manipulate the \TeX\ state directly from within Python,
+so you don't need to write a single line of Python code.
+
+\section{Installation}
+
+%You need to install Python \pkg{daemoniker} and \pkg{psutil} package.
+
+The package should work out of the box with no additional Python package needed.
+
+\subsection{Installation on Overleaf}
+
+At the point of writing, this package can be used on Overleaf.
+
+
 
 \section{Usage}
 
 \subsection{Package options}
 
 \DescribeOption{outputdir=}
-
 Specify the output directory if it's not the default value.
 
-The value will be x-expanded.
+\begin{texnote}
+	The value will be |x|-expanded.
+\end{texnote}
 
 Using the \pkg{outputdir} package, it's possible to determine the output directory automatically, subject to restrictions.
 
-\DescribeOption{mode=}
-
-Method to communicate between \TeX\ and Python. Usually the method will be automatically detected.
-
-\subsection{Commands and environments}
-
-The interface mimics those in popular packages such as \pkg{Python\TeX} or \pkg{PyLua\TeX}.
-
-\subsubsection{Print to \TeX}\label{print-to-TeX}
-
-\DescribePython{pythonimmediate.print()}
-\DescribePython{pythonimmediate.file}
-
-These functions are used in |\pyc| command or |pycode| environment.
-
-Using |print()| function in Python will print to the console (\TeX\ standard output).
-In order to print \TeX\ code to be executed, you can do one of
+An usage example, if you invoked |pdflatex| with the command
 \begin{verbatim}
-pythonimmediate.print(...)
-print(..., file=pythonimmediate.file)  # note that in quiet environments, pythonimmediate.file is None, this will print to stdout instead of suppress output
-with contextlib.redirect_stdout(pythonimmediate.file):
-	print(...)
+pdflatex --output-directory=/tmp/ a.tex
+\end{verbatim}
+then in the file \file{a.tex} you should have
+\begin{verbatim}
+\usepackage[outputdir=/tmp/]{pythonimmediate}
 \end{verbatim}
 
-All output will be buffered until the whole Python code finishes executing.
-In order to typeset the text immediately use one of the advanced commands.
+\DescribeOption{mode=}
+Method to communicate between \TeX\ and Python. Usually the method will be automatically detected.
+
+Possible values include |multiprocessing_network| and |unnamed_pipe|.
+
+\subsection{\TeX\ interface}
+
+The interface mimics those in popular packages such as \pkg{Python\TeX} or \pkg{PyLua\TeX}.
 
 \subsubsection{Inline commands}
 
 \DescribeMacro{\py}
+Evaluate some Python expression, consider the result as a string, then execute the result as \TeX\ command.
 
-Evaluate some Python expression, and typesets the result as a string.
+\begin{texnote}
+	The command is not expandable, and the argument will be fully expanded, then detokenized under |\escapechar=-1|, then the resulting
+	passed to Python as a string.
+\end{texnote}
 
-The value can only be used to typeset text, it must not be used to pass "values" to other \LaTeX\ commands.
-
-The code will be tokenized.
+Which, for the users who are not familiar with \TeX\ terminology, roughly means the following:
+\begin{itemize}
+	\item the value can only be used to typeset text,
+		it must not be used to pass "values" to other \LaTeX\ commands. See the example below.
+	\item Special characters can be "escaped" simply by prefixing the character with backslash.
+\end{itemize}
 
 Example:
 \begin{verbatim}
 The value of $1+1$ is $\py{1+1}$.
 
-\setcounter{abc}{\py{1+1}}  % illegal, the result (2) can only be used to typeset text
+The following is the \TeX\ logo: \py{'\\\\TeX'}
 \end{verbatim}
+In the example above, the Python expression being evaluated is |'\\TeX'|, which results in a string that contains the content |\TeX|
+which typesets the \TeX\ logo.
+
+The following is illegal, as the result (2) can only be used to typeset text, not passed to another command that expect a "value":
+\begin{verbatim}
+\setcounter{abc}{\py{1+1}} 
+\end{verbatim}
+A possible workaround is:
+\begin{verbatim}
+\py{ r'\\setcounter{abc}{' + str(1+1) + '}' }
+\end{verbatim}
+In this example you don't need to escape the |{}| characters, but if the Python code has those unbalanced then you can escape them as mentioned above.
 
 \DescribeMacro{\pyc}
-
-Execute some Python code.
+Execute some Python code provided as an argument (the argument will be interpreted as described above).
 
 The macro is not expandable -- roughly speaking, you can only use this at "top level".
 
@@ -77,41 +138,65 @@ Any output (as described in \ref{print-to-TeX}) will be typesetted.
 The code will be tokenized.
 
 \DescribeMacro{\pycq}
-
 Same as above, but output will not be typesetted.
 
 \DescribeMacro{\pyfile}
-\DescribeMacro{\pyfileq}
-
-Same as above.
+Given an argument being the file name, execute that file.
 
 \DescribeMacro{\pys}
-
 Performs "string interpolation", the same way as \pkg{Python\TeX}.
+(not yet implemented)
 
 \subsubsection{Environments}
 
 \DescribeEnv{pycode}
+Verbatim-like environment that executes the code inside as Python.
+
+Example usage: The following will typeset |123|
+\begin{verbatim}
+\begin{pycode}
+pythonimmediate.print("123")
+\end{pycode}
+\end{verbatim}
 
 Special note: white spaces at the end of lines are preserved.
 
 Any output (as described in \ref{print-to-TeX}) will be typesetted.
 
 \DescribeEnv{pycodeq}
+Same as above, but output will not be typesetted.
 
 \DescribeEnv{pysub}
+Not yet implemented.
+
+\subsection{Python interface}
+
+The \TeX\ interface is only used to call Python. Apart from that, all the work can be done on the Python side.
+
+\subsubsection{Print to \TeX}\label{print-to-TeX}
+
+\DescribePython{.print()}
+\DescribePython{.file}
+These functions are used in |\pyc| command or |pycode| environment.
+
+Unlike most other packages, using |print()| function in Python will print to the console (\TeX\ standard output).
+In order to print \TeX\ code to be executed, you can do one of
+\begin{verbatim}
+pythonimmediate.print(...)
+print(..., file=pythonimmediate.file)
+with contextlib.redirect_stdout(pythonimmediate.file):
+	print(...)
+\end{verbatim}
+Note that in quiet environments, |pythonimmediate.file| is None, the second variant using |print()| will print to stdout
+instead of suppress output. The third variant works as expected.
+
+All output will be buffered until the whole Python code finishes executing.
+In order to typeset the text immediately use one of the advanced commands.
 
 
-\subsubsection{Python interface}
 
-There are a lot of Python commands provided.
-
-\DescribePython{pythonimmediate.print()}
-\DescribePython{pythonimmediate.file}
-Described above.
-
-\DescribePython{pythonimmediate.newcommand()}
-\DescribePython{pythonimmediate.renewcommand()}
+\DescribePython{.newcommand()}
+\DescribePython{.renewcommand()}
 
 Same as \LaTeX's |\newcommand| and |\renewcommand|. Can be used as follows:
 
@@ -131,10 +216,92 @@ def function():
 newcommand("controlsequencename", function)
 \end{verbatim}
 
-\DescribePython{pythonimmediate.get_argument_detokenized()}
-\DescribePython{pythonimmediate.get_optional_argument_detokenized()}
-\DescribePython{pythonimmediate.get_verbatim_argument_detokenized()}
-\DescribePython{pythonimmediate.get_multiline_verbatim_argument_detokenized()}
+\DescribePython{.get_arg_str()}
+\DescribePython{.get_optional_arg_str()}
+\DescribePython{.get_verb_arg()}
+\DescribePython{.get_multiline_verb_arg()}
+\DescribePython{.peek_next_char()}
+\DescribePython{.get_next_char()}
+
+There are those functions that is mostly understandable to an inexperienced \LaTeX\ user,
+and should be sufficient for a lot of programming works.
+
+This is an example of how the functions could be used. The name should be mostly self-explanatory.
+
+\begin{verbatim}
+\documentclass{article}
+\usepackage{pythonimmediate}
+\begin{document}
+\begin{pycode}
+from pythonimmediate import newcommand, peek_next_char, get_next_char, get_arg_str, print
+@newcommand
+def innerproduct():
+	s = get_arg_str()    # in the example below this will have the value '\mathbf{a},\mathbf{b}'
+	x, y = s.split(",")  # it's just a Python string, manipulate normally (but be careful of comma inside braces, parse the string yourself)
+	print(r"\left\langle" + x + r"\middle|" + y + r"\right\rangle")
+
+@newcommand
+def fx():
+	if peek_next_char() == "_":
+		get_next_char()
+		subscript = get_arg_str()
+		print("f_{" + subscript + "}(x)")
+	else:
+		print("f(x)")
+
+@newcommand
+def sumManyArgs():
+	s = 0
+	while peek_next_char() == "{":
+		i = get_arg_str()
+		s += int(i)
+	print(str(s))
+\end{pycode}
+$1+2+3 = \sumManyArgs{1}{2}{3}$
+
+$\innerproduct{\mathbf{a},\mathbf{b}}=1$
+
+$\fx = 1$, $\fx_i = 2$, $\fx_{ij} = 3$
+\end{document}
+\end{verbatim}
+
+It will typeset:
+
+$1+2+3=6$
+
+$\left\langle\mathbf{a}\middle\vert\mathbf{b}\right\rangle=1$
+
+$f(x)=1$, $f_i(x)=2$, $f_{ij}(x)=3$
+
+\DescribePython{.execute()}
+
+Takes a string and execute it immediately. (so that any |.execute()| will be executed before any |.print()|)
+
+Assuming \TeX\ is in errorstopmode (i.e. errors halt \TeX\ execution),
+any error in \TeX\ will create an error in Python and the traceback should point to the correct line of code.
+
+For example, in the following code
+
+\begin{verbatim}
+\documentclass{article}
+\usepackage{tikz}
+\usepackage{pythonimmediate}
+\begin{document}
+
+\begin{tikzpicture}
+\begin{pycode}
+from pythonimmediate import execute
+execute(r'\draw (0, 0) to (1, 1);')
+execute(r'\draw (2, 2) to (p);')
+execute(r'\draw (3, 3) to (4, 4);')
+\end{pycode}
+\end{tikzpicture}
+
+\end{document}
+\end{verbatim}
+
+each |\draw| command will be executed immediately when the Python |.execute()| function is executed,
+and as the second line throws an error, the Python traceback will point to that line.
 
 \section{Implementation note}
 
@@ -157,23 +324,64 @@ We have the following 3 internal macros/environments to execute Python code at t
 Each of them sends the code to the Python side, then listen for \emph{one} \TeX\ command and execute it
 using \cs{__read_do_one_command:}.
 
+\ExplSyntaxOn
+\let\fpEval\fp_eval:n
+\ExplSyntaxOff
 
+\begingroup
+
+\tikzset{myarrow/.style={-{Latex[length=2mm]}}}
+
+\def\blockWidth{1}
+\def\blockHeight{7}
+\def\separation{10.5}
+\def\step{0.7}
+
+\def\left #1{
+	\draw [myarrow] (p) ++(\separation, 0) -- node [above] {\small #1} ++(-\separation, 0);
+	\path (p) ++ (0, -\step) coordinate (p);
+}
+\def\right #1{
+	\draw [myarrow] (p) -- node [above] {\small #1} ++(\separation, 0);
+	\path (p) ++ (0, -\step) coordinate (p);
+}
+
+\def\drawBlocks{
+	\draw (0, 0) rectangle (\blockWidth, \blockHeight);
+	\draw (\fpEval{\blockWidth+\separation}, 0) rectangle (\fpEval{\separation+2*\blockWidth}, \blockHeight);
+	\path (\blockWidth, \fpEval{\blockHeight-\step}) coordinate (p);
+}
+
+\begin{tikzpicture}
+\edef\blockHeight{\fpEval{\step*3}}
+\drawBlocks
 \right{execute Python code: print(1)}
-\left{execute TeX code: 1}
+\left{execute \TeX\ code: 1}
+\end{tikzpicture}
 
+Nevertheless, there may be mored complicated cases where the Python code itself may call \TeX\ code before actually returns:
 
+\begin{tikzpicture}
+\edef\blockHeight{\fpEval{\step*5}}
+\drawBlocks
 \right{execute Python code: print(var(a)*2)}
-\left{execute TeX code: sendtopy(a); execute another command}
+\left{execute \TeX\ code: sendtopy(a); execute another command}
 \right{123}
-\left{execute TeX code: 123123}
+\left{execute \TeX\ code: 123123}
+\end{tikzpicture}
 
+Or:
 
+\begin{tikzpicture}
+\edef\blockHeight{\fpEval{\step*7}}
+\drawBlocks
 \right{execute Python code: tex.exec(a=456); print(var(a)*2)}
-\left{execute TeX code: a=456; sendtopy(done); execute another command}
+\left{execute \TeX\ code: a=456; sendtopy(done); execute another command}
 \right{done}
-\left{execute TeX code: sendtopy(a); execute another command}
+\left{execute \TeX\ code: sendtopy(a); execute another command}
 \right{456}
 \left{456456}
+\end{tikzpicture}
 
 
 An example where the commands are nested follows. It shows that the Python side must not just listen for "done"
@@ -206,4 +414,6 @@ pythonimm?"""?'''?
 		The command itself might contain additional code to execute more code, e.g. by reading more lines from Python.
 \end{itemize}
 
+\PrintIndex
 
+\end{document}

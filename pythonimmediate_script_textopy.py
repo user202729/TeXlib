@@ -9,6 +9,7 @@ print() might go to TeX's stdout, or somewhere else
 
 #from __future__ import annotations
 import sys
+import os
 import inspect
 import contextlib
 import io
@@ -229,6 +230,8 @@ def check_line(line: str, *, braces: bool, newline: bool, continue_: Optional[bo
 	elif continue_==False: assert "pythonimmediatecontinue" not in line
 
 
+
+
 mark_bootstrap(
 r"""
 \cs_new_eq:NN \__run_none: \relax
@@ -277,25 +280,18 @@ if 1:
 
 user_scope: dict[str, Any]={}  # consist of user's local variables etc.
 
-# this makes sure if TeX process errors out everything will only be printed once
-# (I think? run_main_loop() might be called recursively...)
-# actually it's probably unnecessary because raise RuntimeError() will halt the Python process
-# what if the error is caught?...
-traceback_already_printed_on_TeX_error=False
-
 def readline(allow_nothing=False)->Optional[str]:
 	global traceback_already_printed_on_TeX_error
 	line=raw_readline()
 	if not line:
-		if not traceback_already_printed_on_TeX_error:
-			traceback_already_printed_on_TeX_error=True
-			#print("\n\nTraceback (most recent call last):", file=sys.stderr)
-			#traceback.print_stack(file=sys.stderr)
-			#print("Runtime", file=sys.stderr)
-
 		if allow_nothing:
 			return None
-		raise RuntimeError("Cannot receive message from TeX -- perhaps a TeX error occurred?")
+		
+		print("\n\nTraceback (most recent call last):", file=sys.stderr)
+		traceback.print_stack(file=sys.stderr)
+		print("RuntimeError: Fatal irrecoverable TeX error\n\n", file=sys.stderr)
+		os._exit(1)
+
 
 	assert line[-1]=='\n'
 	line=line[:-1]
@@ -353,6 +349,18 @@ class Token(ABC):
 		assert len(t)==1
 		return t[0]
 
+	@staticmethod
+	def peek_next()->"Token":
+		"""
+		Get the following token without removing it from the input stream.
+
+		Equivalent to get_next() then put_next() immediately. See documentation of get_next() for some notes.
+		"""
+		line=str(peek_next_()[0])
+		t=TokenList.deserialize(line)
+		assert len(t)==1, (line, t)
+		return t[0]
+
 	def put_next(self)->None:
 		d=self.degree()
 		if d==0:
@@ -374,6 +382,114 @@ class Token(ABC):
 		return 0
 
 
+
+"""
+TeX code for serializing and deserializing a token list.
+Convert a token list from/to a string.
+"""
+
+
+mark_bootstrap(
+r"""
+\RequirePackage{precattl}
+\precattl_exec:n {
+
+% here #1 is the target token list to store the result to, #2 is a string with the final '.'.
+\cs_new_protected:Npn \__tldeserialize_dot:Nn #1 #2 {
+	\begingroup
+		\tl_set:Nn \__tmp {#2}
+		\tl_replace_all:Nnn \__tmp {~} {\cO\ }
+
+		\def \start ##1 { \csname ##1 \endcsname }
+
+		\def \> ##1 ##2 \cO\   { \csname ##1 \endcsname ##2  \cU\  }
+		\def \\ ##1 \cO\   ##2 { \expandafter \noexpand \csname ##1 \endcsname                                  \csname ##2 \endcsname }
+		\def \1 ##1        ##2 { \char_generate:nn {`##1} {1}                                                   \csname ##2 \endcsname }
+		\def \2 ##1        ##2 { \char_generate:nn {`##1} {2}                                                   \csname ##2 \endcsname }
+		\def \3 ##1        ##2 { \char_generate:nn {`##1} {3}                                                   \csname ##2 \endcsname }
+		\def \4 ##1        ##2 { \char_generate:nn {`##1} {4}                                                   \csname ##2 \endcsname }
+		\def \6 ##1        ##2 { #### \char_generate:nn {`##1} {6}                                              \csname ##2 \endcsname }
+		\def \7 ##1        ##2 { \char_generate:nn {`##1} {7}                                                   \csname ##2 \endcsname }
+		\def \8 ##1        ##2 { \char_generate:nn {`##1} {8}                                                   \csname ##2 \endcsname }
+		\def \A ##1        ##2 { \char_generate:nn {`##1} {10}                                                  \csname ##2 \endcsname }
+		\def \B ##1        ##2 { \char_generate:nn {`##1} {11}                                                  \csname ##2 \endcsname }
+		\def \C ##1        ##2 { \char_generate:nn {`##1} {12}                                                  \csname ##2 \endcsname }
+		\def \D ##1        ##2 { \expandafter \expandafter \expandafter \noexpand \char_generate:nn {`##1} {13} \csname ##2 \endcsname }
+		\def \R ##1            { \cFrozenRelax                                                                  \csname ##1 \endcsname }
+
+		\let \. \empty
+
+		\exp_args:NNNx
+	\endgroup \tl_set:Nn #1 {\expandafter \start \__tmp}
+}
+
+\cs_new_protected:Npn \__tlserialize_char_unchecked:nnNN #1 #2 #3 #4 {
+	% #1=token, #2=char code, #3=catcode, #4: callback (will be called exactly once and with nothing following the input stream)
+	\int_compare:nNnTF {#2} = {-1} {
+		% token is control sequence
+		\tl_if_eq:onTF {#1} {\cFrozenRelax} {
+			#4 {\cStr{ R }}
+		} {
+			\tl_if_eq:onTF {#1} { \cC{} } {
+				#4 {\cStr{ \\\  }}
+			} {
+				\tl_set:Nx \__name { \expandafter \cs_to_str:N #1 }
+				\exp_args:Nx #4 { \prg_replicate:nn {\str_count_spaces:N \__name} {>}  \cStr\\ \__name \cStr\  }
+			}
+		}
+	} {
+		% token is not control sequence
+		% (hex catcode) (character) (or escape sequence with that character)
+		\exp_args:Nx #4 { #3 \expandafter \string #1 }
+	}
+}
+
+}
+
+% deserialize as above but #2 does not end with '.'.
+\cs_new_protected:Npn \__tldeserialize_nodot:Nn #1 #2 {
+	\__tldeserialize_dot:Nn #1 {#2 .}
+}
+
+% serialize token list in #2 store to #1.
+\cs_new_protected:Npn \__tlserialize_nodot_unchecked:Nn #1 #2 {
+	\tl_build_begin:N #1
+	\tl_set:Nn \__tlserialize_callback { \tl_build_put_right:Nn #1 }
+	\tl_analysis_map_inline:nn {#2} {
+		\__tlserialize_char_unchecked:nnNN {##1}{##2}##3 \__tlserialize_callback
+	}
+	\tl_build_end:N #1
+}
+
+% serialize token list in #2 store to #1. Call T or F branch depends on whether serialize is successful.
+% #1 must be different from \__tlserialize_tmp.
+\cs_new_protected:Npn \__tlserialize_nodot:NnTF #1 #2 {
+	\__tlserialize_nodot_unchecked:Nn #1 {#2}
+	\__tldeserialize_nodot:NV \__tlserialize_nodot_tmp #1
+
+	\tl_if_eq:NnTF \__tlserialize_nodot_tmp {#2} % dangling
+}
+
+\cs_new_protected:Npn \__tlserialize_nodot:NnF #1 #2 {
+	\__tlserialize_nodot:NnTF #1 {#2} {} % dangling
+}
+
+\cs_new_protected:Npn \__tlserialize_nodot:NnT #1 #2 #3 { \__tlserialize_nodot:NnTF #1 {#2} {#3} {} }
+
+\msg_new:nnn {pythonimmediate} {cannot-serialize} {Token~list~cannot~be~serialized}
+
+\cs_new_protected:Npn \__tlserialize_nodot:Nn #1 #2{
+	\__tlserialize_nodot:NnF #1 {#2} {
+		\msg_error:nn {pythonimmediate} {cannot-serialize}
+	}
+}
+
+\cs_generate_variant:Nn \__tldeserialize_dot:Nn {NV}
+\cs_generate_variant:Nn \__tldeserialize_nodot:Nn {NV}
+\cs_generate_variant:Nn \__tlserialize_nodot:Nn {NV}
+""")
+
+
 @export_function_to_module
 @dataclass(repr=False, frozen=True)
 class ControlSequenceToken(Token):
@@ -382,7 +498,7 @@ class ControlSequenceToken(Token):
 		if self.csname=="": return r"\csname\endcsname"
 		return "\\"+self.csname
 	def serialize(self)->str:
-		return "0"+self.csname+"/"
+		return ">"*self.csname.count(" ") + "\\" + self.csname + " "
 	def repr1(self)->str:
 		return f"\\{self.csname}"
 
@@ -642,20 +758,32 @@ class TokenList(collections.UserList[Token]):
 
 	@classmethod
 	def deserialize(cls: type[T], data: str)->T:
-		result=TokenList()
-		for match_ in re.finditer(r'0(.*?)/|(R)|(.)\\?(.) ?', data):
-			groups=match_.groups()
+		try:
+			result=TokenList()
 			i=0
-			while groups[i] is None: i+=1
-			if i==0:
-				result.append(ControlSequenceToken(groups[0]))
-			elif i==1:
-				result.append(frozen_relax_token)
-			elif i==2:
-				result.append(CharacterToken(index=ord(groups[3]), catcode=Catcode(int(groups[2], 16))))
-			else:
-				assert False
-		return cls(result)
+			cs_skip_space_count=0
+			while i<len(data):
+				if data[i]==">":
+					cs_skip_space_count+=1
+					i+=1
+				elif data[i]=="\\":
+					j=data.index(' ', i+1)
+					for __ in range(cs_skip_space_count):
+						j=data.index(' ', j+1)
+					cs_skip_space_count=0
+					result.append(ControlSequenceToken(data[i+1:j]))
+					i=j+1
+				elif data[i]=="R":
+					result.append(frozen_relax_token)
+					i+=1
+				else:
+					result.append(CharacterToken(index=ord(data[i+1]), catcode=Catcode(int(data[i], 16))))
+					i+=2
+			return cls(result)
+		except:
+			print("error", repr(data))
+			traceback.print_exc()
+			raise
 
 	def __repr__(self)->str:
 		return '<' + type(self).__name__ + ': ' + ' '.join(t.repr1() for t in self) + '>'
@@ -755,8 +883,8 @@ class TTPBlock(TeXToPyData, str):
 		return TTPBlock(read_block())
 
 class TTPBalancedTokenList(TeXToPyData, TokenList):
-	send_code=r"\tlserializeb:Nn \__tmp {{ {} }} \immediate \write \__write_file {{\unexpanded\expandafter{{ \__tmp }}}}".format
-	send_code_var=r"\tlserializeb:NV \__tmp {} \immediate \write \__write_file {{\unexpanded\expandafter{{ \__tmp }}}}".format
+	send_code=r"\__tlserialize_nodot:Nn \__tmp {{ {} }} \immediate \write \__write_file {{\unexpanded\expandafter{{ \__tmp }}}}".format
+	send_code_var=r"\__tlserialize_nodot:NV \__tmp {} \immediate \write \__write_file {{\unexpanded\expandafter{{ \__tmp }}}}".format
 	@staticmethod
 	def read()->"TTPBalancedTokenList":
 		line=readline()
@@ -816,7 +944,7 @@ class PTTBlock(PyToTeXData):
 @dataclass
 class PTTBalancedTokenList(PyToTeXData):
 	data: BalancedTokenList
-	read_code=r"\ior_str_get:NN \__read_file {0}  \tldeserializeb_terminated:NV {0} {0}".format
+	read_code=r"\ior_str_get:NN \__read_file {0}  \__tldeserialize_dot:NV {0} {0}".format
 	def write(self)->None:
 		PTTVerbatimLine(self.data.serialize()+".").write()
 
@@ -1257,7 +1385,7 @@ r"""
 \cs_new_protected:Npn %name% {
 	\peek_analysis_map_inline:n {
 		\peek_analysis_map_break:n {
-			\tlserializeb_char_unchecked:nnNN {##1}{##2}##3 \__get_next_callback:
+			\__tlserialize_char_unchecked:nnNN {##1}{##2}##3 \__get_next_callback:
 		}
 	}
 }
@@ -1404,7 +1532,7 @@ r"""
 """, [], [TTPLine], recursive=False)
 @export_function_to_module
 @user_documentation
-def get_argument_detokenized()->str:
+def get_arg_str()->str:
 	"""
 	Get a mandatory argument.
 	"""
@@ -1426,7 +1554,7 @@ r"""
 """, [], [TTPLine], recursive=False)
 @export_function_to_module
 @user_documentation
-def get_optional_argument_detokenized()->Optional[str]:
+def get_optional_arg_str()->Optional[str]:
 	"""
 	Get an optional argument.
 	"""
@@ -1449,7 +1577,7 @@ r"""
 """, [], [TTPLine], recursive=False)
 @export_function_to_module
 @user_documentation
-def get_verbatim_argument()->str:
+def get_verb_arg()->str:
 	"""
 	Get a verbatim argument. Since it's verbatim, there's no worry of |#| being doubled,
 	but it can only be used at top level.
@@ -1469,7 +1597,7 @@ r"""
 """, [], [TTPBlock], recursive=False)
 @export_function_to_module
 @user_documentation
-def get_multiline_verbatim_argument()->str:
+def get_multiline_verb_arg()->str:
 	"""
 	Get a multi-line verbatim argument.
 	"""
@@ -1591,9 +1719,6 @@ def put_next(arg: Union[str, Token, BalancedTokenList])->None:
 	if isinstance(arg, str): put_next_TeX_line(PTTTeXLine(arg))
 	else: arg.put_next()
 
-
-
-
 peek_next_=define_Python_call_TeX_local_sync(
 r"""
 \cs_new_protected:Npn \__peek_next_callback: #1 {
@@ -1605,29 +1730,11 @@ r"""
 \cs_new_protected:Npn %name% {
 	\peek_analysis_map_inline:n {
 		\peek_analysis_map_break:n {
-			\tlserializeb_char_unchecked:nnNN {##1}{##2}##3 \__peek_next_callback: ##1 % (*)
+			\__tlserialize_char_unchecked:nnNN {##1}{##2}##3 \__peek_next_callback: ##1 % (*)
 		}
 	}
 }
 """, [], [TTPLine], recursive=False)
-
-@export_function_to_module
-@user_documentation
-def peek_next_token()->Token:
-	"""
-	Get the following token without removing it from the input stream.
-
-	Note: in LaTeX3 versions without the commit |https://github.com/latex3/latex3/commit/24f7188904d6|
-	sometimes this may error out.
-
-	Note: because of the internal implementation of |\peek_analysis_map_inline:n|, this may
-	tokenize up to 2 tokens ahead (including the returned token),
-	as well as occasionally return the wrong token in unavoidable cases.
-	"""
-	line=str(peek_next_()[0])
-	t=TokenList.deserialize(line)
-	assert len(t)==1, (line, t)
-	return t[0]
 
 
 peek_next_meaning_=define_Python_call_TeX_local_sync(
@@ -1667,7 +1774,7 @@ if 0:
 	\cs_new_protected:Npn \__peek_next_char_callback: {
 		\edef \__tmpb { \expandafter\str_item:nn\expandafter{\meaning \__tmp} {-1} }  % \expandafter just in case \__tmp is \outer
 		\if \noexpand\__tmp \__tmpb  % is a character
-			\immediate\write \__write_file { r^^J \__tmpb }
+			\immediate\write \__write_file { r^^J \__tmpb . }
 		\else  % is not?
 			\immediate\write \__write_file { r^^J }
 		\fi
@@ -1735,6 +1842,11 @@ def peek_next_char()->str:
 		]: return s[-1]
 	return ""
 
+@export_function_to_module
+def get_next_char()->str:
+	result=Token.get_next()
+	assert isinstance(result, CharacterToken), "Next token is not a character!"
+	return result.chr
 
 # ========
 
