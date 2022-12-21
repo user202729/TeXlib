@@ -209,7 +209,6 @@ def run_main_loop()->TeXToPyObjectType:
 
 def run_main_loop_get_return_one()->str:
 	line=readline()
-	assert line is not None
 	assert line[0]=="r"
 	return line[1:]
 
@@ -320,13 +319,9 @@ if 1:
 
 user_scope: Dict[str, Any]={}  # consist of user's local variables etc.
 
-def readline(allow_nothing=False)->Optional[str]:
-	global traceback_already_printed_on_TeX_error
+def readline()->str:
 	line=raw_readline()
 	if not line:
-		if allow_nothing:
-			return None
-		
 		print("\n\nTraceback (most recent call last):", file=sys.stderr)
 		traceback.print_stack(file=sys.stderr)
 		print("RuntimeError: Fatal irrecoverable TeX error\n\n", file=sys.stderr)
@@ -348,7 +343,6 @@ def read_block()->str:
 	lines: List[str]=[]
 	while True:
 		line=readline()
-		assert line is not None, "internal error TeX does not send complete data"
 		if line==block_delimiter:
 			return '\n'.join(lines)
 		else:
@@ -904,9 +898,7 @@ class TTPLine(TeXToPyData, str):
 	send_code_var=r"\immediate \write \__write_file {{\unexpanded{{ {} }}}}".format
 	@staticmethod
 	def read()->"TTPLine":
-		line=readline()
-		assert line is not None
-		return TTPLine(line)
+		return TTPLine(readline())
 
 class TTPEmbeddedLine(TeXToPyData, str):
 	@staticmethod
@@ -934,10 +926,7 @@ class TTPBalancedTokenList(TeXToPyData, TokenList):
 	send_code_var=r"\__tlserialize_nodot:NV \__tmp {} \immediate \write \__write_file {{\unexpanded\expandafter{{ \__tmp }}}}".format
 	@staticmethod
 	def read()->"TTPBalancedTokenList":
-		line=readline()
-		assert line is not None
-		debug(line)
-		return TTPBalancedTokenList(TokenList.deserialize(line))
+		return TTPBalancedTokenList(TokenList.deserialize(readline()))
 
 
 class PyToTeXData(ABC):
@@ -1018,7 +1007,6 @@ def wrap_executor(f: Callable[..., None])->Callable:
 			else:
 				# TODO what should be done here? What if the error raised below is caught
 				action_done=True
-				#do_run_error_finish=True  # it already is
 			raise
 		finally:
 			if not action_done:
@@ -1900,8 +1888,6 @@ def get_next_char()->str:
 
 send_bootstrap_code()
 run_main_loop()  # if this returns cleanly TeX has no error. Otherwise some readline() will reach eof and print out a stack trace
-
-assert readline(allow_nothing=True)==None, "Internal error: TeX sends extra line"
-do_run_error_finish=False
+assert raw_readline()==None, "Internal error: TeX sends extra line"
 
 
