@@ -14,7 +14,7 @@ import inspect
 import contextlib
 import io
 import functools
-from typing import Optional, Union, Callable, Any, Iterator, Protocol, Iterable, Sequence
+from typing import Optional, Union, Callable, Any, Iterator, Protocol, Iterable, Sequence, Type, Tuple, List, Dict
 import typing
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -191,7 +191,7 @@ r"""
 # ========
 
 # when 'i⟨string⟩' is sent from TeX to Python, the function with index ⟨string⟩ in this dict is called
-TeX_handlers: dict[str, Callable[[], None]]={}
+TeX_handlers: Dict[str, Callable[[], None]]={}
 
 TeXToPyObjectType=Optional[str]
 
@@ -318,7 +318,7 @@ if 1:
 
 
 
-user_scope: dict[str, Any]={}  # consist of user's local variables etc.
+user_scope: Dict[str, Any]={}  # consist of user's local variables etc.
 
 def readline(allow_nothing=False)->Optional[str]:
 	global traceback_already_printed_on_TeX_error
@@ -345,7 +345,7 @@ def read_block()->str:
 	Internal function to read one block sent from \TeX\ (including the final delimiter line,
 	but the delimiter line is not returned)
 	"""
-	lines: list[str]=[]
+	lines: List[str]=[]
 	while True:
 		line=readline()
 		assert line is not None, "internal error TeX does not send complete data"
@@ -613,7 +613,7 @@ egroup=Catcode.egroup("}")
 space=Catcode.space(" ")
 
 
-doc_catcode_table: dict[int, Catcode]={}
+doc_catcode_table: Dict[int, Catcode]={}
 doc_catcode_table[ord("{")]=Catcode.begin_group
 doc_catcode_table[ord("}")]=Catcode.end_group
 doc_catcode_table[ord("$")]=Catcode.math_toggle
@@ -637,8 +637,13 @@ e3_catcode_table[ord("~")]=Catcode.space
 
 T = typing.TypeVar("T", bound="TokenList")
 
+if typing.TYPE_CHECKING:
+	TokenListBaseClass = collections.UserList[Token]
+else:  # Python 3.8 compatibility
+	TokenListBaseClass = collections.UserList
+
 @export_function_to_module
-class TokenList(collections.UserList[Token]):
+class TokenList(TokenListBaseClass):
 	@staticmethod
 	def force_token_list(a: Iterable)->Iterable[Token]:
 		for x in a:
@@ -670,7 +675,7 @@ class TokenList(collections.UserList[Token]):
 		if not self.is_balanced():
 			raise ValueError("Token list is not balanced")
 
-	def balanced_parts(self)->"list[Union[BalancedTokenList, Token]]":
+	def balanced_parts(self)->"List[Union[BalancedTokenList, Token]]":
 		"""
 		split this TokenList into a list of balanced parts and unbalanced {/}tokens
 		"""
@@ -681,7 +686,7 @@ class TokenList(collections.UserList[Token]):
 			min_degree=min(min_degree, (degree, i+1))
 		min_degree_pos=min_degree[1]
 
-		left_half: list[Union[BalancedTokenList, Token]]=[]
+		left_half: List[Union[BalancedTokenList, Token]]=[]
 		degree=0
 		last_pos=0
 		for i in range(min_degree_pos):
@@ -696,7 +701,7 @@ class TokenList(collections.UserList[Token]):
 		if min_degree_pos!=last_pos:
 			left_half.append(BalancedTokenList(self[last_pos:min_degree_pos]))
 
-		right_half: list[Union[BalancedTokenList, Token]]=[]
+		right_half: List[Union[BalancedTokenList, Token]]=[]
 		degree=0
 		last_pos=len(self)
 		for i in range(len(self)-1, min_degree_pos-1, -1):
@@ -766,7 +771,7 @@ class TokenList(collections.UserList[Token]):
 							i+=1
 
 	@classmethod
-	def from_string(cls: type[T], s: str, get_catcode: Callable[[int], Catcode])->T:
+	def from_string(cls: Type[T], s: str, get_catcode: Callable[[int], Catcode])->T:
 		"""
 		convert a string to a TokenList approximately.
 		The tokenization algorithm is slightly different from TeX's in the following respect:
@@ -778,7 +783,7 @@ class TokenList(collections.UserList[Token]):
 		return cls(TokenList.iterable_from_string(s, get_catcode))
 
 	@classmethod
-	def e3(cls: type[T], s: str)->T:
+	def e3(cls: Type[T], s: str)->T:
 		"""
 		approximate tokenizer in expl3 catcode, implemented in Python.
 		refer to documentation of from_string() for details.
@@ -786,7 +791,7 @@ class TokenList(collections.UserList[Token]):
 		return cls.from_string(s, lambda x: e3_catcode_table.get(x, Catcode.other))
 
 	@classmethod
-	def doc(cls: type[T], s: str)->T:
+	def doc(cls: Type[T], s: str)->T:
 		"""
 		approximate tokenizer in document catcode, implemented in Python.
 		refer to documentation of from_string() for details.
@@ -797,7 +802,7 @@ class TokenList(collections.UserList[Token]):
 		return "".join(t.serialize() for t in self)
 
 	@classmethod
-	def deserialize(cls: type[T], data: str)->T:
+	def deserialize(cls: Type[T], data: str)->T:
 		try:
 			result=TokenList()
 			i=0
@@ -1054,7 +1059,7 @@ def get_random_identifier()->str:
 	return next(random_identifier_iterable)
 
 
-def define_TeX_call_Python(f: Callable[..., None], name: Optional[str]=None, argtypes: Optional[list[type[TeXToPyData]]]=None, identifier: Optional[str]=None)->str:
+def define_TeX_call_Python(f: Callable[..., None], name: Optional[str]=None, argtypes: Optional[List[Type[TeXToPyData]]]=None, identifier: Optional[str]=None)->str:
 	"""
 	This function setups some internal data structure, and
 	returns the \TeX\ code to be executed on the \TeX\ side to define the macro.
@@ -1125,10 +1130,10 @@ def exec_or_eval_with_linecache(code: str, globals: dict, mode: str)->Any:
 	#del linecache.cache[sourcename]
 	# we never delete the cache, in case some function is defined here then later are called...
 
-def exec_with_linecache(code: str, globals: dict[str, Any])->None:
+def exec_with_linecache(code: str, globals: Dict[str, Any])->None:
 	exec_or_eval_with_linecache(code, globals, "exec")
 
-def eval_with_linecache(code: str, globals: dict[str, Any])->Any:
+def eval_with_linecache(code: str, globals: Dict[str, Any])->Any:
 	return exec_or_eval_with_linecache(code, globals, "eval")
 
 
@@ -1210,7 +1215,7 @@ r"""
 }
 """)
 
-def normalize_lines(lines: list[str])->list[str]:
+def normalize_lines(lines: List[str])->List[str]:
 	return [line.rstrip() for line in lines]
 
 @define_internal_handler
@@ -1282,19 +1287,19 @@ def template_substitute(template: str, pattern: str, substitute: Union[str, Call
 
 #typing.TypeVarTuple(PyToTeXData)
 
-#PythonCallTeXFunctionType=Callable[[PyToTeXData], Optional[tuple[TeXToPyData, ...]]]
+#PythonCallTeXFunctionType=Callable[[PyToTeXData], Optional[Tuple[TeXToPyData, ...]]]
 
 class PythonCallTeXFunctionType(Protocol):  # https://stackoverflow.com/questions/57658879/python-type-hint-for-callable-with-variable-number-of-str-same-type-arguments
-	def __call__(self, *args: PyToTeXData)->Optional[tuple[TeXToPyData, ...]]: ...
+	def __call__(self, *args: PyToTeXData)->Optional[Tuple[TeXToPyData, ...]]: ...
 
 class PythonCallTeXSyncFunctionType(PythonCallTeXFunctionType, Protocol):  # https://stackoverflow.com/questions/57658879/python-type-hint-for-callable-with-variable-number-of-str-same-type-arguments
-	def __call__(self, *args: PyToTeXData)->tuple[TeXToPyData, ...]: ...
+	def __call__(self, *args: PyToTeXData)->Tuple[TeXToPyData, ...]: ...
 
-def define_Python_call_TeX(TeX_code: str, ptt_argtypes: list[type[PyToTeXData]], ttp_argtypes: list[type[TeXToPyData]],
+def define_Python_call_TeX(TeX_code: str, ptt_argtypes: List[Type[PyToTeXData]], ttp_argtypes: List[Type[TeXToPyData]],
 						   *,
 						   recursive: bool=True,
 						   sync: Optional[bool]=None,
-						   )->tuple[str, PythonCallTeXFunctionType]:
+						   )->Tuple[str, PythonCallTeXFunctionType]:
 	r"""
 	|TeX_code| should be some expl3 code that defines a function with name |%name%| that when called should:
 		* run some \TeX\ code (which includes reading the arguments, if any)
@@ -1363,7 +1368,7 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: list[type[PyToTeXData]],
 							   lambda match: argtype.send_code_var(match[1]),
 							   optional=True)
 
-	def f(*args)->Optional[tuple[TeXToPyData, ...]]:
+	def f(*args)->Optional[Tuple[TeXToPyData, ...]]:
 		assert len(args)==len(ptt_argtypes)
 
 		# send function header
@@ -1383,7 +1388,7 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: list[type[PyToTeXData]],
 		else:
 			result_=run_main_loop_get_return_one()
 
-		result: list[TeXToPyData]=[]
+		result: List[TeXToPyData]=[]
 		if TTPEmbeddedLine not in ttp_argtypes:
 			assert not result_
 		for argtype_ in ttp_argtypes:
