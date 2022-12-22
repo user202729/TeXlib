@@ -1378,7 +1378,7 @@ def define_Python_call_TeX_local_sync(*args, **kwargs)->PythonCallTeXSyncFunctio
 
 put_next_tokenlist=define_Python_call_TeX_local(
 r"""
-\tl_gset:Nn \__put_next_tmp {
+\cs_new_protected:Npn \__put_next_tmp {
 	%optional_sync%
 	\__read_do_one_command:
 }
@@ -1487,20 +1487,6 @@ r"""
 @export_function_to_module
 def run_block_local(block: str)->None:
 	run_block_local_(PTTBlock(block))
-	
-#mark_bootstrap(
-#r"""
-#\cs_new_protected:Npn \__run_blockcont: {
-#	\__run_block:
-#	\pythonimmediatecontinue {}
-#}
-#""")
-#
-#@export_function_to_module
-#def run_block_local(block: str)->TeXToPyObjectType:
-#	check_not_finished()
-#	send_raw("blockcont\n" + surround_delimiter(block))
-#	return run_main_loop()
 
 expand_o_=define_Python_call_TeX_local_sync(
 r"""
@@ -1710,7 +1696,7 @@ def renewcommand(x: Union[str, Callable, None]=None, f: Optional[Callable]=None)
 
 put_next_TeX_line=define_Python_call_TeX_local(
 r"""
-\tl_gset:Nn \__put_next_tmpa {
+\cs_new_protected:Npn \__put_next_tmpa {
 	%optional_sync%
 	\__read_do_one_command:
 }
