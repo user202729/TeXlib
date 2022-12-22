@@ -1863,6 +1863,6 @@ def get_next_char()->str:
 
 send_bootstrap_code()
 run_main_loop()  # if this returns cleanly TeX has no error. Otherwise some readline() will reach eof and print out a stack trace
-assert raw_readline()==None, "Internal error: TeX sends extra line"
+assert not raw_readline(), "Internal error: TeX sends extra line"
 
 
