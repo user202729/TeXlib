@@ -21,7 +21,7 @@
 
 \str_set:Nn \_pythonimmediate_outputdir{.}
 \tl_set:Nn \_pythonimmediate_textopy_script_path{}
-\str_set:Nn \_pythonimmediate_mode{multiprocessing_network}
+\str_set:Nn \_pythonimmediate_mode{multiprocessing-network}
 \str_set:Nn \_pythonimmediate_python_executable{python3}
 \keys_define:nn{pythonimmediate}{
 	outputdir.tl_set_x:N=\_pythonimmediate_outputdir,
@@ -47,8 +47,8 @@
 
 \bool_new:N \_pythonimmediate_mode_multiprocessing_network
 \bool_new:N \_pythonimmediate_mode_unnamed_pipe
-\str_if_eq:VnT \_pythonimmediate_mode {multiprocessing_network} {\bool_set_true:N \_pythonimmediate_mode_multiprocessing_network}
-\str_if_eq:VnT \_pythonimmediate_mode {unnamed_pipe} {\bool_set_true:N \_pythonimmediate_mode_unnamed_pipe}
+\str_if_eq:VnT \_pythonimmediate_mode {multiprocessing-network} {\bool_set_true:N \_pythonimmediate_mode_multiprocessing_network}
+\str_if_eq:VnT \_pythonimmediate_mode {unnamed-pipe} {\bool_set_true:N \_pythonimmediate_mode_unnamed_pipe}
 \bool_if:nF {\_pythonimmediate_mode_multiprocessing_network || \_pythonimmediate_mode_unnamed_pipe} {
     \msg_error:nnV {pythonimmediate} {invalid-mode} \_pythonimmediate_mode
 }

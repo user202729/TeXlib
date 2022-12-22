@@ -40,7 +40,7 @@ debug=lambda *args, **kwargs: None
 
 import argparse
 parser=argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument("mode", choices=["multiprocessing_network", "unnamed_pipe"])
+parser.add_argument("mode", choices=["multiprocessing-network", "unnamed-pipe"])
 args=parser.parse_args()
 
 expansion_only_can_call_Python=False  # normally. May be different in LuaTeX etc.
@@ -53,7 +53,7 @@ if True:
 
 	raw_readline=sys.__stdin__.readline  # raw_readline() should return "⟨line⟩\n" or "" (if EOF) on each call
 
-if args.mode=="multiprocessing_network":
+if args.mode=="multiprocessing-network":
 	address=("localhost", 7348)  # this must be identical to that of the other half-script
 	#address="./pythonimmediate.socket"
 
@@ -65,7 +65,7 @@ if args.mode=="multiprocessing_network":
 		global connection
 		connection.send_bytes(s.encode('u8'))
 
-elif args.mode=="unnamed_pipe":
+elif args.mode=="unnamed-pipe":
 	pytotex_pid_line=raw_readline()
 	match_=re.fullmatch("pytotex_pid=(\d+)\n", pytotex_pid_line)
 	assert match_

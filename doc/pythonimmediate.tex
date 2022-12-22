@@ -59,7 +59,30 @@ The package should work out of the box with no additional Python package needed.
 
 At the point of writing, this package can be used on Overleaf.
 
+Instruction:
 
+\begin{itemize}
+	\item Download the following files and place it in the root folder of Overleaf:
+		\begin{itemize}
+			\item \file{saveenv.sty}
+			\item \file{precattl.sty}
+			\item \file{pythonimmediate.sty}
+			\item \file{pythonimmediate_script_textopy.py}
+			\item \file{pythonimmediate_script_pytotex.py}
+		\end{itemize}
+	\item Write the following in the preamble:
+\begin{verbatim}
+\usepackage[abspath]{currfile}
+\usepackage[mode=unnamed-pipe]{pythonimmediate}
+\end{verbatim}
+Refer to \ref{troubleshoot-source-file-not-found} for explanation of the |abspath| option.
+\end{itemize}
+
+For some unknown reason in the default mode on Overleaf (|\nonstopmode|), when there's an error
+the log file might be truncated,
+so in that case consider writing |\errorstopmode|.
+
+Refer to \ref{troubleshoot-Python-error} to read the error traceback in case of Python error.
 
 \section{Usage}
 
@@ -86,7 +109,7 @@ then in the file \file{a.tex} you should have
 \DescribeOption{mode=}
 Method to communicate between \TeX\ and Python. Usually the method will be automatically detected.
 
-Possible values include |multiprocessing_network| and |unnamed_pipe|.
+Possible values include |multiprocessing-network| and |unnamed-pipe|.
 
 \subsection{\TeX\ interface}
 
@@ -173,6 +196,8 @@ Not yet implemented.
 
 The \TeX\ interface is only used to call Python. Apart from that, all the work can be done on the Python side.
 
+All functions in this section should be imported from |pythonimmediate| package, unless specified otherwise.
+
 \subsubsection{Print to \TeX}\label{print-to-TeX}
 
 \DescribePython{.print()}
@@ -197,10 +222,11 @@ In order to typeset the text immediately use one of the advanced commands.
 
 \DescribePython{.newcommand()}
 \DescribePython{.renewcommand()}
-
 Same as \LaTeX's |\newcommand| and |\renewcommand|. Can be used as follows:
 
 \begin{verbatim}
+from pythonimmediate import newcommand, renewcommand
+
 @newcommand
 def function():
 	...
@@ -222,7 +248,6 @@ newcommand("controlsequencename", function)
 \DescribePython{.get_multiline_verb_arg()}
 \DescribePython{.peek_next_char()}
 \DescribePython{.get_next_char()}
-
 There are those functions that is mostly understandable to an inexperienced \LaTeX\ user,
 and should be sufficient for a lot of programming works.
 
@@ -267,14 +292,16 @@ $\fx = 1$, $\fx_i = 2$, $\fx_{ij} = 3$
 
 It will typeset:
 
+\begin{quote}
 $1+2+3=6$
 
 $\left\langle\mathbf{a}\middle\vert\mathbf{b}\right\rangle=1$
 
 $f(x)=1$, $f_i(x)=2$, $f_{ij}(x)=3$
+\end{quote}
+
 
 \DescribePython{.execute()}
-
 Takes a string and execute it immediately. (so that any |.execute()| will be executed before any |.print()|)
 
 Assuming \TeX\ is in errorstopmode (i.e. errors halt \TeX\ execution),
@@ -299,9 +326,51 @@ execute(r'\draw (3, 3) to (4, 4);')
 
 \end{document}
 \end{verbatim}
-
 each |\draw| command will be executed immediately when the Python |.execute()| function is executed,
 and as the second line throws an error, the Python traceback will point to that line.
+
+\section{Troubleshooting}
+
+\subsection{"Source file not found!" error message}\label{troubleshoot-source-file-not-found}
+
+In order to obtain the exact code with trailing spaces and produce error traceback
+point to the correct \TeX\ file, the Python code need to know the full path to the current
+\TeX\ file for the |pycode| environment.
+
+Nevertheless, this is difficult and does not always work
+(refer to the documentation of \pkg{currfile} for details), so this message is issued
+when the file cannot be found.
+
+In that case try the following fixes:
+
+\begin{itemize}
+	\item Include |\usepackage[abspath]{currfile}| at the start of the document, after the |\documentclass| line.
+		(this option is not included by default because it's easy to get package clash, and usually \pkg{currfile} without
+		the |abspath| option works fine -- unless custom |jobname| is used)
+	\item Explicitly override |currfilename| or |currfileabspath| -- for example
+\begin{verbatim}
+\def\currfilename{main.tex}
+\end{verbatim}
+		Technically this is an abuse of the \pkg{currfile} package API, but it usually works regardless.
+\end{itemize}
+
+\subsection{"Python error" error message}\label{troubleshoot-Python-error}
+
+In case of Python error, the Python traceback is included in the terminal and \TeX\ log file.
+
+Search for "Python error traceback" before the error line in the log file.
+
+On Overleaf, you can either view the log file ("Raw logs" section)
+or the traceback on stderr (download \file{output.stderr} file)
+
+\subsection{"\TeX\ error" error message}\label{troubleshoot-TeX-error}
+
+If an error occur in \TeX, traceback cannot be included in the log file.
+
+Besides, this can only be detected in |\errorstopmode|. Such an error will always halt \TeX,
+and Python will be force-exited after printing the error traceback.
+
+On Overleaf, download \file{output.stderr} file to read the traceback.
 
 \section{Implementation note}
 
@@ -322,7 +391,7 @@ We have the following 3 internal macros/environments to execute Python code at t
 \DescribeMacro{\pythonimmediate:n}
 \DescribeEnv{pythonimmediateenv}
 Each of them sends the code to the Python side, then listen for \emph{one} \TeX\ command and execute it
-using \cs{__read_do_one_command:}.
+using |\__read_do_one_command:|.
 
 \ExplSyntaxOn
 \let\fpEval\fp_eval:n
@@ -352,6 +421,7 @@ using \cs{__read_do_one_command:}.
 	\path (\blockWidth, \fpEval{\blockHeight-\step}) coordinate (p);
 }
 
+\vspace{5pt}
 \begin{tikzpicture}
 \edef\blockHeight{\fpEval{\step*3}}
 \drawBlocks
@@ -361,6 +431,7 @@ using \cs{__read_do_one_command:}.
 
 Nevertheless, there may be mored complicated cases where the Python code itself may call \TeX\ code before actually returns:
 
+\vspace{5pt}
 \begin{tikzpicture}
 \edef\blockHeight{\fpEval{\step*5}}
 \drawBlocks
@@ -372,6 +443,7 @@ Nevertheless, there may be mored complicated cases where the Python code itself 
 
 Or:
 
+\vspace{5pt}
 \begin{tikzpicture}
 \edef\blockHeight{\fpEval{\step*7}}
 \drawBlocks
@@ -389,16 +461,10 @@ command back, but must potentially call a nested loop.
 
 The exact protocol is:
 \begin{itemize}
-	\item "execute Python code" sends from \TeX\ to Python has the format:
-\begin{verbatim}
-i
-multiple lines of
-Python code
-here...
-pythonimm?"""?'''?
-\end{verbatim}
+	\item "execute Python code" sends from \TeX\ to Python has a single line "|i|\meta{handler name}",
+		followed by any number of arguments (depends on the handler).
 
-		This can be done by \cs{pythonimmediate:n} or other user interface as listed above.
+		Refer to the |define_TeX_call_Python| internal function for details.
 
 	\item "done" sends from \TeX\ to Python has the format "|r|\meta{optional return value as a string in a single line}".
 
@@ -412,7 +478,11 @@ pythonimm?"""?'''?
 		which must already be defined on the \TeX\ side.
 
 		The command itself might contain additional code to execute more code, e.g. by reading more lines from Python.
+
+		Refer to the |define_Python_call_TeX| internal function for details.
 \end{itemize}
+
+
 
 \PrintIndex
 
