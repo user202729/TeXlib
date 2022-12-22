@@ -82,18 +82,6 @@ x=\pyc{print(str(x), end="")}.  % without trailing space. Note that this require
 
 x=\pyc{print(str(x))}.  % there's an extra space.
 
-% "escaped" things are passed "verbatim" to Python. There's no way to pass a single backslash to it.
-\py{len(r"\\")}=2.
-
-% values are not expanded before being passed to Python.
-\def\myvalue{123}
-\py{len(r"\myvalue")}  % 9, which is the string
-
-\py{r"\verb|\myvalue |"}% print "\myvalue" verbatim (because of tokenization a space will be added)
-\py{r"\myvalue"}  % print "\myvalue" to TeX, however TeX will execute \myvalue and typeset 123
-
-\verb|\myvalue|\myvalue
-
 \begin{pycode}
 print("11.\n", file=sys.stderr)
 \end{pycode}
@@ -101,20 +89,6 @@ print("11.\n", file=sys.stderr)
 % ======== test empty code block
 \begin{pycode}
 \end{pycode}
-
-\begin{pycode}
-@pythonimmediate.newcommand
-def pyvmanual():
-	return eval(pythonimmediate.get_verb_arg())
-\end{pycode}
-
-
-
-\pyv{r"\verb|\myvalue|"}%
-\pyv{r"\myvalue"}  %  use pyv to avoid tokenization
-
-\pyvmanual{r"\verb|\myvalue|"}%
-\pyvmanual{r"\myvalue"}  %  use pyv to avoid tokenization
 
 
 \begin{pycode}
@@ -367,13 +341,58 @@ class Test(unittest.TestCase):
 suite = unittest.defaultTestLoader.loadTestsFromTestCase(Test)
 unittest.TextTestRunner().run(suite)
 
-x=1
+x=y=z=1
 \end{pycode}
 
-\pyfile{test_pythonimmediate_file.py}
+\def\testFilePath{test_pythonimmediate_file.py}
+\def\letYThree{y=3}
+\def\letZFour{z=4}
+
+% ======== test indirect execution
+\pyfile{\testFilePath}  % x=2
+\pyc{\letYThree}
+\pycq{\letZFour}
 
 \begin{pycode}
 assert x==2
+assert y==3
+assert z==4
+x=y=z=1
 \end{pycode}
+
+% ======== test direct execution
+\pyfile{test_pythonimmediate_file.py}  % x=2
+\pyc{y=3}
+\pycq{z=4}
+
+\begin{pycode}
+assert x==2
+assert y==3
+assert z==4
+x=y=z=1
+\end{pycode}
+
+% ======== test more symbols
+\pyc{assert ord(' ')   ==0x20}
+\pyc{assert ord('\ ')  ==0x20}
+\pyc{assert len('  ')  ==1}  % unfortunate
+\pyc{assert len('\ \ ')==2}
+\pyc{assert ord('\\\\')==0x5c}
+\pyc{assert ord('\{')  ==0x7b}
+\pyc{assert ord('\}')  ==0x7d}
+\pyc{assert ord('\$')  ==0x24}
+\pyc{assert ord('$')   ==0x24}
+\pyc{assert ord('\&')  ==0x26}
+\pyc{assert ord('&')   ==0x26}
+\pyc{assert len('#')   ==2}  % unfortunate
+\pyc{assert len('\#')  ==1}
+\pyc{assert ord('\#')  ==0x23}
+\pyc{assert ord('^')   ==0x5e}
+\pyc{assert ord('\^')  ==0x5e}
+\pyc{assert ord('_')   ==0x5f}
+\pyc{assert ord('\_')  ==0x5f}
+\pyc{assert ord('\%')  ==0x25}
+\pyc{assert ord('~')   ==0x7e}
+\pyc{assert ord('\~')  ==0x7e}
 
 \end{document}

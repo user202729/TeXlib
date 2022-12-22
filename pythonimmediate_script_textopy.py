@@ -174,12 +174,15 @@ r"""
 }
 
 % internal function. Just send an arbitrary block of data to Python.
-% the block itself will not be expanded.
-\cs_new_protected:Npn \__send_block:n #1 {
-	\immediate\write \__write_file {\unexpanded{
+\cs_new_protected:Npn \__send_block:e #1 {
+	\immediate\write \__write_file {
 		#1 ^^J
-		pythonimm?""" + '"""' + """?'''?  % following character will be newline
-	}}
+		pythonimm?""" + '"""' + r"""?'''?  % following character will be newline
+	}
+}
+
+\cs_new_protected:Npn \__send_block:n #1 {
+	\__send_block:e {\unexpanded{#1}}
 }
 
 \AtEndDocument{
@@ -860,6 +863,30 @@ class TTPLine(TeXToPyData, str):
 	def read()->"TTPLine":
 		return TTPLine(readline())
 
+# some old commands e.g. \$, \^, \_, \~ require \set@display@protect to be robust.
+# ~ needs to be redefined directly.
+mark_bootstrap(
+r"""
+\precattl_exec:n {
+	\cs_new_protected:Npn \__begingroup_setup_estr: {
+		\begingroup
+			\escapechar=-1~
+			\cC{set@display@protect}
+			\let  \cA\~  \relax
+	}
+}
+""")
+
+class TTPELine(TeXToPyData, str):
+	"""
+	Same as TTPEBlock, but for a single line only.
+	"""
+	send_code=r"\__begingroup_setup_estr: \immediate \write \__write_file {{ {} }} \endgroup".format
+	send_code_var=r"\__begingroup_setup_estr: \immediate \write \__write_file {{ {} }} \endgroup".format
+	@staticmethod
+	def read()->"TTPELine":
+		return TTPELine(readline())
+
 class TTPEmbeddedLine(TeXToPyData, str):
 	@staticmethod
 	def send_code(self):
@@ -871,15 +898,25 @@ class TTPEmbeddedLine(TeXToPyData, str):
 	def read()->"TTPEmbeddedLine":
 		raise RuntimeError("Must be manually handled")
 
-
-
-
 class TTPBlock(TeXToPyData, str):
 	send_code=r"\__send_block:n {{ {} }}".format
 	send_code_var=r"\__send_block:V {}".format
 	@staticmethod
 	def read()->"TTPBlock":
 		return TTPBlock(read_block())
+
+class TTPEBlock(TeXToPyData, str):
+	"""
+	A kind of argument that interprets "escaped string" and fully expand anything inside.
+	For example, {\\} sends a single backslash to Python, {\{} sends a single '{' to Python.
+	Done by fully expand the argument in \escapechar=-1 and convert it to a string.
+	Additional precaution is needed, see the note above.
+	"""
+	send_code=r"\__begingroup_setup_estr: \__send_block:e {{ {} }} \endgroup".format
+	send_code_var=r"\__begingroup_setup_estr: \__send_block:e {} \endgroup".format
+	@staticmethod
+	def read()->"TTPEBlock":
+		return TTPEBlock(read_block())
 
 class TTPBalancedTokenList(TeXToPyData, TokenList):
 	send_code=r"\__tlserialize_nodot:Nn \__tmp {{ {} }} \immediate \write \__write_file {{\unexpanded\expandafter{{ \__tmp }}}}".format
@@ -1064,11 +1101,11 @@ def eval_with_linecache(code: str, globals: Dict[str, Any])->Any:
 
 
 @define_internal_handler
-def py(code: TTPBlock)->None:
+def py(code: TTPEBlock)->None:
 	pythonimmediate.run_block_finish(str(eval_with_linecache(code, user_scope))+"%")
 
 @define_internal_handler
-def pyfile(filename: TTPLine)->None:
+def pyfile(filename: TTPELine)->None:
 	with open(filename, "r") as f:
 		source=f.read()
 	exec(compile(source, filename, "exec"), user_scope)
@@ -1110,11 +1147,11 @@ def run_code_redirect_print_TeX(f: Callable[[], Any])->None:
 		pythonimmediate.run_block_finish(content)
 
 @define_internal_handler
-def pyc(code: TTPBlock)->None:
+def pyc(code: TTPEBlock)->None:
 	run_code_redirect_print_TeX(lambda: exec_with_linecache(code, user_scope))
 
 @define_internal_handler
-def pycq(code: TTPBlock)->None:
+def pycq(code: TTPEBlock)->None:
 	with RedirectPrintTeX(None):
 		exec_with_linecache(code, user_scope)
 	run_none_finish()

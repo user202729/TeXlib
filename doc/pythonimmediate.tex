@@ -130,6 +130,7 @@ Which, for the users who are not familiar with \TeX\ terminology, roughly means 
 	\item the value can only be used to typeset text,
 		it must not be used to pass "values" to other \LaTeX\ commands. See the example below.
 	\item Special characters can be "escaped" simply by prefixing the character with backslash.
+	\item Macros will be expanded.
 \end{itemize}
 
 Example:
@@ -137,6 +138,9 @@ Example:
 The value of $1+1$ is $\py{1+1}$.
 
 The following is the \TeX\ logo: \py{'\\\\TeX'}
+
+\def\mycode{1+1}
+The value of $1+1$ is $\py{\mycode}$.
 \end{verbatim}
 In the example above, the Python expression being evaluated is |'\\TeX'|, which results in a string that contains the content |\TeX|
 which typesets the \TeX\ logo.
@@ -158,10 +162,20 @@ The macro is not expandable -- roughly speaking, you can only use this at "top l
 
 Any output (as described in \ref{print-to-TeX}) will be typesetted.
 
-The code will be tokenized.
+The difference between |\py| and |\pyc| is that the argument of |\py| should be a Python expression
+(suitable for passing into |eval()| Python function) while the argument of |\pyc| should be a Python
+statement (suitable for passing into |exec()| Python function).
+
+Therefore,
+\begin{itemize}
+	\item |\py{1+1}| will typeset 2.
+	\item |\pyc{1+1}| is valid, but will do nothing just like |exec("1+1")|.
+	\item |\py{x=1}| is invalid.
+	\item |\pyc{x=1}| is valid and assigns the variable |x| to be 1.
+\end{itemize}
 
 \DescribeMacro{\pycq}
-Same as above, but output will not be typesetted.
+Same as above, but output (\ref{print-to-TeX}) will not be typesetted.
 
 \DescribeMacro{\pyfile}
 Given an argument being the file name, execute that file.
