@@ -985,37 +985,6 @@ class PTTBalancedTokenList(PyToTeXData):
 		PTTVerbatimLine(self.data.serialize()+".").write()
 
 
-def wrap_executor(f: Callable[..., None])->Callable:
-	"""
-	some internal function. I don't know how to explain this but it works.
-
-	Basically if this is something that might be directly executed from |run_main_loop()|
-	then it must be a "executor"...?
-	"""
-	@functools.wraps(f)
-	def result(*args, **kwargs)->None:
-		global action_done
-		old_action_done=action_done
-
-		action_done=False
-		try:
-			f(*args, **kwargs)
-		except:
-			if action_done:
-				# error occurred after 'finish' is called, cannot signal the error to TeX, will just ignore (after printing out the traceback)...
-				pass
-			else:
-				# TODO what should be done here? What if the error raised below is caught
-				action_done=True
-			raise
-		finally:
-			if not action_done:
-				run_none_finish()
-		
-		action_done=old_action_done
-	return result
-
-
 # ======== define TeX functions that execute Python code ========
 # ======== implementation of |\py| etc. Doesn't support verbatim argument yet. ========
 
@@ -1058,7 +1027,29 @@ def define_TeX_call_Python(f: Callable[..., None], name: Optional[str]=None, arg
 	def g()->None:
 		assert argtypes is not None
 		args=[argtype.read() for argtype in argtypes]
-		wrap_executor(f)(*args)
+
+
+		global action_done
+		old_action_done=action_done
+
+		action_done=False
+		try:
+			f(*args)
+		except:
+			if action_done:
+				# error occurred after 'finish' is called, cannot signal the error to TeX, will just ignore (after printing out the traceback)...
+				pass
+			else:
+				# TODO what should be done here? What if the error raised below is caught
+				action_done=True
+			raise
+		finally:
+			if not action_done:
+				run_none_finish()
+		
+			action_done=old_action_done
+
+
 	TeX_handlers[identifier]=g
 
 	TeX_argspec = ""
