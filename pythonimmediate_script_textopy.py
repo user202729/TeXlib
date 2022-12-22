@@ -115,7 +115,7 @@ def check_not_finished()->None:
 	global action_done
 	if action_done:
 		raise RuntimeError("can only do one action per block!")
-	
+
 def send_finish(s: str)->None:
 	check_not_finished()
 	global action_done
@@ -269,36 +269,6 @@ def check_line(line: str, *, braces: bool, newline: bool, continue_: Optional[bo
 	elif continue_==False: assert "pythonimmediatecontinue" not in line
 
 
-
-
-mark_bootstrap(
-r"""
-\cs_new_eq:NN \__run_none: \relax
-""")
-
-def run_none_finish()->None:
-	check_not_finished()
-	send_raw("none\n")
-
-mark_bootstrap(
-r"""
-\msg_new:nnn {pythonimmediate} {python-error} {Python~error.}
-\cs_new_protected:Npn \__run_err: { 
-    \msg_error:nn {pythonimmediate} {python-error}
-}
-""")
-def run_error_finish()->None:
-	"""
-	this function is fatal to TeX, so we only run it when it's fatal to Python.
-	Which we use atexit_function above.
-
-	TODO what to do if the error is caught?
-
-	Also we want to make sure the Python traceback is printed strictly before run_error_finish() is called.
-	(thus atexit is used for now)
-	"""
-	check_not_finished()
-	send_raw("err\n")
 
 
 do_run_error_finish=True
@@ -1346,6 +1316,9 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: List[Type[PyToTeXData]],
 
 		# send function header
 		check_not_finished()
+		if finish:
+			global action_done
+			action_done=True
 		send_raw(identifier+"\n")
 
 		# send function args
@@ -1385,6 +1358,28 @@ def define_Python_call_TeX_local(*args, **kwargs)->PythonCallTeXFunctionType:
 # essentially this is the same as the above, but just that the return type is guaranteed to be not None to satisfy type checkers
 def define_Python_call_TeX_local_sync(*args, **kwargs)->PythonCallTeXSyncFunctionType:
 	return define_Python_call_TeX_local(*args, **kwargs, sync=True)  # type: ignore
+
+run_none_finish=define_Python_call_TeX_local(
+r"""
+\cs_new_eq:NN %name% \relax
+""", [], [], finish=True, sync=False)
+
+
+"""
+This function is fatal to TeX, so we only run it when it's fatal to Python.
+Which we use atexit_function above.
+
+We want to make sure the Python traceback is printed strictly before run_error_finish() is called,
+so that the Python traceback is not interleaved with TeX error messages.
+"""
+run_error_finish=define_Python_call_TeX_local(
+r"""
+\msg_new:nnn {pythonimmediate} {python-error} {Python~error.}
+\cs_new_protected:Npn %name% {
+    \msg_error:nn {pythonimmediate} {python-error}
+}
+""", [], [], finish=True, sync=False)
+
 
 
 put_next_tokenlist=define_Python_call_TeX_local(
@@ -1661,7 +1656,7 @@ def newcommand_(name: str, f: Callable)->Callable:
 	_code=define_TeX_call_Python(
 			lambda: run_code_redirect_print_TeX(f),
 			name, argtypes=[], identifier=identifier)
-	# ignore _code, already executed something equivalent in \__run_[re]newc:
+	# ignore _code, already executed something equivalent in the TeX command
 	return f
 
 def renewcommand_(name: str, f: Callable)->Callable:
@@ -1675,7 +1670,7 @@ def renewcommand_(name: str, f: Callable)->Callable:
 	_code=define_TeX_call_Python(
 			lambda: run_code_redirect_print_TeX(f),
 			name, argtypes=[], identifier=identifier)
-	# ignore _code, already executed something equivalent in \__run_[re]newc:
+	# ignore _code, already executed something equivalent in the TeX command
 	return f
 
 	
