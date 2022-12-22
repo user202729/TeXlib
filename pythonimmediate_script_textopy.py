@@ -2003,6 +2003,25 @@ if 0:
 	, [], [TTPLine], recursive=False)
 
 
+
+meaning_str_to_catcode: Dict[str, Catcode]={
+		"begin-group character ": Catcode.bgroup,
+		"end-group character ": Catcode.egroup,
+		"math shift character ": Catcode.math,
+		"alignment tab character ": Catcode.alignment,
+		"macro parameter character ": Catcode.parameter,
+		"superscript character ": Catcode.superscript,
+		"subscript character ": Catcode.subscript,
+		"blank space ": Catcode.space,
+		"the letter ": Catcode.letter,
+		"the character ": Catcode.other,
+		}
+
+def parse_meaning_str(s: str)->Optional[Tuple[Catcode, str]]:
+	if s and s[:-1] in meaning_str_to_catcode:
+		return meaning_str_to_catcode[s[:-1]], s[-1]
+	return None
+
 @export_function_to_module
 @user_documentation
 def peek_next_char()->str:
@@ -2016,20 +2035,10 @@ def peek_next_char()->str:
 	#return str(peek_next_char_()[0])
 	# too slow (marginally slower than peek_next_meaning)
 
-	s=peek_next_meaning()
-	if s and s[:-1] in [
-		"begin-group character ",
-		"end-group character ",
-		"math shift character ",
-		"alignment tab character ",
-		"macro parameter character ",
-		"superscript character ",
-		"subscript character ",
-		"blank space ",
-		"the letter ",
-		"the character ",
-		]: return s[-1]
-	return ""
+	r=parse_meaning_str(peek_next_meaning())
+	if r is None:
+		return ""
+	return r[1]
 
 @export_function_to_module
 def get_next_char()->str:
