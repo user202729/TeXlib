@@ -319,15 +319,18 @@ class Token(ABC):
 	Represent a TeX token. See also documentation of NToken.
 	Remark: Token objects must be frozen.
 	"""
+
 	@abstractmethod
-	def __str__(self)->str:
-		...
+	def __str__(self)->str: ...
+
 	@abstractmethod
-	def serialize(self)->str:
-		...
+	def serialize(self)->str: ...
+
 	@abstractmethod
-	def repr1(self)->str:
-		...
+	def repr1(self)->str: ...
+
+	@abstractmethod
+	def assignable(self)->bool: ...
 
 	def __repr__(self)->str:
 		return f"<Token: {self.repr1()}>"
@@ -380,6 +383,10 @@ class Token(ABC):
 			elif self.catcode==Catcode.egroup:
 				return -1
 		return 0
+
+	def meaning_is(self, other: "Token")->bool:
+		#expand_x_str()
+		raise NotImplementedError
 
 
 @dataclass(frozen=True)
@@ -514,10 +521,25 @@ r"""
 """)
 
 
+class ControlSequenceTokenMaker:
+	"""
+	shorthand to create control sequence objects in Python easier.
+	"""
+	def __init__(self, prefix: str):
+		self.prefix=prefix
+	def __getattribute__(self, a: str)->"ControlSequenceToken":
+		return ControlSequenceToken(object.__getattribute__(self, "prefix")+a)
+	def __getitem__(self, a: str)->"ControlSequenceToken":
+		return ControlSequenceToken(object.__getattribute__(self, "prefix")+a)
+
+
 @export_function_to_module
 @dataclass(repr=False, frozen=True)
 class ControlSequenceToken(Token):
+	make=typing.cast(ControlSequenceTokenMaker, None)  # some inference makes this incorrect. Manually assign below
 	csname: str
+	def assignable(self)->bool:
+		return True
 	def __str__(self)->str:
 		if self.csname=="": return r"\csname\endcsname"
 		return "\\"+self.csname
@@ -525,6 +547,11 @@ class ControlSequenceToken(Token):
 		return ">"*self.csname.count(" ") + "\\" + self.csname + " "
 	def repr1(self)->str:
 		return f"\\{self.csname}"
+
+ControlSequenceToken.make=ControlSequenceTokenMaker("")
+
+T=ControlSequenceToken.make
+P=ControlSequenceTokenMaker("_pythonimmediate_")  # create private tokens
 
 @export_function_to_module
 class Catcode(enum.Enum):
@@ -578,6 +605,8 @@ class CharacterToken(Token):
 	def repr1(self)->str:
 		cat=str(self.catcode.value).translate(str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉"))
 		return f"{self.chr}{cat}"
+	def assignable(self)->bool:
+		return self.catcode==Catcode.active
 
 class FrozenRelaxToken(Token):
 	def __str__(self)->str:
@@ -586,6 +615,8 @@ class FrozenRelaxToken(Token):
 		return "R"
 	def repr1(self)->str:
 		return r"[frozen]\relax"
+	def assignable(self)->bool:
+		return False
 
 frozen_relax_token=FrozenRelaxToken()
 pythonimmediate.frozen_relax_token=frozen_relax_token
@@ -619,7 +650,7 @@ e3_catcode_table[ord(" ")]=Catcode.ignored
 e3_catcode_table[ord("~")]=Catcode.space
 
 
-T = typing.TypeVar("T", bound="TokenList")
+TokenListType = typing.TypeVar("TokenListType", bound="TokenList")
 
 if typing.TYPE_CHECKING:
 	TokenListBaseClass = collections.UserList[Token]
@@ -757,7 +788,7 @@ class TokenList(TokenListBaseClass):
 							i+=1
 
 	@classmethod
-	def from_string(cls: Type[T], s: str, get_catcode: Callable[[int], Catcode])->T:
+	def from_string(cls: Type[TokenListType], s: str, get_catcode: Callable[[int], Catcode])->TokenListType:
 		"""
 		convert a string to a TokenList approximately.
 		The tokenization algorithm is slightly different from TeX's in the following respect:
@@ -769,7 +800,7 @@ class TokenList(TokenListBaseClass):
 		return cls(TokenList.iterable_from_string(s, get_catcode))
 
 	@classmethod
-	def e3(cls: Type[T], s: str)->T:
+	def e3(cls: Type[TokenListType], s: str)->TokenListType:
 		"""
 		approximate tokenizer in expl3 catcode, implemented in Python.
 		refer to documentation of from_string() for details.
@@ -777,7 +808,7 @@ class TokenList(TokenListBaseClass):
 		return cls.from_string(s, lambda x: e3_catcode_table.get(x, Catcode.other))
 
 	@classmethod
-	def doc(cls: Type[T], s: str)->T:
+	def doc(cls: Type[TokenListType], s: str)->TokenListType:
 		"""
 		approximate tokenizer in document catcode, implemented in Python.
 		refer to documentation of from_string() for details.
@@ -788,7 +819,7 @@ class TokenList(TokenListBaseClass):
 		return "".join(t.serialize() for t in self)
 
 	@classmethod
-	def deserialize(cls: Type[T], data: str)->T:
+	def deserialize(cls: Type[TokenListType], data: str)->TokenListType:
 		result: List[Token]=[]
 		i=0
 		cs_skip_space_count=0
@@ -916,8 +947,15 @@ class NTokenList(NTokenListBaseClass):
 			if isinstance(x, BalancedTokenList):
 				x.execute()
 				return
-		NTokenList([*self, ControlSequenceToken("pythonimmediatecontinue"), []]).put_next()
+		NTokenList([*self, T.pythonimmediatecontinue, []]).put_next()
 		continue_until_passed_back()
+
+	def expand_x(self)->BalancedTokenList:
+		"""
+		x-expand self. The result must be balanced.
+		"""
+		NTokenList([T.edef, P.tmp, self]).execute()
+		return BalancedTokenList([P.tmp]).expand_o()
 
 
 class TeXToPyData(ABC):

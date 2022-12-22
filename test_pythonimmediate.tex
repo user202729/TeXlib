@@ -377,6 +377,10 @@ class Test(unittest.TestCase):
 		self.assertEqual(pythonimmediate.get_optional_arg_estr(), None)
 		self.assertEqual(pythonimmediate.get_arg_str(), "ab")
 
+	def test_control_sequence_token_maker(self):
+		self.assertEqual(ControlSequenceToken("ab_c"), ControlSequenceToken.make.ab_c)
+		self.assertEqual(ControlSequenceToken("ab_c"), ControlSequenceToken.make["ab_c"])
+
 
 suite = unittest.defaultTestLoader.loadTestsFromTestCase(Test)
 unittest.TextTestRunner().run(suite)
