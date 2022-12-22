@@ -273,16 +273,6 @@ def check_line(line: str, *, braces: bool, newline: bool, continue_: Optional[bo
 
 do_run_error_finish=True
 
-if 1:
-	import atexit
-	def atexit_function()->None:
-		global action_done
-		#debug("======== exit ========")
-		#traceback.print_stack(file=sys.stderr)
-		if do_run_error_finish:
-			action_done=False
-			run_error_finish()
-	atexit.register(atexit_function)
 
 
 
@@ -1366,8 +1356,7 @@ r"""
 
 
 """
-This function is fatal to TeX, so we only run it when it's fatal to Python.
-Which we use atexit_function above.
+|run_error_finish| is fatal to TeX, so we only run it when it's fatal to Python.
 
 We want to make sure the Python traceback is printed strictly before run_error_finish() is called,
 so that the Python traceback is not interleaved with TeX error messages.
@@ -1376,9 +1365,11 @@ run_error_finish=define_Python_call_TeX_local(
 r"""
 \msg_new:nnn {pythonimmediate} {python-error} {Python~error.}
 \cs_new_protected:Npn %name% {
+	%read_arg0(\__data)%
+	\wlog{^^JPython~error~traceback:^^J\__data^^J}
     \msg_error:nn {pythonimmediate} {python-error}
 }
-""", [], [], finish=True, sync=False)
+""", [PTTBlock], [], finish=True, sync=False)
 
 
 
@@ -1856,8 +1847,19 @@ def get_next_char()->str:
 
 # ========
 
-send_bootstrap_code()
-run_main_loop()  # if this returns cleanly TeX has no error. Otherwise some readline() will reach eof and print out a stack trace
-assert not raw_readline(), "Internal error: TeX sends extra line"
+try:
+	send_bootstrap_code()
+	run_main_loop()  # if this returns cleanly TeX has no error. Otherwise some readline() will reach eof and print out a stack trace
+	assert not raw_readline(), "Internal error: TeX sends extra line"
 
+except:
+	# see also documentation of run_error_finish.
+	print(file=sys.stderr)
+	traceback.print_exc(file=sys.stderr)
+
+	if do_run_error_finish:
+		action_done=False  # force run it
+		run_error_finish(PTTBlock("".join(traceback.format_exc())))
+
+	os._exit(0)
 
