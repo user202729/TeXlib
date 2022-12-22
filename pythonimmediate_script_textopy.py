@@ -1265,6 +1265,7 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: List[Type[PyToTeXData]],
 						   *,
 						   recursive: bool=True,
 						   sync: Optional[bool]=None,
+						   finish: bool=False,
 						   )->Tuple[str, PythonCallTeXFunctionType]:
 	r"""
 	|TeX_code| should be some expl3 code that defines a function with name |%name%| that when called should:
@@ -1272,7 +1273,7 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: List[Type[PyToTeXData]],
 		* do the following if |sync|:
 			* send |r| to Python (equivalently write %sync%)
 			* send whatever needed for the output (as in |ttp_argtypes|)
-		* call |\__read_do_one_command:|
+		* call |\__read_do_one_command:| iff not |finish|.
 
 		This is allowed to contain the following:
 		* %name%: the name of the function to be defined as explained above.
@@ -1293,7 +1294,13 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: List[Type[PyToTeXData]],
 		This should be left to be the default None most of the time. (which will make it always sync if |debugging|,
 		otherwise only sync if needed i.e. there's some output)
 
-	Return some TeX_code to be executed, and a Python function object that when called will call the TeX function
+	finish: Include this if and only if |\__read_do_one_command:| is omitted.
+		Normally this is not needed, but it can be used as a slight optimization; and it's needed internally to implement
+		|run_none_finish| among others.
+		For each TeX-call-Python layer, \emph{exactly one} |finish| call can be made. If the function itself doesn't call
+		any |finish| call (which happens most of the time), then the wrapper will call |run_none_finish|.
+
+	Return some TeX code to be executed, and a Python function object that when called will call the TeX function
 	and return the result.
 
 	Possible optimizations:
@@ -1367,6 +1374,10 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: List[Type[PyToTeXData]],
 	return TeX_code, f
 
 def define_Python_call_TeX_local(*args, **kwargs)->PythonCallTeXFunctionType:
+	"""
+	used to define "local" handlers i.e. used by this library.
+	The code will be included in mark_bootstrap().
+	"""
 	code, result=define_Python_call_TeX(*args, **kwargs)
 	mark_bootstrap(code)
 	return result
