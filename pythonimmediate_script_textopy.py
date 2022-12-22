@@ -315,6 +315,10 @@ def read_block()->str:
 
 @export_function_to_module
 class Token(ABC):
+	"""
+	Represent a TeX token. See also documentation of NToken.
+	Remark: Token objects must be frozen.
+	"""
 	@abstractmethod
 	def __str__(self)->str:
 		...
@@ -329,6 +333,12 @@ class Token(ABC):
 		return f"<Token: {self.repr1()}>"
 
 	@staticmethod
+	def deserialize(s: str)->"Token":
+		t=TokenList.deserialize(s)
+		assert len(t)==1
+		return t[0]
+
+	@staticmethod
 	def get_next()->"Token":
 		"""
 		Get the following token.
@@ -340,10 +350,7 @@ class Token(ABC):
 		tokenize up to 2 tokens ahead (including the returned token),
 		as well as occasionally return the wrong token in unavoidable cases.
 		"""
-		line=str(get_next_()[0])
-		t=TokenList.deserialize(line)
-		assert len(t)==1
-		return t[0]
+		return Token.deserialize(str(get_next_()[0]))
 
 	@staticmethod
 	def peek_next()->"Token":
@@ -352,10 +359,7 @@ class Token(ABC):
 
 		Equivalent to get_next() then put_next() immediately. See documentation of get_next() for some notes.
 		"""
-		line=str(peek_next_()[0])
-		t=TokenList.deserialize(line)
-		assert len(t)==1, (line, t)
-		return t[0]
+		return Token.deserialize(str(peek_next_()[0]))
 
 	def put_next(self)->None:
 		d=self.degree()
@@ -377,6 +381,30 @@ class Token(ABC):
 				return -1
 		return 0
 
+
+@dataclass(frozen=True)
+class NToken:
+	"""
+	Represent a possibly-notexpanded token.
+	For convenience, a notexpanded token is called a blue token.
+	It's not always possible to determine the notexpanded status of a token.
+	"""
+	token: Token
+	blue: bool
+
+	def __post_init__(self)->None:
+		token=self.token
+		if self.blue:
+			assert isinstance(token, ControlSequenceToken) or (isinstance(token, CharacterToken) and token.catcode==Catcode.active)
+
+	def put_next(self)->None:
+		if self.blue:
+			put_next_blue(PTTBalancedTokenList(BalancedTokenList([self.token])))
+		else:
+			self.token.put_next()
+			
+	def get_next(self)->"NToken":
+		raise NotImplementedError
 
 
 """
@@ -605,6 +633,8 @@ class TokenList(TokenListBaseClass):
 		for x in a:
 			if isinstance(x, Token):
 				yield x
+			elif isinstance(x, NToken):
+				yield x.token
 			elif isinstance(x, Sequence):
 				yield bgroup
 				child=BalancedTokenList(x)
@@ -784,6 +814,11 @@ class TokenList(TokenListBaseClass):
 	def __repr__(self)->str:
 		return '<' + type(self).__name__ + ': ' + ' '.join(t.repr1() for t in self) + '>'
 
+	def execute(self)->None:
+		NTokenList(self).execute()
+
+
+
 
 @export_function_to_module
 class BalancedTokenList(TokenList):
@@ -819,6 +854,67 @@ class BalancedTokenList(TokenList):
 
 
 
+if typing.TYPE_CHECKING:
+	NTokenListBaseClass = collections.UserList[NToken]
+else:  # Python 3.8 compatibility
+	NTokenListBaseClass = collections.UserList
+
+@export_function_to_module
+class NTokenList(NTokenListBaseClass):
+	@staticmethod
+	def force_token_list(a: Iterable)->Iterable[NToken]:
+		for x in a:
+			if isinstance(x, Token):
+				yield NToken(x, False)
+			elif isinstance(x, NToken):
+				yield x
+			elif isinstance(x, Sequence):
+				yield NToken(bgroup, False)
+				child=NTokenList(x)
+				assert child.is_balanced()
+				yield from child
+				yield NToken(egroup, False)
+			else:
+				raise RuntimeError(f"Cannot make NTokenList from object {x} of type {type(x)}")
+
+	def is_balanced(self)->bool:
+		return TokenList(self).is_balanced()  # a bit inefficient (need to construct a TokenList) but good enough
+
+	def simple_parts(self)->List[Union[BalancedTokenList, Token, NToken]]:
+		"""
+		Split this NTokenList into a list of balanced non-blue parts, unbalanced {/} tokens, and blue tokens.
+		"""
+		parts: List[Union[TokenList, NToken]]=[TokenList()]
+		for i in self:
+			if i.blue:
+				parts+=i, TokenList()
+			else:
+				last_part=parts[-1]
+				assert isinstance(last_part, TokenList)
+				last_part.append(i.token)
+		result: List[Union[BalancedTokenList, Token, NToken]]=[]
+		for large_part in parts:
+			if isinstance(large_part, NToken):
+				result.append(large_part)
+			else:
+				result+=large_part.balanced_parts()
+		return result
+
+	def put_next(self)->None:
+		for part in reversed(self.simple_parts()): part.put_next()
+		
+	def execute(self)->None:
+		"""
+		Execute self.
+		"""
+		parts=self.simple_parts()
+		if len(parts)==1:
+			x=parts[0]
+			if isinstance(x, BalancedTokenList):
+				x.execute()
+				return
+		NTokenList([*self, ControlSequenceToken("pythonimmediatecontinue"), []]).put_next()
+		continue_until_passed_back()
 
 
 class TeXToPyData(ABC):
@@ -1392,6 +1488,19 @@ r"""
 """, [PTTBlock], [], finish=True, sync=False)
 
 
+put_next_blue=define_Python_call_TeX_local(
+r"""
+\cs_new_protected:Npn \__put_next_blue_tmp {
+	%optional_sync%
+	\expandafter \__read_do_one_command: \noexpand
+}
+\cs_new_protected:Npn %name% {
+	%read_arg0(\__target)%
+	\expandafter \__put_next_blue_tmp \__target
+}
+"""
+		, [PTTBalancedTokenList], [], recursive=False)
+
 
 put_next_tokenlist=define_Python_call_TeX_local(
 r"""
@@ -1535,6 +1644,33 @@ r"""
 	\__read_do_one_command:
 }
 """, [PTTBalancedTokenList], [])
+
+
+continue_until_passed_back_=define_Python_call_TeX_local_sync(
+r"""
+\cs_new_eq:NN %name% \relax
+""", [], [TTPEmbeddedLine])
+
+@export_function_to_module
+def continue_until_passed_back_str()->str:
+	"""
+	Usage:
+
+	First put some tokens in the input stream that includes |\pythonimmediatecontinue{...}|
+	(or |%sync% \__read_do_one_command:|), then call |continue_until_passed_back()|.
+
+	The function will only return when the |\pythonimmediatecontinue| is called.
+	"""
+	return str(continue_until_passed_back_()[0])
+
+@export_function_to_module
+def continue_until_passed_back()->None:
+	"""
+	Same as |continue_until_passed_back_str()| but nothing can be returned from TeX to Python.
+	"""
+	result=continue_until_passed_back_str()
+	assert not result
+
 
 get_argument_detokenized_=define_Python_call_TeX_local_sync(
 r"""
