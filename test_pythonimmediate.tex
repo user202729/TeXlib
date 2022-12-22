@@ -95,7 +95,10 @@ print("11.\n", file=sys.stderr)
 
 
 import unittest
-from pythonimmediate import Token, TokenList, BalancedTokenList, Catcode, ControlSequenceToken, frozen_relax_token
+from pythonimmediate import Token, TokenList, BalancedTokenList, Catcode, ControlSequenceToken, frozen_relax_token, BlueToken, NTokenList
+from pythonimmediate import Catcode as C
+T=ControlSequenceToken.make
+
 class Test(unittest.TestCase):
 	def test_simple_run_tokenized_line_local(self)->None:
 		pythonimmediate.run_tokenized_line_local(r'\testa {123} {456}')
@@ -264,8 +267,6 @@ class Test(unittest.TestCase):
 
 
 	def test_from_str(self):
-		from pythonimmediate import Catcode as C
-		C=Catcode
 		self.assertEqual(TokenList.doc(r'}{abc:  d?&#^_\test+\test a\##'),
 			  TokenList([
 				  C.egroup("}"),
@@ -336,6 +337,7 @@ class Test(unittest.TestCase):
 		self.assertEqual(BalancedTokenList.doc(' ').expand_x(), BalancedTokenList.doc(' '))
 		self.assertEqual(1, len(BalancedTokenList.doc(' ')))
 		self.assertEqual(BalancedTokenList([frozen_relax_token]).expand_x(), BalancedTokenList([frozen_relax_token]))
+		self.assertEqual(TokenList.doc(r'\string}\string{\number`{').expand_x().str(), "}{123")
 
 	def test_get_arg_estr(self):
 		BalancedTokenList.doc(r'{123}').put_next()
@@ -380,6 +382,65 @@ class Test(unittest.TestCase):
 	def test_control_sequence_token_maker(self):
 		self.assertEqual(ControlSequenceToken("ab_c"), ControlSequenceToken.make.ab_c)
 		self.assertEqual(ControlSequenceToken("ab_c"), ControlSequenceToken.make["ab_c"])
+
+	def test_expand_once(self):
+		BalancedTokenList.doc(r'\def\aaa{\bbb}').execute()
+		T.aaa.put_next()
+		pythonimmediate.expand_once()
+		self.assertEqual(Token.get_next(), T.bbb)
+
+	def test_blue_tokens(self):
+		self.assertEqual(
+				T.empty.meaning_str(),
+				"macro:->")
+		self.assertIn(
+				T.empty.blue.meaning_str(),
+				[r"\relax", r"[unknown command code! (0, 1)]"])
+
+	def test_meaning_equal(self):
+		self.assertFalse(T.empty.blue.meaning_equal(T.empty))
+		self.assertFalse(T.empty.meaning_equal(T.empty.blue))
+		self.assertTrue(T.relax.blue.meaning_equal(T.relax))
+		self.assertTrue(T.empty.blue.meaning_equal(T.empty.blue))
+
+	def test_assign_to_blue(self):
+		NTokenList([T.let, T.aaa.blue, T.ifx]).execute()
+		self.assertTrue(T.aaa.meaning_equal(T.ifx))
+
+		NTokenList([T.futurelet, T.aaa, T["@gobble"], T.ifcat]).execute()
+		self.assertTrue(T.aaa.meaning_equal(T.ifcat))
+
+	def test_make_tokenlist_from_blue(self):
+		with self.assertRaises(RuntimeError):
+			TokenList([T.aaa.blue])
+
+	def test_assign(self):
+		for t in [T.ifx, T.ifx.blue, C.other("="), C.space(' '), T.empty, T.relax, T.empty.blue]:
+			with self.subTest(t=t):
+				T.aaa.assign(t)
+				self.assertTrue(T.aaa.meaning_equal(t))
+
+				t.put_next()
+				T.aaa.assign_future()
+				self.assertTrue(T.aaa.meaning_equal(t))
+
+				T.aaa.assign(T.empty)
+
+				T.empty.put_next()
+				T.aaa.assign_futurenext()
+				self.assertTrue(T.aaa.meaning_equal(t.no_blue))
+
+				assert Token.get_next()==T.empty
+				assert Token.get_next()==t.no_blue
+
+				T.aaa.assign(T.empty)
+
+				NTokenList([T.empty, t]).put_next()
+				T.aaa.assign_futurenext()
+				self.assertTrue(T.aaa.meaning_equal(t))
+
+				assert Token.get_next()==T.empty
+				assert Token.get_next()==t.no_blue
 
 
 suite = unittest.defaultTestLoader.loadTestsFromTestCase(Test)

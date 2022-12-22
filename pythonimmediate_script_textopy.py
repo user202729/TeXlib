@@ -172,6 +172,10 @@ r"""
 	\__read_do_one_command:
 }
 
+\cs_new_protected:Npn \pythonimmediatecontinuenoarg {
+	\pythonimmediatecontinue {}
+}
+
 % internal function. Just send an arbitrary block of data to Python.
 \cs_new_protected:Npn \__send_block:e #1 {
 	\immediate\write \__write_file {
@@ -311,12 +315,12 @@ def read_block()->str:
 			lines.append(line)
 
 
-
-
 @export_function_to_module
-class Token(ABC):
+class NToken(ABC):
 	"""
-	Represent a TeX token. See also documentation of NToken.
+	Represent a possibly-notexpanded token.
+	For convenience, a notexpanded token is called a blue token.
+	It's not always possible to determine the notexpanded status of a following token in the input stream.
 	Remark: Token objects must be frozen.
 	"""
 
@@ -324,13 +328,74 @@ class Token(ABC):
 	def __str__(self)->str: ...
 
 	@abstractmethod
-	def serialize(self)->str: ...
-
-	@abstractmethod
 	def repr1(self)->str: ...
 
+	@property
 	@abstractmethod
 	def assignable(self)->bool: ...
+
+	def assign(self, other: "NToken")->None:
+		assert self.assignable
+		NTokenList([T.let, self, C.other("="), C.space(' '), other]).execute()
+
+	def assign_future(self)->None:
+		assert self.assignable
+		futurelet_(PTTBalancedTokenList(BalancedTokenList([self.no_blue])))
+
+	def assign_futurenext(self)->None:
+		assert self.assignable
+		futureletnext_(PTTBalancedTokenList(BalancedTokenList([self.no_blue])))
+
+	def meaning_str(self)->str:
+		"""
+		get the meaning of this token as a string.
+		"""
+		return NTokenList([T.meaning, self]).expand_x().str()
+
+	@property
+	@abstractmethod
+	def blue(self)->"BlueToken": ...
+
+	@property
+	@abstractmethod
+	def no_blue(self)->"Token": ...
+
+	def meaning_equal(self, other: "Token")->bool:
+		return NTokenList([T.ifx, self, other, Catcode.other("1"), T["else"], Catcode.other("0"), T.fi]).expand_x().bool()
+
+	def str(self)->str:
+		"""
+		self must represent a character of a TeX string. (i.e. equal to itself when detokenized)
+		return the string content.
+
+		default implementation below. Not necessarily correct.
+		"""
+		raise ValueError("Token does not represent a string!")
+
+	def degree(self)->int:
+		"""
+		return the imbalance degree for this token ({ -> 1, } -> -1, everything else -> 0)
+
+		default implementation below. Not necessarily correct.
+		"""
+		return 0
+
+
+@export_function_to_module
+class Token(NToken):
+	"""
+	Represent a TeX token, excluding the notexpanded possibility.
+	See also documentation of NToken.
+	"""
+
+	@abstractmethod
+	def serialize(self)->str: ...
+
+	@property
+	def blue(self)->"BlueToken": return BlueToken(self)
+
+	@property
+	def no_blue(self)->"Token": return self
 
 	def __repr__(self)->str:
 		return f"<Token: {self.repr1()}>"
@@ -376,42 +441,9 @@ class Token(ABC):
 				assert d==-1
 				put_next_egroup(PTTInt(self.index))
 
-	def degree(self)->int:
-		if isinstance(self, CharacterToken):
-			if self.catcode==Catcode.bgroup:
-				return 1
-			elif self.catcode==Catcode.egroup:
-				return -1
-		return 0
-
-	def meaning_is(self, other: "Token")->bool:
-		#expand_x_str()
-		raise NotImplementedError
 
 
-@dataclass(frozen=True)
-class NToken:
-	"""
-	Represent a possibly-notexpanded token.
-	For convenience, a notexpanded token is called a blue token.
-	It's not always possible to determine the notexpanded status of a token.
-	"""
-	token: Token
-	blue: bool
 
-	def __post_init__(self)->None:
-		token=self.token
-		if self.blue:
-			assert isinstance(token, ControlSequenceToken) or (isinstance(token, CharacterToken) and token.catcode==Catcode.active)
-
-	def put_next(self)->None:
-		if self.blue:
-			put_next_blue(PTTBalancedTokenList(BalancedTokenList([self.token])))
-		else:
-			self.token.put_next()
-			
-	def get_next(self)->"NToken":
-		raise NotImplementedError
 
 
 """
@@ -525,7 +557,7 @@ class ControlSequenceTokenMaker:
 	"""
 	shorthand to create control sequence objects in Python easier.
 	"""
-	def __init__(self, prefix: str):
+	def __init__(self, prefix: str)->None:
 		self.prefix=prefix
 	def __getattribute__(self, a: str)->"ControlSequenceToken":
 		return ControlSequenceToken(object.__getattribute__(self, "prefix")+a)
@@ -538,6 +570,7 @@ class ControlSequenceTokenMaker:
 class ControlSequenceToken(Token):
 	make=typing.cast(ControlSequenceTokenMaker, None)  # some inference makes this incorrect. Manually assign below
 	csname: str
+	@property
 	def assignable(self)->bool:
 		return True
 	def __str__(self)->str:
@@ -547,6 +580,7 @@ class ControlSequenceToken(Token):
 		return ">"*self.csname.count(" ") + "\\" + self.csname + " "
 	def repr1(self)->str:
 		return f"\\{self.csname}"
+
 
 ControlSequenceToken.make=ControlSequenceTokenMaker("")
 
@@ -588,6 +622,8 @@ class Catcode(enum.Enum):
 		if isinstance(ch, str): ch=ord(ch)
 		return CharacterToken(ch, self)
 
+C=Catcode
+
 @export_function_to_module
 @dataclass(repr=False, frozen=True)  # must be frozen because bgroup and egroup below are reused
 class CharacterToken(Token):
@@ -605,8 +641,21 @@ class CharacterToken(Token):
 	def repr1(self)->str:
 		cat=str(self.catcode.value).translate(str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉"))
 		return f"{self.chr}{cat}"
+	@property
 	def assignable(self)->bool:
 		return self.catcode==Catcode.active
+	def degree(self)->int:
+		if self.catcode==Catcode.bgroup:
+			return 1
+		elif self.catcode==Catcode.egroup:
+			return -1
+		else:
+			return 0
+	def str(self)->str:
+		catcode=Catcode.space if self.index==32 else Catcode.other
+		if catcode!=self.catcode:
+			raise ValueError("this CharacterToken does not represent a string!")
+		return self.chr
 
 class FrozenRelaxToken(Token):
 	def __str__(self)->str:
@@ -615,6 +664,7 @@ class FrozenRelaxToken(Token):
 		return "R"
 	def repr1(self)->str:
 		return r"[frozen]\relax"
+	@property
 	def assignable(self)->bool:
 		return False
 
@@ -626,6 +676,29 @@ pythonimmediate.frozen_relax_token=frozen_relax_token
 bgroup=Catcode.bgroup("{")
 egroup=Catcode.egroup("}")
 space=Catcode.space(" ")
+
+
+
+@export_function_to_module
+@dataclass(frozen=True)
+class BlueToken(NToken):
+	token: Token
+
+	@property
+	def blue(self)->"BlueToken": return self
+
+	@property
+	def no_blue(self)->"Token": return self.token
+
+	def __str__(self)->str: return str(self.token)
+
+	def repr1(self)->str: return "notexpanded:"+self.token.repr1()
+
+	@property
+	def assignable(self)->bool: return self.token.assignable
+
+	def put_next(self)->None:
+		put_next_blue(PTTBalancedTokenList(BalancedTokenList([self.token])))
 
 
 doc_catcode_table: Dict[int, Catcode]={}
@@ -664,8 +737,6 @@ class TokenList(TokenListBaseClass):
 		for x in a:
 			if isinstance(x, Token):
 				yield x
-			elif isinstance(x, NToken):
-				yield x.token
 			elif isinstance(x, Sequence):
 				yield bgroup
 				child=BalancedTokenList(x)
@@ -848,6 +919,14 @@ class TokenList(TokenListBaseClass):
 	def execute(self)->None:
 		NTokenList(self).execute()
 
+	def expand_x(self)->"BalancedTokenList":
+		return NTokenList(self).expand_x()
+
+	def bool(self)->bool:
+		return NTokenList(self).bool()
+
+	def str(self)->str:
+		return NTokenList(self).str()
 
 
 
@@ -895,16 +974,14 @@ class NTokenList(NTokenListBaseClass):
 	@staticmethod
 	def force_token_list(a: Iterable)->Iterable[NToken]:
 		for x in a:
-			if isinstance(x, Token):
-				yield NToken(x, False)
-			elif isinstance(x, NToken):
+			if isinstance(x, NToken):
 				yield x
 			elif isinstance(x, Sequence):
-				yield NToken(bgroup, False)
+				yield bgroup
 				child=NTokenList(x)
 				assert child.is_balanced()
 				yield from child
-				yield NToken(egroup, False)
+				yield egroup
 			else:
 				raise RuntimeError(f"Cannot make NTokenList from object {x} of type {type(x)}")
 
@@ -914,21 +991,22 @@ class NTokenList(NTokenListBaseClass):
 	def is_balanced(self)->bool:
 		return TokenList(self).is_balanced()  # a bit inefficient (need to construct a TokenList) but good enough
 
-	def simple_parts(self)->List[Union[BalancedTokenList, Token, NToken]]:
+	def simple_parts(self)->List[Union[BalancedTokenList, Token, BlueToken]]:
 		"""
 		Split this NTokenList into a list of balanced non-blue parts, unbalanced {/} tokens, and blue tokens.
 		"""
-		parts: List[Union[TokenList, NToken]]=[TokenList()]
+		parts: List[Union[TokenList, BlueToken]]=[TokenList()]
 		for i in self:
-			if i.blue:
+			if isinstance(i, BlueToken):
 				parts+=i, TokenList()
 			else:
+				assert isinstance(i, Token)
 				last_part=parts[-1]
 				assert isinstance(last_part, TokenList)
-				last_part.append(i.token)
-		result: List[Union[BalancedTokenList, Token, NToken]]=[]
+				last_part.append(i)
+		result: List[Union[BalancedTokenList, Token, BlueToken]]=[]
 		for large_part in parts:
-			if isinstance(large_part, NToken):
+			if isinstance(large_part, BlueToken):
 				result.append(large_part)
 			else:
 				result+=large_part.balanced_parts()
@@ -954,8 +1032,19 @@ class NTokenList(NTokenListBaseClass):
 		"""
 		x-expand self. The result must be balanced.
 		"""
-		NTokenList([T.edef, P.tmp, self]).execute()
+		NTokenList([T.edef, P.tmp, bgroup, *self, egroup]).execute()
 		return BalancedTokenList([P.tmp]).expand_o()
+
+	def str(self)->str:
+		"""
+		self must represent a TeX string. (i.e. equal to itself when detokenized)
+		return the string content.
+		"""
+		return "".join(t.str() for t in self)
+
+	def bool(self)->bool:
+		s=self.str()
+		return {"0": False, "1": True}[s]
 
 
 class TeXToPyData(ABC):
@@ -1020,10 +1109,10 @@ class TTPELine(TeXToPyData, str):
 
 class TTPEmbeddedLine(TeXToPyData, str):
 	@staticmethod
-	def send_code(self):
+	def send_code(self)->str:
 		raise RuntimeError("Must be manually handled")
 	@staticmethod
-	def send_code_var(self):
+	def send_code_var(self)->str:
 		raise RuntimeError("Must be manually handled")
 	@staticmethod
 	def read()->"TTPEmbeddedLine":
@@ -1558,30 +1647,20 @@ r"""
 
 get_next_=define_Python_call_TeX_local_sync(
 r"""
-\cs_new_protected:Npn \__get_next_callback: #1 {
-	\immediate\write \__write_file { r^^J #1 }
-	\__read_do_one_command:
-}
-
 \cs_new_protected:Npn %name% {
 	\peek_analysis_map_inline:n {
 		\peek_analysis_map_break:n {
-			\__tlserialize_char_unchecked:nnNN {##1}{##2}##3 \__get_next_callback:
+			\__tlserialize_char_unchecked:nnNN {##1}{##2}##3 \pythonimmediatecontinue
 		}
 	}
 }
-""", [], [TTPLine], recursive=False)
+""", [], [TTPEmbeddedLine], recursive=False)
 
 put_next_bgroup=define_Python_call_TeX_local_sync(
 r"""
-\cs_new_protected:Npn \__put_next_char_callback: {
-	%sync%
-	\__read_do_one_command:
-}
-
 \cs_new_protected:Npn %name% {
 	%read_arg0(\__index)%
-	\expandafter \expandafter \expandafter \__put_next_char_callback:
+	\expandafter \expandafter \expandafter \pythonimmediatecontinuenoarg
 		\char_generate:nn {\__index} {1}
 }
 """, [PTTInt], [], recursive=False)
@@ -1590,7 +1669,7 @@ put_next_egroup=define_Python_call_TeX_local_sync(
 r"""
 \cs_new_protected:Npn %name% {
 	%read_arg0(\__index)%
-	\expandafter \expandafter \expandafter \__put_next_char_callback:
+	\expandafter \expandafter \expandafter \pythonimmediatecontinuenoarg
 		\char_generate:nn {\__index} {2}
 }
 """, [PTTInt], [], recursive=False)
@@ -1686,6 +1765,21 @@ r"""
 }
 """, [PTTBalancedTokenList], [])
 
+futurelet_=define_Python_call_TeX_local_sync(
+r"""
+\cs_new_protected:Npn %name% {
+	%read_arg0(\__data)%
+	\expandafter \futurelet \__data \pythonimmediatecontinuenoarg
+}
+""", [PTTBalancedTokenList], [])
+
+futureletnext_=define_Python_call_TeX_local_sync(
+r"""
+\cs_new_protected:Npn %name% {
+	%read_arg0(\__data)%
+	\afterassignment \pythonimmediatecontinuenoarg \expandafter \futurelet \__data 
+}
+""", [PTTBalancedTokenList], [])
 
 continue_until_passed_back_=define_Python_call_TeX_local_sync(
 r"""
@@ -1712,6 +1806,14 @@ def continue_until_passed_back()->None:
 	result=continue_until_passed_back_str()
 	assert not result
 
+
+expand_once_=define_Python_call_TeX_local_sync(
+r"""
+\cs_new_protected:Npn %name% { \expandafter \pythonimmediatecontinuenoarg }
+""", [], [])
+@export_function_to_module
+def expand_once()->None:
+	expand_once_()
 
 get_argument_detokenized_=define_Python_call_TeX_local_sync(
 r"""

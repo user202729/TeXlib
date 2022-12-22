@@ -11,6 +11,8 @@ user code are not executed here.
 """
 
 import sys
+import signal
+signal.signal(signal.SIGINT, signal.SIG_IGN)  # when the other half terminates this one will terminates "gracefully"
 
 #debug_file=open(Path(tempfile.gettempdir())/"pythonimmediate_debug_pytotex.txt", "w", encoding='u8', buffering=2)
 #debug=functools.partial(print, file=debug_file, flush=True)
