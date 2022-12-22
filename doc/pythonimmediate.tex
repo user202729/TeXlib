@@ -117,34 +117,24 @@ The interface mimics those in popular packages such as \pkg{Python\TeX} or \pkg{
 
 \subsubsection{Inline commands}
 
-\DescribeMacro{\py}
+\DescribeMacro{\py}\label{py-command}
 Evaluate some Python expression, consider the result as a string, then execute the result as \TeX\ command.
 
 \begin{texnote}
-	The command is not expandable, and the argument will be fully expanded, then detokenized under |\escapechar=-1|, then the resulting
+	The command is not expandable, and the argument will be fully expanded with the active |~| set to |\relax|,
+	|\set@display@protect| executed and |\escapechar=-1|, then the result
 	passed to Python as a string.
 \end{texnote}
 
 Which, for the users who are not familiar with \TeX\ terminology, roughly means the following:
 \begin{itemize}
 	\item the value can only be used to typeset text,
-		it must not be used to pass "values" to other \LaTeX\ commands. See the example below.
-	\item Special characters can be "escaped" simply by prefixing the character with backslash.
-	\item Macros will be expanded.
-\end{itemize}
+		it must not be used to pass "values" to other \LaTeX\ commands.
 
-Example:
+		The following is legal:
 \begin{verbatim}
 The value of $1+1$ is $\py{1+1}$.
-
-The following is the \TeX\ logo: \py{'\\\\TeX'}
-
-\def\mycode{1+1}
-The value of $1+1$ is $\py{\mycode}$.
 \end{verbatim}
-In the example above, the Python expression being evaluated is |'\\TeX'|, which results in a string that contains the content |\TeX|
-which typesets the \TeX\ logo.
-
 The following is illegal, as the result (2) can only be used to typeset text, not passed to another command that expect a "value":
 \begin{verbatim}
 \setcounter{abc}{\py{1+1}} 
@@ -153,12 +143,36 @@ A possible workaround is:
 \begin{verbatim}
 \py{ r'\\setcounter{abc}{' + str(1+1) + '}' }
 \end{verbatim}
-In this example you don't need to escape the |{}| characters, but if the Python code has those unbalanced then you can escape them as mentioned above.
+In this example it works without escaping the |{}| characters, but if the Python code has those unbalanced then you can escape them as mentioned below.
+
+	\item Special characters can be "escaped" simply by prefixing the character with backslash.
+
+		For example
+\begin{verbatim}
+\pyc{assert len('\ \ ')==2}
+\pyc{assert ord('\\\\')==0x5c}
+\pyc{assert ord('\%')  ==0x25}
+\end{verbatim}
+In the examples above, Python "sees" (i.e. the Python code being executed is)
+\begin{verbatim}
+assert len('  ')==2
+assert ord('\\')==0x5c
+assert ord('%') ==0x25
+\end{verbatim}
+respectively.
+
+	\item Macros will be expanded.
+\begin{verbatim}
+\def\mycode{1+1}
+The value of $1+1$ is $\py{\mycode}$.
+\end{verbatim}
+\end{itemize}
+
 
 \DescribeMacro{\pyc}
 Execute some Python code provided as an argument (the argument will be interpreted as described above).
 
-The macro is not expandable -- roughly speaking, you can only use this at "top level".
+The command is not expandable -- roughly speaking, you can only use this at "top level".
 
 Any output (as described in \ref{print-to-TeX}) will be typesetted.
 
@@ -314,6 +328,10 @@ $\left\langle\mathbf{a}\middle\vert\mathbf{b}\right\rangle=1$
 $f(x)=1$, $f_i(x)=2$, $f_{ij}(x)=3$
 \end{quote}
 
+\DescribePython{.get_arg_estr()}
+\DescribePython{.get_optional_arg_estr()}
+Similar to some functions above, except that the argument is fully expanded and "escapes" of common characters are handled correctly,
+similar to how |\py| command (\ref{py-command}) reads its arguments.
 
 \DescribePython{.execute()}
 Takes a string and execute it immediately. (so that any |.execute()| will be executed before any |.print()|)
@@ -400,12 +418,9 @@ The communication protocol is a little complicated, since it must support nestin
 
 Besides, I believe it's not possible to make a "background listener" on the \TeX\ side, so it must keep track of whether a command should be read from Python and executed.
 
-We have the following 3 internal macros/environments to execute Python code at the lowest level.
-\DescribeMacro{\pythonimmediateverb}
-\DescribeMacro{\pythonimmediate:n}
-\DescribeEnv{pythonimmediateenv}
-Each of them sends the code to the Python side, then listen for \emph{one} \TeX\ command and execute it
-using |\__read_do_one_command:|.
+Currently, exception handling (throwing a Python exception in a nested Python function, catch it in the outer Python function) is not supported.
+
+These are some examples of what could happen in the communication protocol.
 
 \ExplSyntaxOn
 \let\fpEval\fp_eval:n

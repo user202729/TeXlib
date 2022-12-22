@@ -337,6 +337,46 @@ class Test(unittest.TestCase):
 		self.assertEqual(1, len(BalancedTokenList.doc(' ')))
 		self.assertEqual(BalancedTokenList([frozen_relax_token]).expand_x(), BalancedTokenList([frozen_relax_token]))
 
+	def test_get_arg_estr(self):
+		BalancedTokenList.doc(r'{123}').put_next()
+		self.assertEqual(pythonimmediate.get_arg_estr(), "123")
+
+		BalancedTokenList.doc(r'{\empty}').put_next()
+		self.assertEqual(pythonimmediate.get_arg_estr(), "")
+
+		BalancedTokenList.doc(r'{a\ \\\{\}\$\&\#\^\_\%\~~b}').put_next()
+		self.assertEqual(pythonimmediate.get_arg_estr(), r"a \{}$&#^_%~~b")
+
+		
+	def test_get_optional_arg_estr(self):
+		BalancedTokenList.doc(r'[123]').put_next()
+		self.assertEqual(pythonimmediate.get_optional_arg_estr(), "123")
+
+		# outermost only {} get stripped
+		BalancedTokenList.doc(r'[{123}]').put_next()
+		self.assertEqual(pythonimmediate.get_optional_arg_estr(), "123")
+
+		# can also be used to hide the ]
+		BalancedTokenList.doc(r'[{]}]').put_next()
+		self.assertEqual(pythonimmediate.get_optional_arg_estr(), "]")
+
+		# can also hide this way
+		BalancedTokenList.doc(r'[\]]').put_next()
+		self.assertEqual(pythonimmediate.get_optional_arg_estr(), "]")
+
+		# test expansion
+		BalancedTokenList.doc(r'[\empty]').put_next()
+		self.assertEqual(pythonimmediate.get_optional_arg_estr(), "")
+
+		# test balancedness & keep braces (supported by xparse)
+		BalancedTokenList.doc(r'[{a}\ \\\{\}\$\&\#\^\_\%\~~b[]]').put_next()
+		self.assertEqual(pythonimmediate.get_optional_arg_estr(), r"{a} \{}$&#^_%~~b[]")
+
+		# test nonexistent optional argument
+		BalancedTokenList.doc(r'{ab}').put_next()
+		self.assertEqual(pythonimmediate.get_optional_arg_estr(), None)
+		self.assertEqual(pythonimmediate.get_arg_str(), "ab")
+
 
 suite = unittest.defaultTestLoader.loadTestsFromTestCase(Test)
 unittest.TextTestRunner().run(suite)
@@ -373,26 +413,26 @@ x=y=z=1
 \end{pycode}
 
 % ======== test more symbols
-\pyc{assert ord(' ')   ==0x20}
-\pyc{assert ord('\ ')  ==0x20}
-\pyc{assert len('  ')  ==1}  % unfortunate
-\pyc{assert len('\ \ ')==2}
+\pyc{assert ord(r' ')   ==0x20}
+\pyc{assert ord(r'\ ')  ==0x20}
+\pyc{assert len(r'  ')  ==1}  % unfortunate
+\pyc{assert len(r'\ \ ')==2}
 \pyc{assert ord('\\\\')==0x5c}
-\pyc{assert ord('\{')  ==0x7b}
-\pyc{assert ord('\}')  ==0x7d}
-\pyc{assert ord('\$')  ==0x24}
-\pyc{assert ord('$')   ==0x24}
-\pyc{assert ord('\&')  ==0x26}
-\pyc{assert ord('&')   ==0x26}
-\pyc{assert len('#')   ==2}  % unfortunate
-\pyc{assert len('\#')  ==1}
-\pyc{assert ord('\#')  ==0x23}
-\pyc{assert ord('^')   ==0x5e}
-\pyc{assert ord('\^')  ==0x5e}
-\pyc{assert ord('_')   ==0x5f}
-\pyc{assert ord('\_')  ==0x5f}
-\pyc{assert ord('\%')  ==0x25}
-\pyc{assert ord('~')   ==0x7e}
-\pyc{assert ord('\~')  ==0x7e}
+\pyc{assert ord(r'\{')  ==0x7b}
+\pyc{assert ord(r'\}')  ==0x7d}
+\pyc{assert ord(r'\$')  ==0x24}
+\pyc{assert ord(r'$')   ==0x24}
+\pyc{assert ord(r'\&')  ==0x26}
+\pyc{assert ord(r'&')   ==0x26}
+\pyc{assert len(r'#')   ==2}  % unfortunate
+\pyc{assert len(r'\#')  ==1}
+\pyc{assert ord(r'\#')  ==0x23}
+\pyc{assert ord(r'^')   ==0x5e}
+\pyc{assert ord(r'\^')  ==0x5e}
+\pyc{assert ord(r'_')   ==0x5f}
+\pyc{assert ord(r'\_')  ==0x5f}
+\pyc{assert ord(r'\%')  ==0x25}
+\pyc{assert ord(r'~')   ==0x7e}
+\pyc{assert ord(r'\~')  ==0x7e}
 
 \end{document}

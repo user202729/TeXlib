@@ -1572,6 +1572,20 @@ def get_arg_str()->str:
 	"""
 	return str(get_argument_detokenized_()[0])
 
+get_arg_estr_=define_Python_call_TeX_local_sync(
+r"""
+\cs_new_protected:Npn %name% #1 {
+	%sync%
+	%send_arg0(#1)%
+	\__read_do_one_command:
+}
+""", [], [TTPEBlock], recursive=False)
+@export_function_to_module
+@user_documentation
+def get_arg_estr()->str:
+	return str(get_arg_estr_()[0])
+
+
 get_optional_argument_detokenized_=define_Python_call_TeX_local_sync(
 r"""
 \NewDocumentCommand %name% {o} {
@@ -1593,6 +1607,29 @@ def get_optional_arg_str()->Optional[str]:
 	Get an optional argument.
 	"""
 	[result]=get_optional_argument_detokenized_()
+	result_=str(result)
+	if result_=="0": return None
+	assert result_[0]=="1", result_
+	return result_[1:]
+
+
+get_optional_arg_estr_=define_Python_call_TeX_local_sync(
+r"""
+\NewDocumentCommand %name% {o} {
+	%sync%
+	\IfNoValueTF {#1} {
+		%send_arg0(0)%
+	} {
+		%send_arg0(1 #1)%
+	}
+	\__read_do_one_command:
+}
+""", [], [TTPEBlock], recursive=False)
+
+@export_function_to_module
+@user_documentation
+def get_optional_arg_estr()->Optional[str]:
+	[result]=get_optional_arg_estr_()
 	result_=str(result)
 	if result_=="0": return None
 	assert result_[0]=="1", result_
