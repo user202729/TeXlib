@@ -91,15 +91,26 @@ but inside |\ExplSyntaxOn| environment it generates a spurious space at the begi
   Environment that saves its body.
   
   For example, the following code
-
 \begin{verbatim}
 \begin{saveenv}{\data}
 123
 456
 \end{saveenv}
 \end{verbatim}
+will save the string \texttt{123\meta{newline}456\meta{newline}} globally into |\data|.
 
-will save the string \texttt{123\meta{newline}456} globally into |\data|.
+Remark: it is consistent to keep the trailing newline, as
+\begin{verbatim}
+\begin{saveenv}{\data}
+\end{saveenv}
+\end{verbatim}
+will make |\data| empty, and
+\begin{verbatim}
+\begin{saveenv}{\data}
+
+\end{saveenv}
+\end{verbatim}
+will make |\data| consist of a single \meta{newline}.
 
 The braces around \verb+{\data}+ is optional; however, in the unlikely case if \cs{endlinechar} has the \enquote{letter} catcode, it might be absorbed and gives unexpected result.
 
@@ -163,8 +174,7 @@ while any code in the second block of the |\NewDocumentEnvironment| definition
 would be executed before the group ends (such as in the example below), thus any local assignment will not persist.
 
 \DescribeEnv{saveenvkeeplastreinsert}
-Same as above, but the trailing whitespaces are preserved.
-
+Same as above, but the trailing whitespaces (after the last newline) are preserved.
 
 \section{Extending the environments}
 

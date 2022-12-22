@@ -1130,7 +1130,7 @@ mark_bootstrap(
 r"""
 \NewDocumentEnvironment{pycode}{}{
 	\saveenvreinsert \__code {
-		\exp_last_unbraced:Nx \__pycodex {{\__code ^^J} {\the\inputlineno} {
+		\exp_last_unbraced:Nx \__pycodex {{\__code} {\the\inputlineno} {
 			\ifdefined\currfilename \currfilename \fi
 		} {
 			\ifdefined\currfileabspath \currfileabspath \fi
@@ -1146,7 +1146,7 @@ def normalize_lines(lines: List[str])->List[str]:
 
 @define_internal_handler
 def __pycodex(code: TTPBlock, lineno_: TTPLine, filename: TTPLine, fileabspath: TTPLine)->None:
-	if not code.strip(): return  # currently saveenv returns empty string + single newline both when there's 0 or 1 empty line between environment body. TODO later fix the bug properly
+	if not code: return
 
 	lineno=int(lineno_)
 	# find where the code comes from... (for easy meaningful traceback)

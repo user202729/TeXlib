@@ -24,7 +24,7 @@
 	\assertequal:Vn \data {
 		\cS\  \cS\  \cO{12} ~ \cO{3 \^^J}
 		\cS\  \cS\  \cO{12} ~ \cO{3 \^^J}
-		\cO{ \^^I \^^I 123}
+		\cO{ \^^I \^^I 123 \^^J}
 	}
 }
 \global\let\data\undefined
@@ -47,11 +47,11 @@
 \precattl_exec:n {
 	\assertequal:Vn \data {
 		\cO{123 \^^J}
-		\cO{123}
+		\cO{123 \^^J}
 	}
 	\assertequal:Vn \datab {
 		\cO{123 \^^J}
-		\cO{123}
+		\cO{123 \^^J}
 	}
 }
 
@@ -66,19 +66,23 @@
 
 \end{saveenvghost}
 
-\begin{saveenv}\datab
+\begin{saveenvghost}\datab
+\end{saveenvghost}
+
+\begin{saveenv}\datac
 
 \end{saveenv}
 
-\begin{saveenv}\datac
+\begin{saveenv}\datad
 \end{saveenv}
 \endgroup
 
 \ExplSyntaxOn
 \precattl_exec:n {
-	\assertequal:Vn \data { }
+	\assertequal:Vn \data { ^^J }
 	\assertequal:Vn \datab { }
-	\assertequal:Vn \datac { }
+	\assertequal:Vn \datac { ^^J }
+	\assertequal:Vn \datad { }
 }
 
 
@@ -102,13 +106,13 @@
 \precattl_exec:n {
 	\assertequal:Vn \data {
 		\cO{123 \^^J}
-		\cO{123}
+		\cO{123 \^^J}
 	}
 }
 \precattl_exec:n {
 	\assertequal:Vn \datab {
 		\cO{123 \^^J}
-		\cO{123}
+		\cO{123 \^^J}
 	}
 }
 \global\let\data\undefined
@@ -131,11 +135,11 @@
 \precattl_exec:n {
 	\assertequal:Vn \data {
 		\cO{123 \^^J}
-		\cO{123}
+		\cO{123 \^^J}
 	}
 	\assertequal:Vn \datab {
 		\cO{123 \^^J}
-		\cO{123}
+		\cO{123 \^^J}
 	}
 }
 \global\let\data\undefined
@@ -152,7 +156,7 @@
 	\assertequal:Vn \data {
 		\cS\  \cS\  \cO{12} ~ \cO{3 \^^J}
 		\cS\  \cS\  \cO{12} ~ \cO{3 \^^J}
-		\cO{ \^^I \^^I 123}
+		\cO{ \^^I \^^I 123 ^^J}
 	}
 }
 \global\let\data\undefined
@@ -182,7 +186,7 @@
 \precattl_exec:n {
 	\assertequal:Vn \data {
 		\cO{\^^I\^^I123\^^I\^^J}
-		\cO{\^^I\^^I123}
+		\cO{\^^I\^^I123\^^J}
 	}
 }
 \global\let\data\undefined
@@ -197,7 +201,7 @@
 \precattl_exec:n {
 	\assertequal:Vn \data {
 		\cO{\^^I\^^I123\^^J}
-		\cO{\^^I\^^I123}
+		\cO{\^^I\^^I123\^^J}
 	}
 }
 \global\let\data\undefined
