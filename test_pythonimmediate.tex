@@ -407,7 +407,7 @@ class Test(unittest.TestCase):
 		NTokenList([T.let, T.aaa.blue, T.ifx]).execute()
 		self.assertTrue(T.aaa.meaning_equal(T.ifx))
 
-		NTokenList([T.futurelet, T.aaa, T["@gobble"], T.ifcat]).execute()
+		NTokenList([T.futurelet, T.aaa.blue, T["@gobble"], T.ifcat]).execute()
 		self.assertTrue(T.aaa.meaning_equal(T.ifcat))
 
 	def test_make_tokenlist_from_blue(self):
