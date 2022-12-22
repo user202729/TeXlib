@@ -3,7 +3,6 @@
 ======== TeX-to-Py half ========
 
 receive commands from TeX, then execute it here
-print() might go to TeX's stdout, or somewhere else
 """
 
 
@@ -285,9 +284,9 @@ user_scope: Dict[str, Any]={}  # consist of user's local variables etc.
 def readline()->str:
 	line=raw_readline()
 	if not line:
-		print("\n\nTraceback (most recent call last):", file=sys.stderr)
+		sys.stderr.write("\n\nTraceback (most recent call last):\n")
 		traceback.print_stack(file=sys.stderr)
-		print("RuntimeError: Fatal irrecoverable TeX error\n\n", file=sys.stderr)
+		sys.stderr.write("RuntimeError: Fatal irrecoverable TeX error\n\n")
 		os._exit(1)
 
 
@@ -760,32 +759,27 @@ class TokenList(TokenListBaseClass):
 
 	@classmethod
 	def deserialize(cls: Type[T], data: str)->T:
-		try:
-			result=TokenList()
-			i=0
-			cs_skip_space_count=0
-			while i<len(data):
-				if data[i]==">":
-					cs_skip_space_count+=1
-					i+=1
-				elif data[i]=="\\":
-					j=data.index(' ', i+1)
-					for __ in range(cs_skip_space_count):
-						j=data.index(' ', j+1)
-					cs_skip_space_count=0
-					result.append(ControlSequenceToken(data[i+1:j]))
-					i=j+1
-				elif data[i]=="R":
-					result.append(frozen_relax_token)
-					i+=1
-				else:
-					result.append(CharacterToken(index=ord(data[i+1]), catcode=Catcode(int(data[i], 16))))
-					i+=2
-			return cls(result)
-		except:
-			print("error", repr(data))
-			traceback.print_exc()
-			raise
+		result: List[Token]=[]
+		i=0
+		cs_skip_space_count=0
+		while i<len(data):
+			if data[i]==">":
+				cs_skip_space_count+=1
+				i+=1
+			elif data[i]=="\\":
+				j=data.index(' ', i+1)
+				for __ in range(cs_skip_space_count):
+					j=data.index(' ', j+1)
+				cs_skip_space_count=0
+				result.append(ControlSequenceToken(data[i+1:j]))
+				i=j+1
+			elif data[i]=="R":
+				result.append(frozen_relax_token)
+				i+=1
+			else:
+				result.append(CharacterToken(index=ord(data[i+1]), catcode=Catcode(int(data[i], 16))))
+				i+=2
+		return cls(result)
 
 	def __repr__(self)->str:
 		return '<' + type(self).__name__ + ': ' + ' '.join(t.repr1() for t in self) + '>'
@@ -806,10 +800,10 @@ class BalancedTokenList(TokenList):
 		super().__init__(a)
 		self.check_balanced()
 
-	def expand_o(self)->"TokenList":
-		return TokenList(expand_o_(PTTBalancedTokenList(self))[0])  # type: ignore
-	def expand_x(self)->"TokenList":
-		return TokenList(expand_x_(PTTBalancedTokenList(self))[0])  # type: ignore
+	def expand_o(self)->"BalancedTokenList":
+		return BalancedTokenList(expand_o_(PTTBalancedTokenList(self))[0])  # type: ignore
+	def expand_x(self)->"BalancedTokenList":
+		return BalancedTokenList(expand_x_(PTTBalancedTokenList(self))[0])  # type: ignore
 	def execute(self)->None:
 		execute_(PTTBalancedTokenList(self))
 
@@ -918,12 +912,12 @@ class TTPEBlock(TeXToPyData, str):
 	def read()->"TTPEBlock":
 		return TTPEBlock(read_block())
 
-class TTPBalancedTokenList(TeXToPyData, TokenList):
+class TTPBalancedTokenList(TeXToPyData, BalancedTokenList):
 	send_code=r"\__tlserialize_nodot:Nn \__tmp {{ {} }} \immediate \write \__write_file {{\unexpanded\expandafter{{ \__tmp }}}}".format
 	send_code_var=r"\__tlserialize_nodot:NV \__tmp {} \immediate \write \__write_file {{\unexpanded\expandafter{{ \__tmp }}}}".format
 	@staticmethod
 	def read()->"TTPBalancedTokenList":
-		return TTPBalancedTokenList(TokenList.deserialize(readline()))
+		return TTPBalancedTokenList(BalancedTokenList.deserialize(readline()))
 
 
 class PyToTeXData(ABC):
@@ -1196,17 +1190,6 @@ def __pycodex(code: TTPBlock, lineno_: TTPLine, filename: TTPLine, fileabspath: 
 		p=Path(f)
 		if not p.is_file(): continue
 		file_lines=p.read_text().splitlines(keepends=True)[lineno-len(code_lines_normalized)-1:lineno-1]
-		#print()
-		#print()
-		#print("========")
-		#for line in normalize_lines(file_lines): print(line)
-		#print("========")
-		#for line in code_lines_normalized: print(line)
-		#print(repr(code))
-		#print("========")
-		#print(lineno)
-		#print()
-		#print()
 		if normalize_lines(file_lines)==code_lines_normalized:
 			target_filename=f
 			break
@@ -1501,7 +1484,6 @@ r"""
 def run_tokenized_line_peek(line: str, *, check_braces: bool=True, check_newline: bool=True, check_continue: bool=True)->str:
 	check_line(line, braces=check_braces, newline=check_newline, continue_=(True if check_continue else None))
 	a=run_tokenized_line_peek_(PTTTeXLine(line))[0]
-	assert isinstance(a, str)
 	return str(a)
 
 
@@ -1928,7 +1910,7 @@ try:
 
 except:
 	# see also documentation of run_error_finish.
-	print(file=sys.stderr)
+	sys.stderr.write("\n")
 	traceback.print_exc(file=sys.stderr)
 
 	if do_run_error_finish:
