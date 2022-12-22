@@ -877,6 +877,9 @@ class NTokenList(NTokenListBaseClass):
 			else:
 				raise RuntimeError(f"Cannot make NTokenList from object {x} of type {type(x)}")
 
+	def __init__(self, a: Iterable=())->None:
+		super().__init__(NTokenList.force_token_list(a))
+
 	def is_balanced(self)->bool:
 		return TokenList(self).is_balanced()  # a bit inefficient (need to construct a TokenList) but good enough
 
