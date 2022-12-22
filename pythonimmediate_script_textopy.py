@@ -1015,19 +1015,6 @@ def wrap_executor(f: Callable[..., None])->Callable:
 		action_done=old_action_done
 	return result
 
-@wrap_executor
-def run_python_block()->None:
-	"""
-	Internal function to read one \emph{Python} block sent from \TeX\ (excluding the initial |i| line)
-	and execute it in |user_scope|.
-	"""
-	content=read_block()
-	debug("executing", content)
-	exec(content, user_scope)
-
-assert "" not in TeX_handlers
-TeX_handlers[""]=run_python_block
-
 
 # ======== define TeX functions that execute Python code ========
 # ======== implementation of |\py| etc. Doesn't support verbatim argument yet. ========
