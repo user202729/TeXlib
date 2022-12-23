@@ -92,11 +92,6 @@ sys.modules["pythonimmediate"]=pythonimmediate
 
 pythonimmediate.debugging=True
 
-def debugonly(s: str)->str:
-	if pythonimmediate.debugging: return s
-	return ""
-
-
 def export_function_to_module(f: Callable)->Callable:
 	"""
 	the functions decorated with this decorator are accessible from user code with
@@ -443,7 +438,7 @@ class Token(NToken):
 							}
 						}
 					}
-					""",   recursive=False))()
+					""", recursive=False))()
 				)
 
 	def put_next(self)->None:
@@ -471,7 +466,6 @@ Convert a token list from/to a string.
 
 mark_bootstrap(
 r"""
-\RequirePackage{precattl}
 \precattl_exec:n {
 
 % here #1 is the target token list to store the result to, #2 is a string with the final '.'.
@@ -585,7 +579,7 @@ class ControlSequenceTokenMaker:
 @export_function_to_module
 @dataclass(repr=False, frozen=True)
 class ControlSequenceToken(Token):
-	make=typing.cast(ControlSequenceTokenMaker, None)  # some inference makes this incorrect. Manually assign below
+	make=typing.cast(ControlSequenceTokenMaker, None)  # some interference makes this incorrect. Manually assign below
 	csname: str
 	@property
 	def assignable(self)->bool:
