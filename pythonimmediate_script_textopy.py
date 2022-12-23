@@ -422,24 +422,9 @@ class Token(NToken):
 
 		Equivalent to get_next() then put_next() immediately. See documentation of get_next() for some notes.
 		"""
-		return Token.deserialize(
-				typing.cast(Callable[[], TTPLine], Python_call_TeX_local(
-					r"""
-					\cs_new_protected:Npn \__peek_next_callback: #1 {
-						\immediate\write \__write_file { r^^J #1 }
-						\expandafter  % expand the ##1 in (*)
-							\__read_do_one_command:
-					}
-
-					\cs_new_protected:Npn %name% {
-						\peek_analysis_map_inline:n {
-							\peek_analysis_map_break:n {
-								\__tlserialize_char_unchecked:nNnN {##2}##3{##1} \__peek_next_callback: ##1 % (*)
-							}
-						}
-					}
-					""", recursive=False))()
-				)
+		t=Token.get_next()
+		t.put_next()
+		return t
 
 	def put_next(self)->None:
 		d=self.degree()
@@ -476,6 +461,7 @@ r"""
 
 		\def \start ##1 { \csname ##1 \endcsname }
 
+		\def \^ ##1 ##2        { \csname ##1 \expandafter \expandafter \expandafter \endcsname \char_generate:nn {`##2-64} {12} }
 		\def \> ##1 ##2 \cO\   { \csname ##1 \endcsname ##2  \cU\  }
 		\def \\ ##1 \cO\   ##2 { \expandafter \noexpand \csname ##1 \endcsname                                  \csname ##2 \endcsname }
 		\def \1 ##1        ##2 { \char_generate:nn {`##1} {1}                                                   \csname ##2 \endcsname }
@@ -524,7 +510,7 @@ r"""
 	} {
 		% it's either 1 or 2
 		% might not be able to edef, but can gobble
-		\__process_gobble #cat
+		\__process_gobble {#char} #cat
 	}
 }
 
@@ -549,7 +535,11 @@ r"""
 			}
 		}
 	} {
-		\exp_args:Nx #callback { #cat \expandafter \expandafter \expandafter \string \__the_token }
+		\int_compare:nNnTF { #char } < {16} {
+			\exp_args:Nx #callback { \cStr{^} #cat \char_generate:nn {#char+64} {12} }
+		} {
+			\exp_args:Nx #callback { #cat \expandafter \string \__the_token }
+		}
 	}
 }
 """
@@ -560,14 +550,18 @@ r"""
 +
 
 r"""
-\cs_new_protected:Npn \__process_gobble #cat #token #callback {
-	\expandafter #callback \expandafter { \expandafter #cat
-			\exp:w \expandafter \expandafter \expandafter \exp_end: \expandafter \string #token }
+\cs_new_protected:Npn \__process_gobble #char #cat #token #callback {
+	\int_compare:nNnTF { #char } < {16} {
+		\exp_args:Nx #callback { \cStr{^} #cat \char_generate:nn {#char+64} {12} }
+	} {
+		\exp_args:Nx #callback { #cat \expandafter \string #token }
+	}
 }
 """
-.replace("#cat", "#1")
-.replace("#token", "#2")
-.replace("#callback", "#3")
+.replace("#char", "#1")
+.replace("#cat", "#2")
+.replace("#token", "#3")
+.replace("#callback", "#4")
 
 ).replace("__", "__tlserialize_")
 
@@ -705,10 +699,13 @@ class CharacterToken(Token):
 	def __str__(self)->str:
 		return self.chr
 	def serialize(self)->str:
-		return f"{self.catcode.value:X}{self.chr}"
+		if self.index<0x10:
+			return f"^{self.catcode.value:X}{chr(self.index+0x40)}"
+		else:
+			return f"{self.catcode.value:X}{self.chr}"
 	def repr1(self)->str:
 		cat=str(self.catcode.value).translate(str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉"))
-		return f"{self.chr}{cat}"
+		return f"{repr(self.chr)[1:-1]}{cat}"
 	@property
 	def assignable(self)->bool:
 		return self.catcode==Catcode.active
@@ -976,6 +973,9 @@ class TokenList(TokenListBaseClass):
 			elif data[i]=="R":
 				result.append(frozen_relax_token)
 				i+=1
+			elif data[i]=="^":
+				result.append(CharacterToken(index=ord(data[i+2])-0x40, catcode=Catcode(int(data[i+1], 16))))
+				i+=3
 			else:
 				result.append(CharacterToken(index=ord(data[i+1]), catcode=Catcode(int(data[i], 16))))
 				i+=2

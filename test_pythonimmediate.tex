@@ -226,6 +226,10 @@ class Test(unittest.TestCase):
 				Catcode.letter('\\'),
 				Catcode.bgroup(' '),
 				Catcode.egroup(' '),
+				Catcode.active("\r"), Catcode.active("\n"),
+				Catcode.bgroup("\r"), Catcode.bgroup("\n"),
+				Catcode.egroup("\r"), Catcode.egroup("\n"),
+				Catcode.other ("\r"), Catcode.other ("\n"),
 				]:
 			with self.subTest(t=t):
 				t.put_next()
