@@ -427,7 +427,24 @@ class Token(NToken):
 
 		Equivalent to get_next() then put_next() immediately. See documentation of get_next() for some notes.
 		"""
-		return Token.deserialize(str(peek_next_()[0]))
+		return Token.deserialize(
+				typing.cast(Callable[[], TTPLine], Python_call_TeX_local(
+					r"""
+					\cs_new_protected:Npn \__peek_next_callback: #1 {
+						\immediate\write \__write_file { r^^J #1 }
+						\expandafter  % expand the ##1 in (*)
+							\__read_do_one_command:
+					}
+
+					\cs_new_protected:Npn %name% {
+						\peek_analysis_map_inline:n {
+							\peek_analysis_map_break:n {
+								\__tlserialize_char_unchecked:nnNN {##1}{##2}##3 \__peek_next_callback: ##1 % (*)
+							}
+						}
+					}
+					""",   recursive=False))()
+				)
 
 	def put_next(self)->None:
 		d=self.degree()
@@ -1478,7 +1495,7 @@ class Python_call_TeX_data:
 @dataclass(frozen=True)
 class Python_call_TeX_extra:
 	ptt_argtypes: Tuple[Type[PyToTeXData], ...]
-	ttp_argtypes: Optional[Tuple[Type[TeXToPyData], ...]]
+	ttp_argtypes: Union[Type[TeXToPyData], Tuple[Type[TeXToPyData], ...]]
 
 Python_call_TeX_defined: Dict[Python_call_TeX_data, Tuple[Python_call_TeX_extra, Callable]]={}
 
@@ -1494,16 +1511,36 @@ def build_Python_call_TeX(T: Type, TeX_code: str, *, recursive: bool=True, sync:
 	data=Python_call_TeX_data(
 			TeX_code=TeX_code, recursive=recursive, sync=sync, finish=finish
 			)
+
+	tmp: Any = T.__args__[-1]
+	ttp_argtypes: Union[Type[TeXToPyData], Tuple[Type[TeXToPyData], ...]]
+	if tmp is type(None):
+		ttp_argtypes = ()
+	elif isinstance(tmp, type) and issubclass(tmp, TeXToPyData):
+		# special case, return a single object instead of a tuple of length 1
+		ttp_argtypes = tmp
+	else:
+		ttp_argtypes = tmp.__args__  # type: ignore
+
 	extra=Python_call_TeX_extra(
 			ptt_argtypes=T.__args__[:-1],
-			ttp_argtypes=T.__args__[-1].__args__,
+			ttp_argtypes=ttp_argtypes
 			)  # type: ignore
 	if data in Python_call_TeX_defined:
 		assert Python_call_TeX_defined[data][0]==extra
 	else:
-		code, result=define_Python_call_TeX(TeX_code=TeX_code, ptt_argtypes=[*extra.ptt_argtypes], ttp_argtypes=[*(extra.ttp_argtypes or [])],
-															  recursive=recursive, sync=sync, finish=finish,
-															  )
+		if  isinstance(ttp_argtypes, type) and issubclass(ttp_argtypes, TeXToPyData):
+			# special case, return a single object instead of a tuple of length 1
+			code, result1=define_Python_call_TeX(TeX_code=TeX_code, ptt_argtypes=[*extra.ptt_argtypes], ttp_argtypes=[ttp_argtypes],
+																  recursive=recursive, sync=sync, finish=finish,
+																  )
+			def result(*args):
+				[tmp]=result1(*args)
+				return tmp
+		else:
+			code, result=define_Python_call_TeX(TeX_code=TeX_code, ptt_argtypes=[*extra.ptt_argtypes], ttp_argtypes=[*ttp_argtypes],
+																  recursive=recursive, sync=sync, finish=finish,
+																  )
 		mark_bootstrap(code)
 		Python_call_TeX_defined[data]=extra, result
 
@@ -1516,23 +1553,27 @@ def scan_Python_call_TeX(filename: str)->None:
 	import ast
 	from copy import deepcopy
 	for node in ast.walk(ast.parse(Path(filename).read_text(), mode="exec")):
-		if isinstance(node, ast.Call):
-			if (
-					isinstance(node.func, ast.Attribute) and
-					isinstance(node.func.value, ast.Name) and
-					node.func.value.id == "typing" and
-					node.func.attr == "cast"
-					):
-				T = node.args[0]
-				if isinstance(node.args[1], ast.Call):
-					f_call = node.args[1]
-					if isinstance(f_call.func, ast.Name):
-						if f_call.func.id == "Python_call_TeX_local":
-							f_call=deepcopy(f_call)
-							assert isinstance(f_call.func, ast.Name)
-							f_call.func.id="build_Python_call_TeX"
-							f_call.args=[T]+f_call.args
-							eval(compile(ast.Expression(body=f_call), "<string>", "eval"))
+		try:
+			if isinstance(node, ast.Call):
+				if (
+						isinstance(node.func, ast.Attribute) and
+						isinstance(node.func.value, ast.Name) and
+						node.func.value.id == "typing" and
+						node.func.attr == "cast"
+						):
+					T = node.args[0]
+					if isinstance(node.args[1], ast.Call):
+						f_call = node.args[1]
+						if isinstance(f_call.func, ast.Name):
+							if f_call.func.id == "Python_call_TeX_local":
+								f_call=deepcopy(f_call)
+								assert isinstance(f_call.func, ast.Name)
+								f_call.func.id="build_Python_call_TeX"
+								f_call.args=[T]+f_call.args
+								eval(compile(ast.Expression(body=f_call), "<string>", "eval"))
+		except:
+			print("======== error on line", node.lineno, "========", file=sys.stderr)
+			raise
 
 def define_Python_call_TeX(TeX_code: str, ptt_argtypes: List[Type[PyToTeXData]], ttp_argtypes: List[Type[TeXToPyData]],
 						   *,
@@ -1877,31 +1918,29 @@ def continue_until_passed_back()->None:
 	assert not result
 
 
-expand_once_=define_Python_call_TeX_local_sync(
-r"""
-\cs_new_protected:Npn %name% { \expandafter \pythonimmediatecontinuenoarg }
-""", [], [])
 @export_function_to_module
 def expand_once()->None:
-	expand_once_()
+	typing.cast(Callable[[], None], Python_call_TeX_local(
+		r"""
+		\cs_new_protected:Npn %name% { \expandafter \pythonimmediatecontinuenoarg }
+		""", recursive=False, sync=True))()
 
-get_argument_detokenized_=define_Python_call_TeX_local_sync(
-r"""
-\cs_new_protected:Npn %name% #1 {
-	\immediate\write\__write_file { \unexpanded {
-		r ^^J
-		#1
-	}}
-	\__read_do_one_command:
-}
-""", [], [TTPLine], recursive=False)
+
 @export_function_to_module
 @user_documentation
 def get_arg_str()->str:
 	"""
 	Get a mandatory argument.
 	"""
-	return str(get_argument_detokenized_()[0])
+	return typing.cast(Callable[[], TTPEmbeddedLine], Python_call_TeX_local(
+		r"""
+		\cs_new_protected:Npn %name% #1 {
+			\immediate\write\__write_file { \unexpanded {
+				r #1
+			}}
+			\__read_do_one_command:
+		}
+		""", recursive=False))()
 
 get_arg_estr_=define_Python_call_TeX_local_sync(
 r"""
@@ -2121,38 +2160,8 @@ def put_next(arg: Union[str, Token, BalancedTokenList])->None:
 	if isinstance(arg, str): put_next_TeX_line(PTTTeXLine(arg))
 	else: arg.put_next()
 
-peek_next_=define_Python_call_TeX_local_sync(
-r"""
-\cs_new_protected:Npn \__peek_next_callback: #1 {
-	\immediate\write \__write_file { r^^J #1 }
-	\expandafter  % expand the ##1 in (*)
-		\__read_do_one_command:
-}
-
-\cs_new_protected:Npn %name% {
-	\peek_analysis_map_inline:n {
-		\peek_analysis_map_break:n {
-			\__tlserialize_char_unchecked:nnNN {##1}{##2}##3 \__peek_next_callback: ##1 % (*)
-		}
-	}
-}
-""", [], [TTPLine], recursive=False)
 
 
-peek_next_meaning_=define_Python_call_TeX_local_sync(
-r"""
-\cs_new_protected:Npn \__peek_next_meaning_callback: {
-
-	\edef \__tmp {\meaning \__tmp}  % just in case |\__tmp| is outer, |\write| will not be able to handle it
-	%\immediate\write \__write_file { r \unexpanded\expandafter{\__tmp} }
-	\immediate\write \__write_file { r \__tmp }
-
-	\__read_do_one_command:
-}
-\cs_new_protected:Npn %name% {
-	\futurelet \__tmp \__peek_next_meaning_callback:
-}
-""", [], [TTPEmbeddedLine], recursive=False)
 # TODO I wonder which one is faster. Need to benchmark...
 @export_function_to_module
 @user_documentation
@@ -2165,7 +2174,20 @@ def peek_next_meaning()->str:
 	It's undefined behavior if there's a newline (|\newlinechar| or |^^J|, the latter is OS-specific)
 	in the meaning string.
 	"""
-	return str(peek_next_meaning_()[0])
+	return typing.cast(Callable[[], TTPEmbeddedLine], Python_call_TeX_local(
+			r"""
+			\cs_new_protected:Npn \__peek_next_meaning_callback: {
+
+				\edef \__tmp {\meaning \__tmp}  % just in case |\__tmp| is outer, |\write| will not be able to handle it
+				%\immediate\write \__write_file { r \unexpanded\expandafter{\__tmp} }
+				\immediate\write \__write_file { r \__tmp }
+
+				\__read_do_one_command:
+			}
+			\cs_new_protected:Npn %name% {
+				\futurelet \__tmp \__peek_next_meaning_callback:
+			}
+			""", recursive=False))()
 
 
 if 0:
