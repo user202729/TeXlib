@@ -31,7 +31,6 @@ def user_documentation(x: Union[Callable, str])->Any:
 
 
 
-#debug=functools.partial(print, file=sys.stderr, flush=True)  # unfortunately this is async ... or so it seems...?
 #debug_file=open(Path(tempfile.gettempdir())/"pythonimmediate_debug_textopy.txt", "w", encoding='u8', buffering=2)
 #debug=functools.partial(print, file=debug_file, flush=True)
 debug=lambda *args, **kwargs: None
@@ -62,6 +61,7 @@ if args.mode=="multiprocessing-network":
 
 	def send_raw(s: str)->None:  # send_raw() should get pass the s = "⟨line⟩\n"
 		global connection
+		debug("======== sending", s)
 		connection.send_bytes(s.encode('u8'))
 
 elif args.mode=="unnamed-pipe":
@@ -76,6 +76,7 @@ elif args.mode=="unnamed-pipe":
 
 	def send_raw(s: str)->None:
 		global connection_
+		debug("======== sending", s)
 		connection_.write(s)
 		connection_.flush()  # just in case
 
@@ -91,6 +92,7 @@ pythonimmediate.__file__="pythonimmediate.py"
 sys.modules["pythonimmediate"]=pythonimmediate
 
 pythonimmediate.debugging=True
+pythonimmediate.debug=debug
 
 def export_function_to_module(f: Callable)->Callable:
 	"""
@@ -463,6 +465,7 @@ r"""
 
 		\def \^ ##1 ##2        { \csname ##1 \expandafter \expandafter \expandafter \endcsname \char_generate:nn {`##2-64} {12} }
 		\def \> ##1 ##2 \cO\   { \csname ##1 \endcsname ##2  \cU\  }
+		\def \* ##1 ##2 \cO\  ##3 { \csname ##1 \endcsname ##2  \char_generate:nn {`##3-64} {12} }
 		\def \\ ##1 \cO\   ##2 { \expandafter \noexpand \csname ##1 \endcsname                                  \csname ##2 \endcsname }
 		\def \1 ##1        ##2 { \char_generate:nn {`##1} {1}                                                   \csname ##2 \endcsname }
 		\def \2 ##1        ##2 { \char_generate:nn {`##1} {2}                                                   \csname ##2 \endcsname }
@@ -522,6 +525,13 @@ r"""
 %	\errmessage { endwrite~token~not~supported }
 %}
 
+\cs_new:Npn \__prefix_escaper #1 {
+	\int_compare:nNnT {`#1} < {33} { * }
+}
+\cs_new:Npn \__content_escaper #1 {
+	\int_compare:nNnTF {`#1} < {33} { \cStr\  \char_generate:nn {`#1+64} {12} } {#1}
+}
+
 \cs_new_protected:Npn \__continue_after_edef #char #cat #callback {
 	\token_if_eq_charcode:NNTF #cat 0 {
 		\tl_if_eq:NNTF \__the_token \__frozen_relax_container {
@@ -531,7 +541,11 @@ r"""
 				#callback {\cStr{ \\\  }}
 			} {
 				\tl_set:Nx \__name { \expandafter \cs_to_str:N \__the_token }
-				\exp_args:Nx #callback { \prg_replicate:nn {\str_count_spaces:N \__name} {>}  \cStr\\ \__name \cStr\  }
+				\exp_args:Nx #callback {
+					\str_map_function:NN \__name \__prefix_escaper
+					\cStr\\
+					\str_map_function:NN \__name \__content_escaper
+					\cStr\  }
 			}
 		}
 	} {
@@ -638,10 +652,16 @@ class ControlSequenceToken(Token):
 	def __str__(self)->str:
 		if self.csname=="": return r"\csname\endcsname"
 		return "\\"+self.csname
+
 	def serialize(self)->str:
-		return ">"*self.csname.count(" ") + "\\" + self.csname + " "
+		return (
+				"*"*sum(1 for x in self.csname if ord(x)<33) +
+				"\\" +
+				"".join(' '+chr(ord(x)+64) if ord(x)<33 else x   for x in self.csname)
+				+ " ")
+
 	def repr1(self)->str:
-		return f"\\{self.csname}"
+		return f"\\" + repr(self.csname.replace(' ', "␣"))[1:-1]
 
 
 ControlSequenceToken.make=ControlSequenceTokenMaker("")
@@ -958,18 +978,26 @@ class TokenList(TokenListBaseClass):
 	def deserialize(cls: Type[TokenListType], data: str)->TokenListType:
 		result: List[Token]=[]
 		i=0
-		cs_skip_space_count=0
 		while i<len(data):
-			if data[i]==">":
-				cs_skip_space_count+=1
-				i+=1
-			elif data[i]=="\\":
-				j=data.index(' ', i+1)
-				for __ in range(cs_skip_space_count):
-					j=data.index(' ', j+1)
-				cs_skip_space_count=0
-				result.append(ControlSequenceToken(data[i+1:j]))
-				i=j+1
+
+			if data[i] in "\\>*":
+				start=data.find("\\", i)
+				pos=start+1
+				csname=""
+				for op in data[i:start]:
+					if op==">":
+						assert False
+					elif op=="*":
+						n=data.find(' ', pos)+2
+						csname+=data[pos:n-2]+chr(ord(data[n-1])-64)
+						pos=n
+					else:
+						assert False
+
+				i=data.find(' ', pos)+1
+				csname+=data[pos:i-1]
+				result.append(ControlSequenceToken(csname))
+
 			elif data[i]=="R":
 				result.append(frozen_relax_token)
 				i+=1

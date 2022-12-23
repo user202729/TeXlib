@@ -226,15 +226,31 @@ class Test(unittest.TestCase):
 				Catcode.letter('\\'),
 				Catcode.bgroup(' '),
 				Catcode.egroup(' '),
-				Catcode.active("\r"), Catcode.active("\n"),
-				Catcode.bgroup("\r"), Catcode.bgroup("\n"),
-				Catcode.egroup("\r"), Catcode.egroup("\n"),
-				Catcode.other ("\r"), Catcode.other ("\n"),
 				]:
 			with self.subTest(t=t):
 				t.put_next()
 				self.assertEqual(Token.peek_next(), t)
 				self.assertEqual(Token.get_next(), t)
+
+	def test_tokens_control_chars(self):
+		for s in [
+				chr(i)
+				for i in range(0, 33)
+				]:
+			for t in [
+				Catcode.active(s),
+				Catcode.bgroup(s),
+				Catcode.egroup(s),
+				Catcode.other (s),
+				ControlSequenceToken(s),
+				ControlSequenceToken(s+s),
+				]:
+				if s==chr(0) and isinstance(t, ControlSequenceToken):
+					continue  # LuaLaTeX bug https://tex.stackexchange.com/questions/640267/lualatex-does-not-handle-control-sequence-consist-of-a-single-null-character-cor
+				with self.subTest(s=s, t=t):
+					pythonimmediate.debug("trying token", t)
+					t.put_next()
+					assert Token.get_next()==t
 
 	def test_put_get_next(self):
 		pythonimmediate.put_next("a")
@@ -458,7 +474,7 @@ class Test(unittest.TestCase):
 
 
 suite = unittest.defaultTestLoader.loadTestsFromTestCase(Test)
-unittest.TextTestRunner().run(suite)
+unittest.TextTestRunner(failfast=True).run(suite)
 
 x=y=z=1
 \end{pycode}
