@@ -1467,6 +1467,73 @@ class PythonCallTeXFunctionType(Protocol):  # https://stackoverflow.com/question
 class PythonCallTeXSyncFunctionType(PythonCallTeXFunctionType, Protocol):  # https://stackoverflow.com/questions/57658879/python-type-hint-for-callable-with-variable-number-of-str-same-type-arguments
 	def __call__(self, *args: PyToTeXData)->Tuple[TeXToPyData, ...]: ...
 
+
+@dataclass(frozen=True)
+class Python_call_TeX_data:
+	TeX_code: str
+	recursive: bool
+	finish: bool
+	sync: Optional[bool]
+
+@dataclass(frozen=True)
+class Python_call_TeX_extra:
+	ptt_argtypes: Tuple[Type[PyToTeXData], ...]
+	ttp_argtypes: Optional[Tuple[Type[TeXToPyData], ...]]
+
+Python_call_TeX_defined: Dict[Python_call_TeX_data, Tuple[Python_call_TeX_extra, Callable]]={}
+
+def Python_call_TeX_local(TeX_code: str, *, recursive: bool=True, sync: Optional[bool]=None, finish: bool=False)->Callable:
+	data=Python_call_TeX_data(
+			TeX_code=TeX_code, recursive=recursive, sync=sync, finish=finish
+			)
+	return Python_call_TeX_defined[data][1]
+
+def build_Python_call_TeX(T: Type, TeX_code: str, *, recursive: bool=True, sync: Optional[bool]=None, finish: bool=False)->None:
+	assert T.__origin__ == typing.Callable[[], None].__origin__  # type: ignore
+	# might be typing.Callable or collections.abc.Callable depends on Python version
+	data=Python_call_TeX_data(
+			TeX_code=TeX_code, recursive=recursive, sync=sync, finish=finish
+			)
+	extra=Python_call_TeX_extra(
+			ptt_argtypes=T.__args__[:-1],
+			ttp_argtypes=T.__args__[-1].__args__,
+			)  # type: ignore
+	if data in Python_call_TeX_defined:
+		assert Python_call_TeX_defined[data][0]==extra
+	else:
+		code, result=define_Python_call_TeX(TeX_code=TeX_code, ptt_argtypes=[*extra.ptt_argtypes], ttp_argtypes=[*(extra.ttp_argtypes or [])],
+															  recursive=recursive, sync=sync, finish=finish,
+															  )
+		mark_bootstrap(code)
+		Python_call_TeX_defined[data]=extra, result
+
+def scan_Python_call_TeX(filename: str)->None:
+	"""
+	scan the file in filename for occurrences of typing.cast(T, Python_call_TeX_local(...)), then call build_Python_call_TeX(T, ...) for each occurrence.
+
+	Don't use on untrusted code.
+	"""
+	import ast
+	from copy import deepcopy
+	for node in ast.walk(ast.parse(Path(filename).read_text(), mode="exec")):
+		if isinstance(node, ast.Call):
+			if (
+					isinstance(node.func, ast.Attribute) and
+					isinstance(node.func.value, ast.Name) and
+					node.func.value.id == "typing" and
+					node.func.attr == "cast"
+					):
+				T = node.args[0]
+				if isinstance(node.args[1], ast.Call):
+					f_call = node.args[1]
+					if isinstance(f_call.func, ast.Name):
+						if f_call.func.id == "Python_call_TeX_local":
+							f_call=deepcopy(f_call)
+							assert isinstance(f_call.func, ast.Name)
+							f_call.func.id="build_Python_call_TeX"
+							f_call.args=[T]+f_call.args
+							eval(compile(ast.Expression(body=f_call), "<string>", "eval"))
+
 def define_Python_call_TeX(TeX_code: str, ptt_argtypes: List[Type[PyToTeXData]], ttp_argtypes: List[Type[TeXToPyData]],
 						   *,
 						   recursive: bool=True,
@@ -1581,6 +1648,8 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: List[Type[PyToTeXData]],
 		return tuple(result)
 
 	return TeX_code, f
+
+scan_Python_call_TeX(__file__)
 
 def define_Python_call_TeX_local(*args, **kwargs)->PythonCallTeXFunctionType:
 	"""
@@ -1701,19 +1770,20 @@ def run_tokenized_line_local(line: str, *, check_braces: bool=True, check_newlin
 	run_tokenized_line_local_(PTTTeXLine(line))
 
 
-run_tokenized_line_peek_=define_Python_call_TeX_local_sync(
-r"""
-\cs_new_protected:Npn %name% {
-	%read_arg0(\__data)%
-	\__data
-}
-""", [PTTTeXLine], [TTPEmbeddedLine])
 
 @export_function_to_module
 def run_tokenized_line_peek(line: str, *, check_braces: bool=True, check_newline: bool=True, check_continue: bool=True)->str:
 	check_line(line, braces=check_braces, newline=check_newline, continue_=(True if check_continue else None))
-	a=run_tokenized_line_peek_(PTTTeXLine(line))[0]
-	return str(a)
+	return typing.cast(
+			Callable[[PTTTeXLine], Tuple[TTPEmbeddedLine]],
+			Python_call_TeX_local(
+				r"""
+				\cs_new_protected:Npn %name% {
+					%read_arg0(\__data)%
+					\__data
+				}
+				""")
+			)(PTTTeXLine(line))[0]
 
 
 run_block_local_=define_Python_call_TeX_local(
