@@ -442,6 +442,16 @@ class Test(unittest.TestCase):
 				assert Token.get_next()==T.empty
 				assert Token.get_next()==t.no_blue
 
+	def test_outer_token(self)->None:
+		TokenList.doc(r"\outer\def\outertest{}").execute()
+
+		self.assertEqual(
+				TokenList.doc(r"\string}\string}\string\outertest\string{\string{").expand_x().str(),
+				r"}}\outertest{{")
+
+		T.outertest.put_next()
+		self.assertEqual(Token.get_next(), T.outertest)
+
 
 suite = unittest.defaultTestLoader.loadTestsFromTestCase(Test)
 unittest.TextTestRunner().run(suite)

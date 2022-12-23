@@ -434,7 +434,7 @@ class Token(NToken):
 					\cs_new_protected:Npn %name% {
 						\peek_analysis_map_inline:n {
 							\peek_analysis_map_break:n {
-								\__tlserialize_char_unchecked:nnNN {##1}{##2}##3 \__peek_next_callback: ##1 % (*)
+								\__tlserialize_char_unchecked:nNnN {##2}##3{##1} \__peek_next_callback: ##1 % (*)
 							}
 						}
 					}
@@ -471,8 +471,8 @@ r"""
 % here #1 is the target token list to store the result to, #2 is a string with the final '.'.
 \cs_new_protected:Npn \__tldeserialize_dot:Nn #1 #2 {
 	\begingroup
-		\tl_set:Nn \__tmp {#2}
-		\tl_replace_all:Nnn \__tmp {~} {\cO\ }
+		\tl_gset:Nn \__gtmp {#2}
+		\tl_greplace_all:Nnn \__gtmp {~} {\cO\ }
 
 		\def \start ##1 { \csname ##1 \endcsname }
 
@@ -492,31 +492,88 @@ r"""
 		\def \R ##1            { \cFrozenRelax                                                                  \csname ##1 \endcsname }
 
 		\let \. \empty
-
-		\exp_args:NNNx
-	\endgroup \tl_set:Nn #1 {\expandafter \start \__tmp}
+		\tl_gset:Nx \__gtmp {\expandafter \start \__gtmp}
+	\endgroup
+	\tl_set_eq:NN #1 \__gtmp
 }
 
-\cs_new_protected:Npn \__tlserialize_char_unchecked:nnNN #1 #2 #3 #4 {
-	% #1=token, #2=char code, #3=catcode, #4: callback (will be called exactly once and with nothing following the input stream)
-	\int_compare:nNnTF {#2} = {-1} {
-		% token is control sequence
-		\tl_if_eq:onTF {#1} {\cFrozenRelax} {
-			#4 {\cStr{ R }}
+"""
+
++
+
+# callback will be called exactly once with the serialized result
+# and, as usual, with nothing leftover following in the input stream
+
+# the token itself can be gobbled or \edef-ed to discard it.
+# if it's active outer or control sequence outer then gobble fails.
+# if it's { or } then edef fails.
+(
+
+r"""
+
+\cs_new_protected:Npn \__char_unchecked:nNnN #char #cat {
+	\int_compare:nNnTF {
+		\if #cat 1  1 \fi 
+		\if #cat 2  1 \fi 
+		0
+	} = {0} {
+		% it's neither 1 nor 2, can edef
+		\tl_set:Nn \__process_after_edef { \__continue_after_edef {#char} #cat }
+		\afterassignment \__process_after_edef
+		\edef \__the_token
+	} {
+		% it's either 1 or 2
+		% might not be able to edef, but can gobble
+		\__process_gobble #cat
+	}
+}
+
+\def \__frozen_relax_container { \cFrozenRelax }
+\def \__null_cs_container { \cC{} }
+
+%\edef \__endwrite_container { \noexpand \cEndwrite }
+%\tl_if_eq:NnT \__endwrite_container { \cC{cEndwrite} } {
+%	\errmessage { endwrite~token~not~supported }
+%}
+
+\cs_new_protected:Npn \__continue_after_edef #char #cat #callback {
+	\token_if_eq_charcode:NNTF #cat 0 {
+		\tl_if_eq:NNTF \__the_token \__frozen_relax_container {
+			#callback {\cStr{ R }}
 		} {
-			\tl_if_eq:onTF {#1} { \cC{} } {
-				#4 {\cStr{ \\\  }}
+			\tl_if_eq:NNTF \__the_token \__null_cs_container {
+				#callback {\cStr{ \\\  }}
 			} {
-				\tl_set:Nx \__name { \expandafter \cs_to_str:N #1 }
-				\exp_args:Nx #4 { \prg_replicate:nn {\str_count_spaces:N \__name} {>}  \cStr\\ \__name \cStr\  }
+				\tl_set:Nx \__name { \expandafter \cs_to_str:N \__the_token }
+				\exp_args:Nx #callback { \prg_replicate:nn {\str_count_spaces:N \__name} {>}  \cStr\\ \__name \cStr\  }
 			}
 		}
 	} {
-		% token is not control sequence
-		% (hex catcode) (character) (or escape sequence with that character)
-		\exp_args:Nx #4 { #3 \expandafter \string #1 }
+		\exp_args:Nx #callback { #cat \expandafter \expandafter \expandafter \string \__the_token }
 	}
 }
+"""
+.replace("#char", "#1")
+.replace("#cat", "#2")
+.replace("#callback", "#3")
+
++
+
+r"""
+\cs_new_protected:Npn \__process_gobble #cat #token #callback {
+	\expandafter #callback \expandafter { \expandafter #cat
+			\exp:w \expandafter \expandafter \expandafter \exp_end: \expandafter \string #token }
+}
+"""
+.replace("#cat", "#1")
+.replace("#token", "#2")
+.replace("#callback", "#3")
+
+).replace("__", "__tlserialize_")
+
++
+
+r"""
 
 }
 
@@ -530,7 +587,7 @@ r"""
 	\tl_build_begin:N #1
 	\tl_set:Nn \__tlserialize_callback { \tl_build_put_right:Nn #1 }
 	\tl_analysis_map_inline:nn {#2} {
-		\__tlserialize_char_unchecked:nnNN {##1}{##2}##3 \__tlserialize_callback
+		\__tlserialize_char_unchecked:nNnN {##2}##3{##1} \__tlserialize_callback
 	}
 	\tl_build_end:N #1
 }
@@ -973,6 +1030,8 @@ class BalancedTokenList(TokenList):
 		"""
 		return BalancedTokenList(get_argument_tokenlist_()[0])  # type: ignore
 
+	def detokenize(self)->str:
+		return BalancedTokenList([T.detokenize, self]).expand_x().str()
 
 
 if typing.TYPE_CHECKING:
@@ -1751,11 +1810,12 @@ r"""
 
 get_next_=define_Python_call_TeX_local_sync(
 r"""
+\cs_new_protected:Npn \__get_next_callback #1 {
+	\peek_analysis_map_break:n { \pythonimmediatecontinue {#1} }
+}
 \cs_new_protected:Npn %name% {
 	\peek_analysis_map_inline:n {
-		\peek_analysis_map_break:n {
-			\__tlserialize_char_unchecked:nnNN {##1}{##2}##3 \pythonimmediatecontinue
-		}
+		\__tlserialize_char_unchecked:nNnN {##2}##3{##1} \__get_next_callback
 	}
 }
 """, [], [TTPEmbeddedLine], recursive=False)

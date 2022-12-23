@@ -1,4 +1,4 @@
-\ProvidesFile{pythonimmediate.tex}[2022/12/21 0.0.0 Library to run Python code]
+\ProvidesFile{pythonimmediate.tex}[2022/12/23 0.0.0 Library to run Python code]
 \RequirePackage{fvextra}
 \documentclass{l3doc}
 \usepackage{tikz}
@@ -47,7 +47,7 @@ There's also debugging functionalities -- \TeX\ errors results in Python traceba
 Errors in code executed with the |pycode| environment gives the correct traceback point to the Python line of code in the \TeX\ file.
 
 For advanced users, this package allows the user to manipulate the \TeX\ state directly from within Python,
-so you don't need to write a single line of Python code.
+so you don't need to write a single line of \TeX\ code.
 
 \section{Installation}
 
@@ -444,30 +444,46 @@ These are some examples of what could happen in the communication protocol.
 	\path (p) ++ (0, -\step) coordinate (p);
 }
 
+\def\initDrawing{
+	\path (\blockWidth, \fpEval{-\step}) coordinate (p);
+}
+
+\newdimen \tempx
+\newdimen \tempy
+
+\ExplSyntaxOn
+\let \dimToDecimalInUnit \dim_to_decimal_in_unit:nn 
+\ExplSyntaxOff
+
 \def\drawBlocks{
-	\draw (0, 0) rectangle (\blockWidth, \blockHeight);
-	\draw (\fpEval{\blockWidth+\separation}, 0) rectangle (\fpEval{\separation+2*\blockWidth}, \blockHeight);
-	\path (\blockWidth, \fpEval{\blockHeight-\step}) coordinate (p);
+    \path [transform canvas] (p);
+	\pgfgetlastxy{\tempx}{\tempy}
+	\edef\blockHeight{ \fpEval{ - \dimToDecimalInUnit{\tempy}{1cm}  } }
+
+	\draw (0, \fpEval{-\blockHeight}) rectangle node [rotate=90] {\TeX} (\blockWidth, 0);
+	\draw (\fpEval{\blockWidth+\separation}, \fpEval{-\blockHeight}) rectangle node [rotate=270] {Python} (\fpEval{\separation+2*\blockWidth}, 0);
 }
 
 \vspace{5pt}
 \begin{tikzpicture}
 \edef\blockHeight{\fpEval{\step*3}}
-\drawBlocks
+\initDrawing
 \right{execute Python code: print(1)}
 \left{execute \TeX\ code: 1}
+\drawBlocks
 \end{tikzpicture}
 
-Nevertheless, there may be mored complicated cases where the Python code itself may call \TeX\ code before actually returns:
+Nevertheless, there may be more complicated cases where the Python code itself may call \TeX\ code before actually returns:
 
 \vspace{5pt}
 \begin{tikzpicture}
 \edef\blockHeight{\fpEval{\step*5}}
-\drawBlocks
+\initDrawing
 \right{execute Python code: print(var(a)*2)}
 \left{execute \TeX\ code: sendtopy(a); execute another command}
 \right{123}
 \left{execute \TeX\ code: 123123}
+\drawBlocks
 \end{tikzpicture}
 
 Or:
@@ -475,18 +491,19 @@ Or:
 \vspace{5pt}
 \begin{tikzpicture}
 \edef\blockHeight{\fpEval{\step*7}}
-\drawBlocks
+\initDrawing
 \right{execute Python code: tex.exec(a=456); print(var(a)*2)}
 \left{execute \TeX\ code: a=456; sendtopy(done); execute another command}
 \right{done}
 \left{execute \TeX\ code: sendtopy(a); execute another command}
 \right{456}
 \left{456456}
+\drawBlocks
 \end{tikzpicture}
 
+\endgroup
 
-An example where the commands are nested follows. It shows that the Python side must not just listen for "done"
-command back, but must potentially call a nested loop.
+The Python side must not just listen for "done" command back, but must potentially call a nested loop.
 
 The exact protocol is:
 \begin{itemize}

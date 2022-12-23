@@ -1,5 +1,5 @@
 %%! TEX program = lualatex
-\ProvidesFile{saveenv.tex} [2022/07/08 v0.0.0 ]
+\ProvidesFile{saveenv.tex} [2022/12/23 v0.0.1 ]
 \documentclass{l3doc}
 \EnableCrossrefs
 \CodelineIndex
@@ -42,7 +42,7 @@ This package provides tools to create your own verbatim environments, and works 
 \begin{itemize}
 	\item \pkg{scontents} package is similar; however it does not allow programmer to programmatically retrieve the macro content, only do a limited number of actions with them (execute, typeset as verbatim code, etc.).
 	\item \pkg{fancyvrb}, \pkg{xsimverb} and \pkg{verbatimcopy} provides some internal macro for defining similar environments, however they're internal and/or too specialized (writes to file etc.).
-	\item \pkg{filecontentsdef} and \pkg{newverbs} provides very similar facilities (\env{filecontentsdefmacro} environment and \tn{Collectverbenv} command respectively); however it requires \verb+\endlinechar=13+ and does not support |\ExplSyntaxOn| environment.
+	\item \pkg{filecontentsdef} and \pkg{newverbs} provides very similar facilities (\env{filecontentsdefmacro} environment and |\Collectverbenv| command respectively); however it requires |\endlinechar=13| and does not support |\ExplSyntaxOn| environment.
 	\item \pkg{verbatim} provides facilities to define custom verbatim environment that processes the content line-by-line, however the interface is more complicated.
 
 		For comparison, the following code
@@ -112,7 +112,7 @@ will make |\data| empty, and
 \end{verbatim}
 will make |\data| consist of a single \meta{newline}.
 
-The braces around \verb+{\data}+ is optional; however, in the unlikely case if \cs{endlinechar} has the \enquote{letter} catcode, it might be absorbed and gives unexpected result.
+The braces around |{\data}| is optional; however, in the unlikely case if \cs{endlinechar} has the \enquote{letter} catcode, it might be absorbed and gives unexpected result.
 
 A newline is represented as a token with charcode 10 (|^^J|) and catcode other.
 
@@ -162,7 +162,7 @@ Usage example: If the following code is executed
 \end{saveenvreinsert}
 some other content
 \end{verbatim}
-the effect would be identical to as if |\data| is set to \texttt{123\meta{newline}456},
+the effect would be identical to as if |\data| is set to \texttt{123\meta{newline}456\meta{newline}},
 then the following code is executed
 \begin{verbatim}
 \myfunction {args etc.}some other content
@@ -206,6 +206,8 @@ Note that in this case |\tl_show:N \data| is executed before the group ends.
 
 				Nevertheless, in modern computers, the overhead is negligible.
 			\item In case it's desired to typeset the content afterwards, it's difficult to preserve the Sync\TeX\ data.
+
+				(although with Lua\LaTeX\ it's possible, see \pkg{rescansync} package)
 		\end{itemize}
 		
 	\item Currently nested environments with the same name are not supported (unlike \pkg{scontents} package).
@@ -221,10 +223,9 @@ Note that in this case |\tl_show:N \data| is executed before the group ends.
 		Alternatively, you can 
 		\begin{itemize}
 			\item manually remove the end line token,
-			\item set \verb+\endlinechar=-1\relax+ before calling \cs{saveenv}
-			\item (optional) reset the value of \cs{endlinechar} afterwards.
-				
+			\item set |\endlinechar=-1\relax| inside the environment before calling \cs{saveenv}.
 		\end{itemize}
+		The value of |\endlinechar| will automatically be reset after the group of the environment is closed.
 \end{itemize}
 
 
