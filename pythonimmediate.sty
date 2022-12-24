@@ -20,21 +20,15 @@
 
 %\GenerateVariantsFile:n{\rescansynclastfilename}
 
-\str_set:Nn \_pythonimmediate_outputdir{.}
 \tl_set:Nn \_pythonimmediate_textopy_script_path{}
 \str_set:Nn \_pythonimmediate_mode{multiprocessing-network}
 \str_set:Nn \_pythonimmediate_python_executable{python3}
 \keys_define:nn{pythonimmediate}{
-	outputdir.tl_set_x:N=\_pythonimmediate_outputdir,
-	%outputdir.default:n={.},  % huh does not work?
-
 	mode.tl_set:N=\_pythonimmediate_mode,
-
 	python-executable.tl_set:N=\_pythonimmediate_python_executable,
 }
 \ProcessKeysOptions{pythonimmediate}
 
-\str_set:NV \_pythonimmediate_outputdir \_pythonimmediate_outputdir
 \str_set:NV \_pythonimmediate_mode \_pythonimmediate_mode
 \str_set:NV \_pythonimmediate_textopy_script_path \_pythonimmediate_textopy_script_path
 
@@ -55,48 +49,41 @@
 % we need to persistently open the file anyway, so using LaTeX3 stream reference counting doesn't help
 \newread \_pythonimmediate_read_file
 
-
-
-
 %\bench before~setup.
 
-\begingroup
-	\endlinechar=-1~
+\newwrite \_pythonimmediate_write_file
 
-	\newwrite \_pythonimmediate_write_file
+%\bench before~openin.
 
-	%\bench before~openin.
+% ======== open persistent pipes to the child processes
+\bool_if:NTF \_pythonimmediate_mode_unnamed_pipe {  % in this case make sure the pipe remains open...
+	\openin \_pythonimmediate_read_file=|"sleep~ 0.5s|\_pythonimmediate_python_executable \space -m ~ pythonimmediate.pytotex ~ \_pythonimmediate_mode"~  % we must use the primitive here to use the pipe file path
+	% TODO sleep infinity causes some resource leak (the process will not exit after TeX exits). Need to fix
+	% but sleep too little might be problematic that it exits before the setup is done
+	% we can just assume machines are not that slow
+} {
+	\openin \_pythonimmediate_read_file=|"\_pythonimmediate_python_executable \space -m ~ pythonimmediate.pytotex ~ \_pythonimmediate_mode"~  % we must use the primitive here to use the pipe file path
+}
 
-	% ======== open persistent pipes to the child processes
-	\bool_if:NTF \_pythonimmediate_mode_unnamed_pipe {  % in this case make sure the pipe remains open...
-		\openin \_pythonimmediate_read_file=|"sleep~ 0.5s|\_pythonimmediate_python_executable \space -m ~ pythonimmediate.pytotex ~ \_pythonimmediate_mode"~  % we must use the primitive here to use the pipe file path
-		% TODO sleep infinity causes some resource leak (the process will not exit after TeX exits). Need to fix
-		% but sleep too little might be problematic that it exits before the setup is done
-		% we can just assume machines are not that slow
-	} {
-		\openin \_pythonimmediate_read_file=|"\_pythonimmediate_python_executable \space -m ~ pythonimmediate.pytotex ~ \_pythonimmediate_mode"~  % we must use the primitive here to use the pipe file path
+\immediate\openout \_pythonimmediate_write_file=|"\_pythonimmediate_python_executable \space -m ~ pythonimmediate.main ~ \_pythonimmediate_mode \space"~
+% note that openout, even to shell, will append .tex if there's no dot in the command
+
+% both processes must be before the \readline below so that the 2 Python processes are started "in parallel"
+\ior_str_get:NN \_pythonimmediate_read_file \_pythonimmediate_dummy_line
+
+\bool_if:NT \_pythonimmediate_mode_multiprocessing_network {
+	\str_if_eq:VnF \_pythonimmediate_dummy_line {listener-setup-done} {
+		\msg_error:nn {pythonimmediate} {cannot-read-line}
 	}
-
-	\immediate\openout \_pythonimmediate_write_file=|"\_pythonimmediate_python_executable \space -m ~ pythonimmediate.main ~ \_pythonimmediate_mode \space"~
-	% note that openout, even to shell, will append .tex if there's no dot in the command
-
-	% both processes must be before the \readline below so that the 2 Python processes are started "in parallel"
-	\readline \_pythonimmediate_read_file to \_pythonimmediate_dummy_line  % endlinechar still -1
-
-	\bool_if:NT \_pythonimmediate_mode_multiprocessing_network {
-		\str_if_eq:VnF \_pythonimmediate_dummy_line {listener-setup-done} {
-			\msg_error:nn {pythonimmediate} {cannot-read-line}
-		}
+}
+\bool_if:NT \_pythonimmediate_mode_unnamed_pipe {
+	\str_if_in:VnF \_pythonimmediate_dummy_line {pytotex_pid=} {
+		\msg_error:nn {pythonimmediate} {cannot-read-line}
 	}
-	\bool_if:NT \_pythonimmediate_mode_unnamed_pipe {
-		\str_if_in:VnF \_pythonimmediate_dummy_line {pytotex_pid=} {
-			\msg_error:nn {pythonimmediate} {cannot-read-line}
-		}
-	}
-	\bool_if:NT \_pythonimmediate_mode_unnamed_pipe {
-		\immediate\write\_pythonimmediate_write_file {\_pythonimmediate_dummy_line}  % which contains pytotex's pid
-	}
-\endgroup
+}
+\bool_if:NT \_pythonimmediate_mode_unnamed_pipe {
+	\immediate\write\_pythonimmediate_write_file {\_pythonimmediate_dummy_line}  % which contains pytotex's pid
+}
 
 %\bench after~setup.
 

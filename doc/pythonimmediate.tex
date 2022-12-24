@@ -53,11 +53,16 @@ so you don't need to write a single line of \TeX\ code.
 
 %You need to install Python \pkg{daemoniker} and \pkg{psutil} package.
 
-The package should work out of the box with no additional Python package needed.
+In addition to the \LaTeX\ package, you need the Python \pkg{pythonimmediate-tex} package,
+installation instruction can be found at \url{https://pypi.org/project/pythonimmediate-tex/}.
 
-\subsection{Installation on Overleaf}
+\subsection{Installation on Overleaf}\label{installation-on-overleaf}
 
 At the point of writing, this package can be used on Overleaf.
+
+Nevertheless, you cannot use |pip| to install Python packages on Overleaf directly, instead it's possible to
+download |.zip| file, include it in your Overleaf project, and specify where the package can be found to Python
+using |PYTHONPATH| environment variable.
 
 Instruction:
 
@@ -67,14 +72,27 @@ Instruction:
 			\item \file{saveenv.sty}
 			\item \file{precattl.sty}
 			\item \file{pythonimmediate.sty}
-			\item \file{pythonimmediate_script_textopy.py}
-			\item \file{pythonimmediate_script_pytotex.py}
+			\item \file{pythonimmediate-tex-0.0.1.zip}
 		\end{itemize}
+		The |0.0.1| part should be replaced with the desired version
+		of the Python package.
+
+		The |.sty| files can be downloaded from CTAN at 
+		\url{https://ctan.org/pkg/saveenv},
+		\url{https://ctan.org/pkg/precattl},
+		\url{https://ctan.org/pkg/pythonimmediate}
+		respectively.
+
+		The |.zip| file containing Python source code
+		can be downloaded from PyPI: \url{https://pypi.org/project/pythonimmediate-tex/\#files}.
+
 	\item Write the following in the preamble:
 \begin{verbatim}
 \usepackage[abspath]{currfile}
-\usepackage[mode=unnamed-pipe]{pythonimmediate}
+\usepackage[python-executable={PYTHONPATH=pythonimmediate-tex-0.0.1.zip/pythonimmediate-tex-0.0.1/ python3},mode=unnamed-pipe]{pythonimmediate}
 \end{verbatim}
+As above, replace |0.0.1| with the downloaded version specified in the zip file above.
+
 Refer to \ref{troubleshoot-source-file-not-found} for explanation of the |abspath| option.
 \end{itemize}
 
@@ -88,28 +106,16 @@ Refer to \ref{troubleshoot-Python-error} to read the error traceback in case of 
 
 \subsection{Package options}
 
-\DescribeOption{outputdir=}
-Specify the output directory if it's not the default value.
-
-\begin{texnote}
-	The value will be |x|-expanded.
-\end{texnote}
-
-Using the \pkg{outputdir} package, it's possible to determine the output directory automatically, subject to restrictions.
-
-An usage example, if you invoked |pdflatex| with the command
-\begin{verbatim}
-pdflatex --output-directory=/tmp/ a.tex
-\end{verbatim}
-then in the file \file{a.tex} you should have
-\begin{verbatim}
-\usepackage[outputdir=/tmp/]{pythonimmediate}
-\end{verbatim}
-
 \DescribeOption{mode=}
 Method to communicate between \TeX\ and Python. Usually the method will be automatically detected.
 
 Possible values include |multiprocessing-network| and |unnamed-pipe|.
+
+\DescribeOption{python-executable=}
+The name/path to the Python executable. Default to "python3".
+
+Can also be used to provide environment variables to the Python process.
+An example how to do that is explained in \ref{installation-on-overleaf}.
 
 \subsection{\TeX\ interface}
 
