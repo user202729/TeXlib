@@ -1473,10 +1473,13 @@ def run_code_redirect_print_TeX(f: Callable[[], Any])->None:
 		content=t.getvalue()
 		if content.endswith("\n"):
 			content=content[:-1]
+		elif not content:
+			run_none_finish()
+			return
 		else:
 			#content+=r"\empty"  # this works too
 			content+="%"
-		pythonimmediate.run_block_finish(content)
+		run_block_finish(content)
 
 @define_internal_handler
 def pyc(code: TTPEBlock)->None:
