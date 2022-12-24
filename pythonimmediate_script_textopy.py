@@ -388,6 +388,18 @@ class Token(NToken):
 	@abstractmethod
 	def serialize(self)->str: ...
 
+	def value(self)->"BalancedTokenList":
+		"""
+		given self is a TokenList variable, return the content.
+		"""
+		return BalancedTokenList([self]).expand_o()
+
+	def value_str(self)->str:
+		"""
+		given self is a str variable, return the content.
+		"""
+		return self.value().str()
+
 	@property
 	def blue(self)->"BlueToken": return BlueToken(self)
 
@@ -715,6 +727,8 @@ class CharacterToken(Token):
 	def chr(self)->str:
 		return chr(self.index)
 	def __post_init__(self)->None:
+		assert isinstance(self.index, int)
+		assert self.index>=0
 		assert self.catcode.for_token
 	def __str__(self)->str:
 		return self.chr

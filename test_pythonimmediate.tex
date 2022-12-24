@@ -27,7 +27,8 @@ import sys
 print("======== test stdout ========")
 print("======== test stderr ========", file=sys.stderr)
 
-print=pythonimmediate.print
+#print=pythonimmediate.print
+printT=pythonimmediate.print
 pythonimmediate.run_tokenized_line_local(r'\pretty:n {2.a}')
 \end{pycode}
 
@@ -76,14 +77,14 @@ r'\pretty:n{9.}'
 
 x=\py{x}.
 
-% \pyc{print("%")}  % ← error!
+% \pyc{printT("%")}  % ← error!
 
-x=\pyc{print(str(x), end="")}.  % without trailing space. Note that this requires % to have the "comment" catcode.
+x=\pyc{printT(str(x), end="")}.  % without trailing space. Note that this requires % to have the "comment" catcode.
 
-x=\pyc{print(str(x))}.  % there's an extra space.
+x=\pyc{printT(str(x))}.  % there's an extra space.
 
 \begin{pycode}
-print("11.\n", file=sys.stderr)
+print("11.\n")
 \end{pycode}
 
 % ======== test empty code block
@@ -98,6 +99,10 @@ import unittest
 from pythonimmediate import Token, TokenList, BalancedTokenList, Catcode, ControlSequenceToken, frozen_relax_token, BlueToken, NTokenList
 from pythonimmediate import Catcode as C
 T=ControlSequenceToken.make
+
+engine: str=T.c_sys_engine_str.value_str()
+assert engine in ["pdftex", "xetex", "luatex"]
+is_unicode: bool=engine in ["xetex", "luatex"]
 
 class Test(unittest.TestCase):
 	def test_simple_run_tokenized_line_local(self)->None:
@@ -155,7 +160,7 @@ class Test(unittest.TestCase):
 			self.assertEqual(pythonimmediate.get_optional_arg_str(), None)
 			self.assertEqual(pythonimmediate.get_verb_arg(), "gh")
 			self.assertEqual(pythonimmediate.get_multiline_verb_arg(), "ijk\nlm")
-			print("123", end="")
+			printT("123", end="")
 			return "456"
 
 		pythonimmediate.run_tokenized_line_local("789%")
@@ -177,11 +182,9 @@ class Test(unittest.TestCase):
 			x=1
 
 			a=BalancedTokenList.get_next()
-			print(f"{a=}", file=sys.stderr)
 
 			pythonimmediate.put_next(r'{123}')
 			b=BalancedTokenList.get_next()
-			print(f"{b=}", file=sys.stderr)
 
 			pythonimmediate.put_next(r'{1 a\relax}')
 			for t, meaning in [
@@ -199,7 +202,6 @@ class Test(unittest.TestCase):
 
 			pythonimmediate.put_next(a)
 			c=BalancedTokenList.get_next()
-			print(f"{c=}", file=sys.stderr)
 
 			self.assertEqual(c, a[1:-1])
 
@@ -235,7 +237,7 @@ class Test(unittest.TestCase):
 	def test_tokens_control_chars(self):
 		for s in [
 				chr(i)
-				for i in range(0, 33)
+				for i in range(0, (700 if is_unicode else 128))
 				]:
 			for t in [
 				Catcode.active(s),
@@ -245,12 +247,14 @@ class Test(unittest.TestCase):
 				ControlSequenceToken(s),
 				ControlSequenceToken(s+s),
 				]:
-				if s==chr(0) and isinstance(t, ControlSequenceToken):
-					continue  # LuaLaTeX bug https://tex.stackexchange.com/questions/640267/lualatex-does-not-handle-control-sequence-consist-of-a-single-null-character-cor
+				if engine=="luatex" and t in [ControlSequenceToken("\x00"), ControlSequenceToken("\x00\x00")]:
+					continue  # LuaTeX bug fixed upstream https://tex.stackexchange.com/questions/640267/lualatex-does-not-handle-control-sequence-consist-of-a-single-null-character-cor
+				if engine=="pdftex" and t==Catcode.active(0x0c):
+					continue
 				with self.subTest(s=s, t=t):
 					pythonimmediate.debug("trying token", t)
 					t.put_next()
-					assert Token.get_next()==t
+					self.assertEqual(Token.get_next(), t)
 
 	def test_put_get_next(self):
 		pythonimmediate.put_next("a")
@@ -338,12 +342,12 @@ class Test(unittest.TestCase):
 				]:
 			t=TokenList.doc(s)
 			parts=t.balanced_parts()
-			assert t==[x for part in parts for x in (part if isinstance(part, BalancedTokenList) else [part])]
+			self.assertEqual(t, [x for part in parts for x in (part if isinstance(part, BalancedTokenList) else [part])])
 			for part in parts:
 				if isinstance(part, Token):
-					assert part.degree()!=0
+					self.assertNotEqual(part.degree(), 0)
 				else:
-					assert len(part)!=0
+					self.assertNotEqual(len(part), 0)
 
 			t.put_next()
 			for x in t:
