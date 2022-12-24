@@ -85,11 +85,8 @@ else:
 
 # ======== done.
 
-# https://stackoverflow.com/questions/5122465/can-i-fake-a-package-or-at-least-a-module-in-python-for-testing-purposes
-from types import ModuleType
-pythonimmediate: Any=ModuleType("pythonimmediate")
-pythonimmediate.__file__="pythonimmediate.py"
-sys.modules["pythonimmediate"]=pythonimmediate
+pythonimmediate: Any
+import pythonimmediate  # type: ignore
 
 pythonimmediate.debugging=True
 pythonimmediate.debug=debug
@@ -1642,7 +1639,7 @@ def build_Python_call_TeX(T: Type, TeX_code: str, *, recursive: bool=True, sync:
 		mark_bootstrap(code)
 		Python_call_TeX_defined[data]=extra, result
 
-def scan_Python_call_TeX(filename: str)->None:
+def scan_Python_call_TeX(sourcecode: str)->None:
 	"""
 	scan the file in filename for occurrences of typing.cast(T, Python_call_TeX_local(...)), then call build_Python_call_TeX(T, ...) for each occurrence.
 
@@ -1650,7 +1647,7 @@ def scan_Python_call_TeX(filename: str)->None:
 	"""
 	import ast
 	from copy import deepcopy
-	for node in ast.walk(ast.parse(Path(filename).read_text(), mode="exec")):
+	for node in ast.walk(ast.parse(sourcecode, mode="exec")):
 		try:
 			if isinstance(node, ast.Call):
 				if (
@@ -1788,7 +1785,7 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: List[Type[PyToTeXData]],
 
 	return TeX_code, f
 
-scan_Python_call_TeX(__file__)
+scan_Python_call_TeX(inspect.getsource(sys.modules[__name__]))
 
 def define_Python_call_TeX_local(*args, **kwargs)->PythonCallTeXFunctionType:
 	"""
