@@ -67,7 +67,7 @@ if args.mode=="multiprocessing-network":
 elif args.mode=="unnamed-pipe":
 	pytotex_pid_line=raw_readline()
 	match_=re.fullmatch("pytotex_pid=(\d+)\n", pytotex_pid_line)
-	assert match_
+	assert match_, pytotex_pid_line
 	pytotex_pid=int(match_[1])
 
 	connection_=open("/proc/" + str(pytotex_pid) + "/fd/0", "w", encoding='u8',

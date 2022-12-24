@@ -29,7 +29,6 @@
 	%outputdir.default:n={.},  % huh does not work?
 
 	mode.tl_set:N=\_pythonimmediate_mode,
-	scriptpath.tl_set_x:N=\_pythonimmediate_textopy_script_path,
 
 	python-executable.tl_set:N=\_pythonimmediate_python_executable,
 }
@@ -40,7 +39,6 @@
 \str_set:NV \_pythonimmediate_textopy_script_path \_pythonimmediate_textopy_script_path
 
 \msg_new:nnn {pythonimmediate} {shell-fail} {Shell~command~execution~failed!}
-\msg_new:nnn {pythonimmediate} {cannot-determine-script-path} {Cannot~determine~script~path!}
 \msg_new:nnn {pythonimmediate} {cannot-read-line} {Cannot~read~line!}
 \msg_new:nnn {pythonimmediate} {internal-error} {Internal~error!}
 \msg_new:nnn {pythonimmediate} {invalid-mode} {Invalid~mode:~'#1'.}
@@ -64,20 +62,6 @@
 
 \begingroup
 	\endlinechar=-1~
-	\tl_if_empty:NT \_pythonimmediate_textopy_script_path {
-		% ======== first use kpsewhich to get the _pythonimmediate_script_path here ========
-		% (abuse \_pythonimmediate_read_file variable for this purpose)
-		\openin \_pythonimmediate_read_file=|"kpsewhich~ pythonimmediate_script_textopy.py"~
-		\readline \_pythonimmediate_read_file to \_pythonimmediate_textopy_script_path
-		%\bench after~get~textopy~path.
-		\ifeof \_pythonimmediate_read_file
-			\msg_error:nn {pythonimmediate} {cannot-determine-script-path}
-		\fi
-	}
-
-	\str_if_eq:xnF {\str_range:Vnn \_pythonimmediate_textopy_script_path {-10} {-1}} {textopy.py} {
-		\msg_error:nn {pythonimmediate} {cannot-determine-script-path}
-	}
 
 	\newwrite \_pythonimmediate_write_file
 
@@ -85,23 +69,20 @@
 
 	% ======== open persistent pipes to the child processes
 	\bool_if:NTF \_pythonimmediate_mode_unnamed_pipe {  % in this case make sure the pipe remains open...
-		\openin \_pythonimmediate_read_file=|"sleep~ 0.5s|\_pythonimmediate_python_executable \space \str_range:Vnn \_pythonimmediate_textopy_script_path {1} {-11} pytotex.py \space \_pythonimmediate_mode"~  % we must use the primitive here to use the pipe file path
+		\openin \_pythonimmediate_read_file=|"sleep~ 0.5s|\_pythonimmediate_python_executable \space -m ~ pythonimmediate.pytotex ~ \_pythonimmediate_mode"~  % we must use the primitive here to use the pipe file path
 		% TODO sleep infinity causes some resource leak (the process will not exit after TeX exits). Need to fix
 		% but sleep too little might be problematic that it exits before the setup is done
 		% we can just assume machines are not that slow
 	} {
-		\openin \_pythonimmediate_read_file=|"\_pythonimmediate_python_executable \space \str_range:Vnn \_pythonimmediate_textopy_script_path {1} {-11} pytotex.py \space \_pythonimmediate_mode"~  % we must use the primitive here to use the pipe file path
+		\openin \_pythonimmediate_read_file=|"\_pythonimmediate_python_executable \space -m ~ pythonimmediate.pytotex ~ \_pythonimmediate_mode"~  % we must use the primitive here to use the pipe file path
 	}
 
-	%\bench after~openin.
+	\immediate\openout \_pythonimmediate_write_file=|"\_pythonimmediate_python_executable \space -m ~ pythonimmediate.main ~ \_pythonimmediate_mode \space"~
+	% note that openout, even to shell, will append .tex if there's no dot in the command
 
-	%\bench before~openout.
-	\immediate\openout \_pythonimmediate_write_file=|"\_pythonimmediate_python_executable \space \_pythonimmediate_textopy_script_path \space \_pythonimmediate_mode"~
-	% both processes must be before the \readline above so that the 2 Python processes are started "in parallel"
-	%\bench after~openout.
-
+	% both processes must be before the \readline below so that the 2 Python processes are started "in parallel"
 	\readline \_pythonimmediate_read_file to \_pythonimmediate_dummy_line  % endlinechar still -1
-	%\bench after~read~line.
+
 	\bool_if:NT \_pythonimmediate_mode_multiprocessing_network {
 		\str_if_eq:VnF \_pythonimmediate_dummy_line {listener-setup-done} {
 			\msg_error:nn {pythonimmediate} {cannot-read-line}
