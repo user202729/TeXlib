@@ -60,21 +60,12 @@ def export_function_to_module(f: FunctionType)->FunctionType:
 	setattr(pythonimmediate, f.__name__, f)
 	return f
 
-action_done=False
-
-
-def check_not_finished()->None:
-	global action_done
-	if action_done:
-		raise RuntimeError("can only do one action per block!")
-
 def send_raw(s: str, engine: Engine)->None:
 	engine.write(s.encode('u8'))
 
 def send_finish(s: str, engine: Engine)->None:
-	check_not_finished()
-	global action_done
-	action_done=True
+	engine.check_not_finished()
+	engine.action_done=True
 	assert s.endswith("\n")
 	send_raw(s, engine=engine)
 
@@ -86,10 +77,9 @@ def surround_delimiter(block: str)->str:
 		if delimiter not in block: break
 	return delimiter + "\n" + block + "\n" + delimiter + "\n"
 
-bootstrap_code: Optional[str]=""
+bootstrap_code: str=""
 def mark_bootstrap(code: str)->None:
 	global bootstrap_code
-	assert bootstrap_code is not None
 	bootstrap_code+=code
 
 def substitute_private(code: str)->str:
@@ -99,10 +89,7 @@ def substitute_private(code: str)->str:
 		 )
 
 def send_bootstrap_code(engine: Engine)->None:
-	global bootstrap_code
-	assert bootstrap_code is not None
 	send_raw(surround_delimiter(substitute_private(bootstrap_code)), engine=engine)
-	bootstrap_code = None
 
 # ========
 
@@ -118,7 +105,6 @@ r"""
 	\begingroup
 		\endlinechar=-1~
 		\readline \__read_file to \__line
-		\wlog{debug just read command \__line}
 		\expandafter
 	\endgroup % also this will give an error instead of silently do nothing when command is invalid
 		\csname __run_ \__line :\endcsname
@@ -1270,7 +1256,7 @@ class PTTBlock(PyToTeXData):
 @dataclass
 class PTTBalancedTokenList(PyToTeXData):
 	data: BalancedTokenList
-	read_code=r"\__str_get:N {0}   \wlog{{read {0}, going to deserialize}}   \__tldeserialize_dot:NV {0} {0}".format
+	read_code=r"\__str_get:N {0}  \__tldeserialize_dot:NV {0} {0}".format
 	def write(self, engine: Engine)->None:
 		PTTVerbatimLine(self.data.serialize()+".").write(engine=engine)
 
@@ -1321,25 +1307,24 @@ def define_TeX_call_Python(f: Callable[..., None], name: Optional[str]=None, arg
 		args=[argtype.read(engine=engine) for argtype in argtypes]
 
 
-		global action_done
-		old_action_done=action_done
+		old_action_done=engine.action_done
 
-		action_done=False
+		engine.action_done=False
 		try:
 			f(*args, engine=engine)
 		except:
-			if action_done:
+			if engine.action_done:
 				# error occurred after 'finish' is called, cannot signal the error to TeX, will just ignore (after printing out the traceback)...
 				pass
 			else:
 				# TODO what should be done here? What if the error raised below is caught
-				action_done=True
+				engine.action_done=True
 			raise
 		finally:
-			if not action_done:
+			if not engine.action_done:
 				run_none_finish(engine=engine)
 		
-			action_done=old_action_done
+			engine.action_done=old_action_done
 
 
 	TeX_handlers[identifier]=g
@@ -1369,6 +1354,7 @@ def define_internal_handler(f: Callable)->Callable:
 	define a TeX function with TeX name = f.__name__ that calls f().
 
 	this does not define the specified function in any particular engine, just add them to the bootstrap_code.
+		essert self.process is not None, "process is already closed!"
 	"""
 	mark_bootstrap(define_TeX_call_Python(f))
 	return f
@@ -1754,10 +1740,9 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: List[Type[PyToTeXData]],
 		assert len(args)==len(ptt_argtypes)
 
 		# send function header
-		check_not_finished()
+		engine.check_not_finished()
 		if finish:
-			global action_done
-			action_done=True
+			engine.action_done=True
 		send_raw(identifier+"\n", engine=engine)
 
 		# send function args
@@ -2393,7 +2378,7 @@ def parent_process_main():
 		traceback.print_exc(file=sys.stderr)
 
 		if do_run_error_finish:
-			action_done=False  # force run it
+			engine.action_done=False  # force run it
 			run_error_finish(PTTBlock("".join(traceback.format_exc())), engine=engine)
 
 		os._exit(0)
