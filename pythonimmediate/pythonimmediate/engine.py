@@ -161,7 +161,7 @@ class ChildProcessEngine(Engine):
 		# create a sym link from /dev/stderr to /tmp/.tex-stderr
 		# because TeX can only write to files that contain a period
 		#from pathlib import Path
-		#import tempfile
+		import tempfile
 		#target=Path(tempfile.gettempdir())/"symlink-to-stderr.txt"
 		#try:
 		#	target.symlink_to(Path("/dev/stderr"))
@@ -177,7 +177,7 @@ class ChildProcessEngine(Engine):
 				#stdout=subprocess.PIPE,  # we don't need the stdout
 				stdout=subprocess.DEVNULL,
 				stderr=subprocess.PIPE,
-				#cwd=tempfile.gettempdir(),
+				cwd=tempfile.gettempdir(),
 				)
 
 		from .textopy import surround_delimiter, send_raw, substitute_private

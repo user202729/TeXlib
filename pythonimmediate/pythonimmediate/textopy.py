@@ -165,7 +165,7 @@ def run_main_loop_get_return_one(engine: Engine)->str:
 
 
 user_documentation(
-"""
+r"""
 All exported functions can be accessed through the module as |import pythonimmediate|.
 
 The |_finish| functions are internal functions, which must be called \emph{at most} once in each
@@ -196,7 +196,7 @@ def run_block_finish(block: str, engine: Engine=  default_engine)->None:
 @user_documentation
 @export_function_to_module
 def execute(block: str, engine: Engine)->None:
-	"""
+	r"""
 	Run a block of \TeX\ code (might consist of multiple lines).
 	Catcode-changing commands are allowed inside.
 
@@ -246,7 +246,7 @@ def readline(engine: Engine)->str:
 block_delimiter: str="pythonimm?\"\"\"?'''?"
 
 def read_block(engine: Engine)->str:
-	"""
+	r"""
 	Internal function to read one block sent from \TeX\ (including the final delimiter line,
 	but the delimiter line is not returned)
 	"""
@@ -364,7 +364,7 @@ class Token(NToken):
 
 	@staticmethod
 	def get_next(engine: Engine=  default_engine)->"Token":
-		"""
+		r"""
 		Get the following token.
 
 		Note: in LaTeX3 versions without the commit |https://github.com/latex3/latex3/commit/24f7188904d6|
@@ -1185,7 +1185,7 @@ class TTPBlock(TeXToPyData, str):
 		return TTPBlock(read_block(engine=engine))
 
 class TTPEBlock(TeXToPyData, str):
-	"""
+	r"""
 	A kind of argument that interprets "escaped string" and fully expand anything inside.
 	For example, {\\} sends a single backslash to Python, {\{} sends a single '{' to Python.
 	Done by fully expand the argument in \escapechar=-1 and convert it to a string.
@@ -1216,7 +1216,7 @@ class PyToTeXData(ABC):
 
 @dataclass
 class PTTVerbatimLine(PyToTeXData):
-	"""
+	r"""
 	Represents a line to be tokenized verbatim. Internally the |\readline| primitive is used, as such, any trailing spaces are stripped.
 	The trailing newline is not included, i.e. it's read under |\endlinechar=-1|.
 	"""
@@ -1236,7 +1236,7 @@ class PTTInt(PyToTeXData):
 
 @dataclass
 class PTTTeXLine(PyToTeXData):
-	"""
+	r"""
 	Represents a line to be tokenized in \TeX's current catcode regime.
 	The trailing newline is not included, i.e. it's tokenized under |\endlinechar=-1|.
 	"""
@@ -1280,7 +1280,7 @@ def get_random_identifier()->str:
 
 
 def define_TeX_call_Python(f: Callable[..., None], name: Optional[str]=None, argtypes: Optional[List[Type[TeXToPyData]]]=None, identifier: Optional[str]=None)->str:
-	"""
+	r"""
 	This function setups some internal data structure, and
 	returns the \TeX\ code to be executed on the \TeX\ side to define the macro.
 
@@ -1341,9 +1341,9 @@ def define_TeX_call_Python(f: Callable[..., None], name: Optional[str]=None, arg
 		TeX_argspec += arg
 
 	return """
-	\\cs_new_protected:Npn \\""" + name + TeX_argspec + """ {
+	\\cs_new_protected:Npn \\""" + name + TeX_argspec + r""" {
 		\immediate \write \__write_file { i """ + identifier + """ }
-		""" + TeX_send_input_commands + """
+		""" + TeX_send_input_commands + r"""
 		\__read_do_one_command:
 	}
 	"""
@@ -1980,7 +1980,7 @@ r"""
 
 @export_function_to_module
 def continue_until_passed_back_str(engine: Engine=  default_engine)->str:
-	"""
+	r"""
 	Usage:
 
 	First put some tokens in the input stream that includes |\pythonimmediatecontinue{...}|
@@ -2193,7 +2193,7 @@ def renewcommand_(name: str, f: Callable, engine: Engine)->Callable:
 
 @export_function_to_module
 def newcommand(x: Union[str, Callable, None]=None, f: Optional[Callable]=None, engine: Engine=  default_engine)->Callable:
-	"""
+	r"""
 	Define a new \TeX\ command.
 	If name is not provided, it's automatically deduced from the function.
 	"""
@@ -2204,7 +2204,7 @@ def newcommand(x: Union[str, Callable, None]=None, f: Optional[Callable]=None, e
 
 @export_function_to_module
 def renewcommand(x: Union[str, Callable, None]=None, f: Optional[Callable]=None, engine: Engine=  default_engine)->Callable:
-	"""
+	r"""
 	Redefine a \TeX\ command.
 	If name is not provided, it's automatically deduced from the function.
 	"""
@@ -2247,7 +2247,7 @@ def put_next(arg: Union[str, Token, BalancedTokenList], engine: Engine=  default
 @export_function_to_module
 @user_documentation
 def peek_next_meaning(engine: Engine=  default_engine)->str:
-	"""
+	r"""
 	Get the meaning of the following token, as a string, using the current |\escapechar|.
 	
 	This is recommended over |peek_next_token()| as it will not tokenize an extra token.
