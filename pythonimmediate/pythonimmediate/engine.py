@@ -2,7 +2,7 @@
 Abstract engine class.
 """
 
-from typing import Optional, Literal, Iterable, List, Dict
+from typing import Optional, Literal, Iterable, List, Dict, Tuple
 from abc import ABC, abstractmethod
 import sys
 import subprocess
@@ -13,6 +13,7 @@ class Engine(ABC):
 	_is_unicode: bool
 	def __init__(self):
 		self.action_done=False
+		self.exited=False  # once the engine exit, it can't be used anymore.
 
 	# some helper functions for the communication protocol.
 	def check_not_finished(self)->None:
@@ -23,8 +24,34 @@ class Engine(ABC):
 	def is_unicode(self)->bool: 
 		return self._is_unicode
 
-	@abstractmethod
+	def check_not_exited(self, message: str)->None:
+		if self.exited:
+			raise RuntimeError(message)
+
+	def check_not_exited_before(self)->None:
+		self.check_not_exited("TeX error already happened, cannot continue")
+
+	def check_not_exited_after(self)->None:
+		self.check_not_exited("TeX error!")
+
 	def read(self)->bytes:
+		"""
+		Read one line from the engine.
+
+		It must not be EOF otherwise there's an error.
+		"""
+		self.check_not_exited_before()
+		result=self._read()
+		self.check_not_exited_after()
+		return result
+
+	def write(self, s: bytes)->None:
+		self.check_not_exited_before()
+		self._write(s)
+		self.check_not_exited_after()
+
+	@abstractmethod
+	def _read(self)->bytes:
 		"""
 		Read one line from the engine.
 
@@ -33,7 +60,7 @@ class Engine(ABC):
 		...
 
 	@abstractmethod
-	def write(self, s: bytes)->None:
+	def _write(self, s: bytes)->None:
 		"""
 		Write data to the engine.
 
@@ -62,19 +89,24 @@ class ParentProcessEngine(Engine):
 		sys.stdin=None  # type: ignore
 		# avoid user mistakenly read
 
-	def read(self)->bytes:
-		return sys.__stdin__.buffer.readline()
+	def _read(self)->bytes:
+		line=sys.__stdin__.buffer.readline()
+		if not line: self.exited=True
+		return line
 
-	def write(self, s: bytes)->None:
+	def _write(self, s: bytes)->None:
 		self.communicator.send(s)
 
 
 EngineName=Literal["pdflatex", "xelatex", "lualatex"]
+engine_names: Tuple[str, ...]=EngineName.__args__  # type: ignore
 engine_is_unicode: Dict[EngineName, bool]={
 		"pdflatex": False,
 		"xelatex": True,
 		"lualatex": True,
 		}
+assert len(engine_is_unicode)==len(engine_names)
+assert set(engine_is_unicode)==set(engine_names)
 
 
 @dataclass
@@ -124,10 +156,10 @@ class DefaultEngine(Engine):
 	def is_unicode(self)->bool:
 		return self.get_engine().is_unicode
 
-	def read(self)->bytes:
+	def _read(self)->bytes:
 		return self.get_engine().read()
 
-	def write(self, s: bytes)->None:
+	def _write(self, s: bytes)->None:
 		self.get_engine().write(s)
 
 
@@ -188,20 +220,25 @@ class ChildProcessEngine(Engine):
 			"""
 			)), engine=self)
 
-	def read(self)->bytes:
-		assert self.process is not None, "process is already closed!"
-		assert self.process.stderr is not None
+	def get_process(self)->subprocess.Popen:
+		if self.process is None:
+			raise RuntimeError("process is already closed!")
+		return self.process
+
+	def _read(self)->bytes:
+		process=self.get_process()
+		assert process.stderr is not None
 		#print("waiting to read")
-		line=self.process.stderr.readline()
+		line=process.stderr.readline()
 		#print("reading", line)
 		return line
 
-	def write(self, s: bytes)->None:
-		assert self.process is not None, "process is already closed!"
-		assert self.process.stdin is not None
+	def _write(self, s: bytes)->None:
+		process=self.get_process()
+		assert process.stdin is not None
 		#print("writing", s)
-		self.process.stdin.write(s)
-		self.process.stdin.flush()
+		process.stdin.write(s)
+		process.stdin.flush()
 
 	def close(self)->None:
 		"""
@@ -209,10 +246,13 @@ class ChildProcessEngine(Engine):
 
 		this might be called from __del__ so do not import anything here.
 		"""
+		process=self.get_process()
 		textopy.run_none_finish(engine=self)
-		self.process.wait()
-		self.process.stdin.close()
-		self.process.stderr.close()
+		process.wait()
+		assert process.stdin is not None
+		assert process.stderr is not None
+		process.stdin.close()
+		process.stderr.close()
 		self.process=None
 
 	def __del__(self)->None:

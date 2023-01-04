@@ -6,7 +6,26 @@
 \ExplSyntaxOn
 \pretty:n{going to load}
 \ExplSyntaxOff
-\usepackage[mode=multiprocessing-network,python-executable=python3.10]{pythonimmediate}
+
+\makeatletter
+\let\firstoftwo\@firstoftwo
+\let\secondoftwo\@secondoftwo
+\makeatother
+
+\ifdefined\specifymode
+	\expandafter\firstoftwo
+\else
+	\expandafter\secondoftwo
+\fi
+{
+	\def\tmp#1{
+		\usepackage[mode=#1,python-executable=python3.10]{pythonimmediate}
+	}
+	\expandafter\tmp\expandafter{\specifymode}
+}{
+	\usepackage[mode=multiprocessing-network,python-executable=python3.10]{pythonimmediate}
+}
+
 %\usepackage[mode=unnamed-pipe]{pythonimmediate}
 
 
@@ -250,7 +269,8 @@ class Test(unittest.TestCase):
 				if engine=="luatex" and t in [ControlSequenceToken("\x00"), ControlSequenceToken("\x00\x00")]:
 					continue  # LuaTeX bug fixed upstream https://tex.stackexchange.com/questions/640267/lualatex-does-not-handle-control-sequence-consist-of-a-single-null-character-cor
 				if engine=="pdftex" and t==Catcode.active(0x0c):
-					continue
+					continue  # https://tex.stackexchange.com/q/669877/250119
+
 				with self.subTest(s=s, t=t):
 					pythonimmediate.debug("trying token", t)
 					t.put_next()

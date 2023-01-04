@@ -33,6 +33,7 @@ def user_documentation(x: Union[Callable, str])->Any:
 
 #debug_file=open(Path(tempfile.gettempdir())/"pythonimmediate_debug_textopy.txt", "w", encoding='u8', buffering=2)
 #debug=functools.partial(print, file=debug_file, flush=True)
+debug=functools.partial(print, file=sys.stderr, flush=True)
 debug=lambda *args, **kwargs: None
 
 
@@ -61,6 +62,7 @@ def export_function_to_module(f: FunctionType)->FunctionType:
 	return f
 
 def send_raw(s: str, engine: Engine)->None:
+	debug("======== sending", s)
 	engine.write(s.encode('u8'))
 
 def send_finish(s: str, engine: Engine)->None:
@@ -217,14 +219,6 @@ def check_line(line: str, *, braces: bool, newline: bool, continue_: Optional[bo
 		assert '\r' not in line  # this is not the line separator but just in case
 	if continue_==True: assert "pythonimmediatecontinue" in line
 	elif continue_==False: assert "pythonimmediatecontinue" not in line
-
-
-
-
-do_run_error_finish=True
-
-
-
 
 
 user_scope: Dict[str, Any]={}  # consist of user's local variables etc.
@@ -491,6 +485,14 @@ r"""
 	\int_compare:nNnTF {`#1} < {33} { \cStr\  \char_generate:nn {`#1+64} {12} } {#1}
 }
 
+% fully expand to zero if #1 is not weird, otherwise expand to nonzero
+% weird means as can be seen below <32 or =127 (those that will be ^^-escaped without -8bit)
+\cs_new:Npn  \__if_weird_charcode:n #1 {
+	\ifnum #1 < 32 ~ 1 \fi
+	\ifnum #1 = 127 ~ 1 \fi
+	0
+}
+
 \cs_new_protected:Npn \__continue_after_edef #char #cat #callback {
 	\token_if_eq_charcode:NNTF #cat 0 {
 		\tl_if_eq:NNTF \__the_token \__frozen_relax_container {
@@ -508,10 +510,12 @@ r"""
 			}
 		}
 	} {
-		\int_compare:nNnTF { #char } < {16} {
-			\exp_args:Nx #callback { \cStr{^} #cat \char_generate:nn {#char+64} {12} }
-		} {
-			\exp_args:Nx #callback { #cat \expandafter \string \__the_token }
+		\exp_args:Nx #callback {
+			\ifnum 0<\__if_weird_charcode:n {#char} ~
+				\cStr{^} #cat \char_generate:nn {#char+64} {12}
+			\else
+				#cat \expandafter \string \__the_token
+			\fi
 		}
 	}
 }
@@ -524,10 +528,12 @@ r"""
 
 r"""
 \cs_new_protected:Npn \__process_gobble #char #cat #token #callback {
-	\int_compare:nNnTF { #char } < {16} {
-		\exp_args:Nx #callback { \cStr{^} #cat \char_generate:nn {#char+64} {12} }
-	} {
-		\exp_args:Nx #callback { #cat \expandafter \string #token }
+	\exp_args:Nx #callback {
+		\ifnum 0<\__if_weird_charcode:n {#char} ~
+			\cStr{^} #cat \char_generate:nn {#char+64} {12}
+		\else
+			#cat \expandafter \string #token
+		\fi
 	}
 }
 """
@@ -1490,7 +1496,7 @@ def __pycodex(code: TTPBlock, lineno_: TTPLine, filename: TTPLine, fileabspath: 
 			break
 
 	if not target_filename:
-		raise RuntimeError("Source file not found! (attempted {})".format((fileabspath, filename)))
+		raise RuntimeError(f"Source file not found! (cwd={os.getcwd()}, attempted {(fileabspath, filename)})")
 
 	with io.StringIO() as t:
 		with RedirectPrintTeX(t):
@@ -2370,16 +2376,15 @@ def parent_process_main():
 		default_engine.set_engine(engine)
 		send_bootstrap_code(engine=engine)
 		run_main_loop(engine=engine)  # if this returns cleanly TeX has no error. Otherwise some readline() will reach eof and print out a stack trace
-		assert not engine.read(), "Internal error: TeX sends extra line"
+		assert not engine._read(), "Internal error: TeX sends extra line"
 
 	except:
 		# see also documentation of run_error_finish.
 		sys.stderr.write("\n")
 		traceback.print_exc(file=sys.stderr)
 
-		if do_run_error_finish:
-			engine.action_done=False  # force run it
-			run_error_finish(PTTBlock("".join(traceback.format_exc())), engine=engine)
+		engine.action_done=False  # force run it
+		run_error_finish(PTTBlock("".join(traceback.format_exc())), engine=engine)
 
 		os._exit(0)
 

@@ -56,7 +56,7 @@
 \providecommand \prettyrefreshstrategy {4}
 \providecommand \prettyrefreshduration {1000}
 
-\msg_new:nnn {prettytok} {already-initialized} {Output~file~is~already~initialized!} 
+\msg_new:nnn {prettytok} {already-initialized} {Output~file~is~already~initialized!}
 
 \cs_new_eq:NN \pretty_check_already_init: \relax
 
@@ -337,6 +337,15 @@
 
 \cs_generate_variant:Nn \pretty:n {x, o, V}
 \def \pretty:N {\pretty:n}  % note that \pretty:n might be redefined to be \prettyterm:n later
+
+\cs_new_protected:Npn \prettythenrun:n #1 {
+	\pretty:n {running~#1}
+	#1
+	\pretty:n {done}
+}
+\cs_new_protected:Npn \prettythenrun:w #1 \prettythenrunstop {
+	\prettythenrun:n {#1}
+}
 
 % ======== normal-catcode alias
 \def\prettyN{\pretty:n}

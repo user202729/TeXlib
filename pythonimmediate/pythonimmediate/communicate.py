@@ -72,9 +72,7 @@ class UnnamedPipeCommunicator(Communicator):
 	character = 'u'
 	
 	def __init__(self, s: str)->None:
-		self.connection=open("/proc/" + str(s) + "/fd/0", "wb",
-				buffering=1  # line buffering
-				)
+		self.connection=open("/proc/" + str(s) + "/fd/0", "wb")
 
 	def send(self, data: bytes)->None:
 		self.connection.write(data)
