@@ -45,6 +45,8 @@ class Engine(ABC):
 class ParentProcessEngine(Engine):
 	"""
 	Represent the engine if this process is started by the TeX's pythonimmediate library.
+
+	This should not be used directly. Only pythonimmediate.main module should use this.
 	"""
 	def __init__(self)->None:
 		super().__init__()
