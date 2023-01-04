@@ -38,23 +38,7 @@ debug=lambda *args, **kwargs: None
 
 
 expansion_only_can_call_Python=False  # normally. May be different in LuaTeX etc.
-
-# ======== setup communication method. Requires raw_readline() and send_raw() methods.
-
-if True:
-	sys.stdin=None  # type: ignore
-	# avoid user mistakenly read
-
-	raw_readline=sys.__stdin__.readline  # raw_readline() should return "⟨line⟩\n" or "" (if EOF) on each call
-
-
-line=raw_readline()
-assert line.endswith("\n")
-from . import communicate
-communicator=communicate.create_communicator(line[:-1])
-def send_raw(s: str)->None:
-	communicator.send(s.encode('u8'))
-
+from .engine import Engine, default_engine, ParentProcessEngine
 
 
 
@@ -64,7 +48,9 @@ import pythonimmediate  # type: ignore
 pythonimmediate.debugging=True
 pythonimmediate.debug=debug
 
-def export_function_to_module(f: Callable)->Callable:
+FunctionType = typing.TypeVar("FunctionType", bound=Callable)
+
+def export_function_to_module(f: FunctionType)->FunctionType:
 	"""
 	the functions decorated with this decorator are accessible from user code with
 
@@ -82,11 +68,15 @@ def check_not_finished()->None:
 	if action_done:
 		raise RuntimeError("can only do one action per block!")
 
-def send_finish(s: str)->None:
+def send_raw(s: str, engine: Engine)->None:
+	engine.write(s.encode('u8'))
+
+def send_finish(s: str, engine: Engine)->None:
 	check_not_finished()
 	global action_done
 	action_done=True
-	send_raw(s)
+	assert s.endswith("\n")
+	send_raw(s, engine=engine)
 
 
 import random
@@ -108,10 +98,10 @@ def substitute_private(code: str)->str:
 		  .replace("__", "_" + "pythonimmediate" + "_")
 		 )
 
-def send_bootstrap_code()->None:
+def send_bootstrap_code(engine: Engine)->None:
 	global bootstrap_code
 	assert bootstrap_code is not None
-	send_raw(surround_delimiter(substitute_private(bootstrap_code)))
+	send_raw(surround_delimiter(substitute_private(bootstrap_code)), engine=engine)
 	bootstrap_code = None
 
 # ========
@@ -164,24 +154,24 @@ r"""
 # ========
 
 # when 'i⟨string⟩' is sent from TeX to Python, the function with index ⟨string⟩ in this dict is called
-TeX_handlers: Dict[str, Callable[[], None]]={}
+TeX_handlers: Dict[str, Callable[[Engine], None]]={}
 
 TeXToPyObjectType=Optional[str]
 
-def run_main_loop()->TeXToPyObjectType:
+def run_main_loop(engine: Engine)->TeXToPyObjectType:
 	while True:
-		line=readline()
+		line=readline(engine=engine)
 		if not line: return None
 
 		if line[0]=="i":
-			TeX_handlers[line[1:]]()
+			TeX_handlers[line[1:]](engine)
 		elif line[0]=="r":
 			return line[1:]
 		else:
 			raise RuntimeError("Internal error: unexpected line "+line)
 
-def run_main_loop_get_return_one()->str:
-	line=readline()
+def run_main_loop_get_return_one(engine: Engine)->str:
+	line=readline(engine=engine)
 	assert line[0]=="r"
 	return line[1:]
 
@@ -212,13 +202,13 @@ In other words, |run_*_local(code)| is almost identical to |run_*_peek(code + "\
 """)
 
 @export_function_to_module
-def run_block_finish(block: str)->None:
-	send_finish("block\n" + surround_delimiter(block))
+def run_block_finish(block: str, engine: Engine=  default_engine)->None:
+	send_finish("block\n" + surround_delimiter(block), engine=engine)
 
 
 @user_documentation
 @export_function_to_module
-def execute(block: str)->None:
+def execute(block: str, engine: Engine)->None:
 	"""
 	Run a block of \TeX\ code (might consist of multiple lines).
 	Catcode-changing commands are allowed inside.
@@ -227,7 +217,7 @@ def execute(block: str)->None:
 
 	A more complicated example is |pythonimmediate.run_block_local(r'\verb+%+')|.
 	"""
-	run_block_local(block)
+	run_block_local(block, engine=engine)
 
 def check_line(line: str, *, braces: bool, newline: bool, continue_: Optional[bool])->None:
 	"""
@@ -252,8 +242,8 @@ do_run_error_finish=True
 
 user_scope: Dict[str, Any]={}  # consist of user's local variables etc.
 
-def readline()->str:
-	line=raw_readline()
+def readline(engine: Engine)->str:
+	line=engine.read().decode('u8')
 	if not line:
 		sys.stderr.write("\n\nTraceback (most recent call last):\n")
 		traceback.print_stack(file=sys.stderr)
@@ -268,14 +258,14 @@ def readline()->str:
 
 block_delimiter: str="pythonimm?\"\"\"?'''?"
 
-def read_block()->str:
+def read_block(engine: Engine)->str:
 	"""
 	Internal function to read one block sent from \TeX\ (including the final delimiter line,
 	but the delimiter line is not returned)
 	"""
 	lines: List[str]=[]
 	while True:
-		line=readline()
+		line=readline(engine=engine)
 		if line==block_delimiter:
 			return '\n'.join(lines)
 		else:
@@ -301,23 +291,23 @@ class NToken(ABC):
 	@abstractmethod
 	def assignable(self)->bool: ...
 
-	def assign(self, other: "NToken")->None:
+	def assign(self, other: "NToken", engine: Engine=default_engine)->None:
 		assert self.assignable
-		NTokenList([T.let, self, C.other("="), C.space(' '), other]).execute()
+		NTokenList([T.let, self, C.other("="), C.space(' '), other]).execute(engine=engine)
 
-	def assign_future(self)->None:
+	def assign_future(self, engine: Engine=  default_engine)->None:
 		assert self.assignable
-		futurelet_(PTTBalancedTokenList(BalancedTokenList([self.no_blue])))
+		futurelet_(PTTBalancedTokenList(BalancedTokenList([self.no_blue])), engine=engine)
 
-	def assign_futurenext(self)->None:
+	def assign_futurenext(self, engine: Engine=  default_engine)->None:
 		assert self.assignable
-		futureletnext_(PTTBalancedTokenList(BalancedTokenList([self.no_blue])))
+		futureletnext_(PTTBalancedTokenList(BalancedTokenList([self.no_blue])), engine=engine)
 
-	def meaning_str(self)->str:
+	def meaning_str(self, engine: Engine=  default_engine)->str:
 		"""
 		get the meaning of this token as a string.
 		"""
-		return NTokenList([T.meaning, self]).expand_x().str()
+		return NTokenList([T.meaning, self]).expand_x(engine=engine).str()
 
 	@property
 	@abstractmethod
@@ -328,7 +318,7 @@ class NToken(ABC):
 	def no_blue(self)->"Token": ...
 
 	def meaning_equal(self, other: "Token")->bool:
-		return NTokenList([T.ifx, self, other, Catcode.other("1"), T["else"], Catcode.other("0"), T.fi]).expand_x().bool()
+		return NTokenList([T.ifx, self, other, Catcode.other("1"), T["else"], Catcode.other("0"), T.fi]).expand_x(engine=engine).bool()
 
 	def str(self)->str:
 		"""
@@ -358,17 +348,17 @@ class Token(NToken):
 	@abstractmethod
 	def serialize(self)->str: ...
 
-	def value(self)->"BalancedTokenList":
+	def value(self, engine: Engine=  default_engine)->"BalancedTokenList":
 		"""
 		given self is a TokenList variable, return the content.
 		"""
-		return BalancedTokenList([self]).expand_o()
+		return BalancedTokenList([self]).expand_o(engine=engine)
 
-	def value_str(self)->str:
+	def value_str(self, engine: Engine=  default_engine)->str:
 		"""
 		given self is a str variable, return the content.
 		"""
-		return self.value().str()
+		return self.value(engine=engine).str()
 
 	@property
 	def blue(self)->"BlueToken": return BlueToken(self)
@@ -386,7 +376,7 @@ class Token(NToken):
 		return t[0]
 
 	@staticmethod
-	def get_next()->"Token":
+	def get_next(engine: Engine=  default_engine)->"Token":
 		"""
 		Get the following token.
 
@@ -397,30 +387,30 @@ class Token(NToken):
 		tokenize up to 2 tokens ahead (including the returned token),
 		as well as occasionally return the wrong token in unavoidable cases.
 		"""
-		return Token.deserialize(str(get_next_()[0]))
+		return Token.deserialize(str(get_next_(engine=engine)[0]))
 
 	@staticmethod
-	def peek_next()->"Token":
+	def peek_next(engine: Engine=  default_engine)->"Token":
 		"""
 		Get the following token without removing it from the input stream.
 
 		Equivalent to get_next() then put_next() immediately. See documentation of get_next() for some notes.
 		"""
-		t=Token.get_next()
-		t.put_next()
+		t=Token.get_next(engine=engine)
+		t.put_next(engine=engine)
 		return t
 
-	def put_next(self)->None:
+	def put_next(self, engine: Engine=  default_engine)->None:
 		d=self.degree()
 		if d==0:
-			BalancedTokenList([self]).put_next()
+			BalancedTokenList([self]).put_next(engine=engine)
 		else:
 			assert isinstance(self, CharacterToken)
 			if d==1:
-				put_next_bgroup(PTTInt(self.index))
+				put_next_bgroup(PTTInt(self.index), engine=engine)
 			else:
 				assert d==-1
-				put_next_egroup(PTTInt(self.index))
+				put_next_egroup(PTTInt(self.index), engine=engine)
 
 
 
@@ -766,8 +756,8 @@ class BlueToken(NToken):
 	@property
 	def assignable(self)->bool: return self.token.assignable
 
-	def put_next(self)->None:
-		put_next_blue(PTTBalancedTokenList(BalancedTokenList([self.token])))
+	def put_next(self, engine: Engine=  default_engine)->None:
+		put_next_blue(PTTBalancedTokenList(BalancedTokenList([self.token])), engine=engine)
 
 
 doc_catcode_table: Dict[int, Catcode]={}
@@ -875,8 +865,8 @@ class TokenList(TokenListBaseClass):
 
 		return left_half+right_half[::-1]
 
-	def put_next(self)->None:
-		for part in reversed(self.balanced_parts()): part.put_next()
+	def put_next(self, engine: Engine=  default_engine)->None:
+		for part in reversed(self.balanced_parts()): part.put_next(engine=engine)
 
 	@property
 	def balanced(self)->"BalancedTokenList":
@@ -996,11 +986,11 @@ class TokenList(TokenListBaseClass):
 	def __repr__(self)->str:
 		return '<' + type(self).__name__ + ': ' + ' '.join(t.repr1() for t in self) + '>'
 
-	def execute(self)->None:
-		NTokenList(self).execute()
+	def execute(self, engine: Engine=  default_engine)->None:
+		NTokenList(self).execute(engine=engine)
 
-	def expand_x(self)->"BalancedTokenList":
-		return NTokenList(self).expand_x()
+	def expand_x(self, engine: Engine=  default_engine)->"BalancedTokenList":
+		return NTokenList(self).expand_x(engine=engine)
 
 	def bool(self)->bool:
 		return NTokenList(self).bool()
@@ -1025,25 +1015,25 @@ class BalancedTokenList(TokenList):
 		super().__init__(a)
 		self.check_balanced()
 
-	def expand_o(self)->"BalancedTokenList":
-		return BalancedTokenList(expand_o_(PTTBalancedTokenList(self))[0])  # type: ignore
-	def expand_x(self)->"BalancedTokenList":
-		return BalancedTokenList(expand_x_(PTTBalancedTokenList(self))[0])  # type: ignore
-	def execute(self)->None:
-		execute_(PTTBalancedTokenList(self))
+	def expand_o(self, engine: Engine=  default_engine)->"BalancedTokenList":
+		return BalancedTokenList(expand_o_(PTTBalancedTokenList(self), engine=engine)[0])  # type: ignore
+	def expand_x(self, engine: Engine=  default_engine)->"BalancedTokenList":
+		return BalancedTokenList(expand_x_(PTTBalancedTokenList(self), engine=engine)[0])  # type: ignore
+	def execute(self, engine: Engine=  default_engine)->None:
+		execute_(PTTBalancedTokenList(self), engine=engine)
 
-	def put_next(self)->None:
-		put_next_tokenlist(PTTBalancedTokenList(self))
+	def put_next(self, engine: Engine=  default_engine)->None:
+		put_next_tokenlist(PTTBalancedTokenList(self), engine=engine)
 
 	@staticmethod
-	def get_next()->"BalancedTokenList":
+	def get_next(engine: Engine=  default_engine)->"BalancedTokenList":
 		"""
 		get an (undelimited) argument from the TeX input stream.
 		"""
-		return BalancedTokenList(get_argument_tokenlist_()[0])  # type: ignore
+		return BalancedTokenList(get_argument_tokenlist_(engine=engine)[0])  # type: ignore
 
 	def detokenize(self)->str:
-		return BalancedTokenList([T.detokenize, self]).expand_x().str()
+		return BalancedTokenList([T.detokenize, self]).expand_x(engine=engine).str()
 
 
 if typing.TYPE_CHECKING:
@@ -1094,10 +1084,10 @@ class NTokenList(NTokenListBaseClass):
 				result+=large_part.balanced_parts()
 		return result
 
-	def put_next(self)->None:
-		for part in reversed(self.simple_parts()): part.put_next()
+	def put_next(self, engine: Engine=  default_engine)->None:
+		for part in reversed(self.simple_parts()): part.put_next(engine=engine)
 		
-	def execute(self)->None:
+	def execute(self, engine: Engine=  default_engine)->None:
 		"""
 		Execute self.
 		"""
@@ -1105,17 +1095,17 @@ class NTokenList(NTokenListBaseClass):
 		if len(parts)==1:
 			x=parts[0]
 			if isinstance(x, BalancedTokenList):
-				x.execute()
+				x.execute(engine=engine)
 				return
-		NTokenList([*self, T.pythonimmediatecontinue, []]).put_next()
+		NTokenList([*self, T.pythonimmediatecontinue, []]).put_next(engine=engine)
 		continue_until_passed_back()
 
-	def expand_x(self)->BalancedTokenList:
+	def expand_x(self, engine: Engine=  default_engine)->BalancedTokenList:
 		"""
 		x-expand self. The result must be balanced.
 		"""
-		NTokenList([T.edef, P.tmp, bgroup, *self, egroup]).execute()
-		return BalancedTokenList([P.tmp]).expand_o()
+		NTokenList([T.edef, P.tmp, bgroup, *self, egroup]).execute(engine=engine)
+		return BalancedTokenList([P.tmp]).expand_o(engine=engine)
 
 	def str(self)->str:
 		"""
@@ -1132,7 +1122,7 @@ class NTokenList(NTokenListBaseClass):
 class TeXToPyData(ABC):
 	@staticmethod
 	@abstractmethod
-	def read()->"TeXToPyData":
+	def read(engine: Engine)->"TeXToPyData":
 		...
 	@staticmethod
 	@abstractmethod
@@ -1162,8 +1152,8 @@ class TTPLine(TeXToPyData, str):
 	send_code=r"\immediate \write \__write_file {{\unexpanded{{ {} }}}}".format
 	send_code_var=r"\immediate \write \__write_file {{\unexpanded{{ {} }}}}".format
 	@staticmethod
-	def read()->"TTPLine":
-		return TTPLine(readline())
+	def read(engine: Engine)->"TTPLine":
+		return TTPLine(readline(engine=engine))
 
 # some old commands e.g. \$, \^, \_, \~ require \set@display@protect to be robust.
 # ~ needs to be redefined directly.
@@ -1186,8 +1176,8 @@ class TTPELine(TeXToPyData, str):
 	send_code=r"\__begingroup_setup_estr: \immediate \write \__write_file {{ {} }} \endgroup".format
 	send_code_var=r"\__begingroup_setup_estr: \immediate \write \__write_file {{ {} }} \endgroup".format
 	@staticmethod
-	def read()->"TTPELine":
-		return TTPELine(readline())
+	def read(engine: Engine)->"TTPELine":
+		return TTPELine(readline(engine=engine))
 
 class TTPEmbeddedLine(TeXToPyData, str):
 	@staticmethod
@@ -1197,15 +1187,15 @@ class TTPEmbeddedLine(TeXToPyData, str):
 	def send_code_var(self)->str:
 		raise RuntimeError("Must be manually handled")
 	@staticmethod
-	def read()->"TTPEmbeddedLine":
+	def read(engine: Engine)->"TTPEmbeddedLine":
 		raise RuntimeError("Must be manually handled")
 
 class TTPBlock(TeXToPyData, str):
 	send_code=r"\__send_block:n {{ {} }}".format
 	send_code_var=r"\__send_block:V {}".format
 	@staticmethod
-	def read()->"TTPBlock":
-		return TTPBlock(read_block())
+	def read(engine: Engine)->"TTPBlock":
+		return TTPBlock(read_block(engine=engine))
 
 class TTPEBlock(TeXToPyData, str):
 	"""
@@ -1217,15 +1207,15 @@ class TTPEBlock(TeXToPyData, str):
 	send_code=r"\__begingroup_setup_estr: \__send_block:e {{ {} }} \endgroup".format
 	send_code_var=r"\__begingroup_setup_estr: \__send_block:e {} \endgroup".format
 	@staticmethod
-	def read()->"TTPEBlock":
-		return TTPEBlock(read_block())
+	def read(engine: Engine)->"TTPEBlock":
+		return TTPEBlock(read_block(engine=engine))
 
 class TTPBalancedTokenList(TeXToPyData, BalancedTokenList):
 	send_code=r"\__tlserialize_nodot:Nn \__tmp {{ {} }} \immediate \write \__write_file {{\unexpanded\expandafter{{ \__tmp }}}}".format
 	send_code_var=r"\__tlserialize_nodot:NV \__tmp {} \immediate \write \__write_file {{\unexpanded\expandafter{{ \__tmp }}}}".format
 	@staticmethod
-	def read()->"TTPBalancedTokenList":
-		return TTPBalancedTokenList(BalancedTokenList.deserialize(readline()))
+	def read(engine: Engine)->"TTPBalancedTokenList":
+		return TTPBalancedTokenList(BalancedTokenList.deserialize(readline(engine=engine)))
 
 
 class PyToTeXData(ABC):
@@ -1234,7 +1224,7 @@ class PyToTeXData(ABC):
 	def read_code(var: str)->str:
 		...
 	@abstractmethod
-	def write(self)->None:
+	def write(self, engine: Engine)->None:
 		...
 
 @dataclass
@@ -1245,17 +1235,17 @@ class PTTVerbatimLine(PyToTeXData):
 	"""
 	data: str
 	read_code=r"\ior_str_get:NN \__read_file {} ".format
-	def write(self)->None:
+	def write(self, engine: Engine)->None:
 		assert "\n" not in self.data
 		assert self.data.rstrip()==self.data, "Cannot send verbatim line with trailing spaces!"
-		send_raw(self.data+"\n")
+		send_raw(self.data+"\n", engine=engine)
 
 @dataclass
 class PTTInt(PyToTeXData):
 	data: int
 	read_code=PTTVerbatimLine.read_code
-	def write(self)->None:
-		PTTVerbatimLine(str(self.data)).write()
+	def write(self, engine: Engine)->None:
+		PTTVerbatimLine(str(self.data)).write(engine=engine)
 
 @dataclass
 class PTTTeXLine(PyToTeXData):
@@ -1265,23 +1255,23 @@ class PTTTeXLine(PyToTeXData):
 	"""
 	data: str
 	read_code=r"\ior_get:NN \__read_file {} ".format
-	def write(self)->None:
+	def write(self, engine: Engine)->None:
 		assert "\n" not in self.data
-		send_raw(self.data+"\n")
+		send_raw(self.data+"\n", engine=engine)
 
 @dataclass
 class PTTBlock(PyToTeXData):
 	data: str
 	read_code=r"\__read_block:N {}".format
-	def write(self)->None:
-		send_raw(surround_delimiter(self.data))
+	def write(self, engine: Engine)->None:
+		send_raw(surround_delimiter(self.data), engine=engine)
 
 @dataclass
 class PTTBalancedTokenList(PyToTeXData):
 	data: BalancedTokenList
 	read_code=r"\ior_str_get:NN \__read_file {0}  \__tldeserialize_dot:NV {0} {0}".format
-	def write(self)->None:
-		PTTVerbatimLine(self.data.serialize()+".").write()
+	def write(self, engine: Engine)->None:
+		PTTVerbatimLine(self.data.serialize()+".").write(engine=engine)
 
 
 # ======== define TeX functions that execute Python code ========
@@ -1308,7 +1298,7 @@ def define_TeX_call_Python(f: Callable[..., None], name: Optional[str]=None, arg
 	returns the \TeX\ code to be executed on the \TeX\ side to define the macro.
 
 	f: the Python function to be executed.
-	It should take some arguments and eventually (optionally) call one of the |_finish| functions.
+	It should take some arguments plus a keyword argument `engine` and eventually (optionally) call one of the |_finish| functions.
 
 	name: the macro name on the \TeX\ side. This should only consist of letter characters in |expl3| catcode regime.
 
@@ -1316,16 +1306,18 @@ def define_TeX_call_Python(f: Callable[..., None], name: Optional[str]=None, arg
 
 	Returns: some code (to be executed in |expl3| catcode regime) as explained above.
 	"""
-	if argtypes is None: argtypes=[p.annotation for p in inspect.signature(f).parameters.values()]
+	if argtypes is None:
+		argtypes=[p.annotation for p in inspect.signature(f).parameters.values()]
+		argtypes=[t for t in argtypes if t!=Engine]
 	if name is None: name=f.__name__
 
 	if identifier is None: identifier=get_random_identifier()
 	assert identifier not in TeX_handlers
 
 	@functools.wraps(f)
-	def g()->None:
+	def g(engine: Engine)->None:
 		assert argtypes is not None
-		args=[argtype.read() for argtype in argtypes]
+		args=[argtype.read(engine=engine) for argtype in argtypes]
 
 
 		global action_done
@@ -1333,7 +1325,7 @@ def define_TeX_call_Python(f: Callable[..., None], name: Optional[str]=None, arg
 
 		action_done=False
 		try:
-			f(*args)
+			f(*args, engine=engine)
 		except:
 			if action_done:
 				# error occurred after 'finish' is called, cannot signal the error to TeX, will just ignore (after printing out the traceback)...
@@ -1344,7 +1336,7 @@ def define_TeX_call_Python(f: Callable[..., None], name: Optional[str]=None, arg
 			raise
 		finally:
 			if not action_done:
-				run_none_finish()
+				run_none_finish(engine=engine)
 		
 			action_done=old_action_done
 
@@ -1372,6 +1364,11 @@ def define_TeX_call_Python(f: Callable[..., None], name: Optional[str]=None, arg
 
 
 def define_internal_handler(f: Callable)->Callable:
+	"""
+	define a TeX function with TeX name = f.__name__ that calls f().
+
+	this does not define the specified function in any particular engine, just add them to the bootstrap_code.
+	"""
 	mark_bootstrap(define_TeX_call_Python(f))
 	return f
 
@@ -1403,11 +1400,11 @@ def eval_with_linecache(code: str, globals: Dict[str, Any])->Any:
 
 
 @define_internal_handler
-def py(code: TTPEBlock)->None:
-	pythonimmediate.run_block_finish(str(eval_with_linecache(code, user_scope))+"%")
+def py(code: TTPEBlock, engine: Engine)->None:
+	pythonimmediate.run_block_finish(str(eval_with_linecache(code, user_scope))+"%", engine=engine)
 
 @define_internal_handler
-def pyfile(filename: TTPELine)->None:
+def pyfile(filename: TTPELine, engine: Engine)->None:
 	with open(filename, "r") as f:
 		source=f.read()
 	exec(compile(source, filename, "exec"), user_scope)
@@ -1434,7 +1431,7 @@ class RedirectPrintTeX:
 		else:
 			del pythonimmediate.file
 
-def run_code_redirect_print_TeX(f: Callable[[], Any])->None:
+def run_code_redirect_print_TeX(f: Callable[[], Any], engine: Engine)->None:
 	with io.StringIO() as t:
 		with RedirectPrintTeX(t):
 			result=f()
@@ -1444,22 +1441,22 @@ def run_code_redirect_print_TeX(f: Callable[[], Any])->None:
 		if content.endswith("\n"):
 			content=content[:-1]
 		elif not content:
-			run_none_finish()
+			run_none_finish(engine=engine)
 			return
 		else:
 			#content+=r"\empty"  # this works too
 			content+="%"
-		run_block_finish(content)
+		run_block_finish(content, engine=engine)
 
 @define_internal_handler
-def pyc(code: TTPEBlock)->None:
-	run_code_redirect_print_TeX(lambda: exec_with_linecache(code, user_scope))
+def pyc(code: TTPEBlock, engine: Engine)->None:
+	run_code_redirect_print_TeX(lambda: exec_with_linecache(code, user_scope), engine=engine)
 
 @define_internal_handler
-def pycq(code: TTPEBlock)->None:
+def pycq(code: TTPEBlock, engine: Engine)->None:
 	with RedirectPrintTeX(None):
 		exec_with_linecache(code, user_scope)
-	run_none_finish()
+	run_none_finish(engine=engine)
 
 mark_bootstrap(
 r"""
@@ -1487,7 +1484,7 @@ def normalize_lines(lines: List[str])->List[str]:
 	return [line.rstrip() for line in lines]
 
 @define_internal_handler
-def __pycodex(code: TTPBlock, lineno_: TTPLine, filename: TTPLine, fileabspath: TTPLine)->None:
+def __pycodex(code: TTPBlock, lineno_: TTPLine, filename: TTPLine, fileabspath: TTPLine, engine: Engine)->None:
 	if not code: return
 
 	lineno=int(lineno_)
@@ -1518,7 +1515,7 @@ def __pycodex(code: TTPBlock, lineno_: TTPLine, filename: TTPLine, fileabspath: 
 				exec(compiled_code, user_scope)
 			else:
 				exec(code_, user_scope)
-		pythonimmediate.run_block_finish(t.getvalue())
+		run_block_finish(t.getvalue(), engine=engine)
 
 # ======== Python-call-TeX functions
 # ======== additional functions...
@@ -1547,10 +1544,10 @@ def template_substitute(template: str, pattern: str, substitute: Union[str, Call
 #PythonCallTeXFunctionType=Callable[[PyToTeXData], Optional[Tuple[TeXToPyData, ...]]]
 
 class PythonCallTeXFunctionType(Protocol):  # https://stackoverflow.com/questions/57658879/python-type-hint-for-callable-with-variable-number-of-str-same-type-arguments
-	def __call__(self, *args: PyToTeXData)->Optional[Tuple[TeXToPyData, ...]]: ...
+	def __call__(self, *args: PyToTeXData, engine: Engine)->Optional[Tuple[TeXToPyData, ...]]: ...
 
 class PythonCallTeXSyncFunctionType(PythonCallTeXFunctionType, Protocol):  # https://stackoverflow.com/questions/57658879/python-type-hint-for-callable-with-variable-number-of-str-same-type-arguments
-	def __call__(self, *args: PyToTeXData)->Tuple[TeXToPyData, ...]: ...
+	def __call__(self, *args: PyToTeXData, engine: Engine)->Tuple[TeXToPyData, ...]: ...
 
 
 @dataclass(frozen=True)
@@ -1574,24 +1571,40 @@ def Python_call_TeX_local(TeX_code: str, *, recursive: bool=True, sync: Optional
 	return Python_call_TeX_defined[data][1]
 
 def build_Python_call_TeX(T: Type, TeX_code: str, *, recursive: bool=True, sync: Optional[bool]=None, finish: bool=False)->None:
+	"""
+	T has the form Callable[[T1, T2], Tuple[U1, U2]]
+	where the Tx are subclasses of PyToTeXData and the Ux are subclasses of TeXToPyData
+
+	The Tuple[...] can optionally be a single type, then it is almost equivalent to a tuple of one element
+	It can also be None
+	"""
+
 	assert T.__origin__ == typing.Callable[[], None].__origin__  # type: ignore
 	# might be typing.Callable or collections.abc.Callable depends on Python version
 	data=Python_call_TeX_data(
 			TeX_code=TeX_code, recursive=recursive, sync=sync, finish=finish
 			)
 
-	tmp: Any = T.__args__[-1]
+	# T.__args__ consist of the argument types int
+
+	Tx=T.__args__[:-1]
+	assert Tx and Tx[-1]==Engine
+	Tx=Tx[:-1]
+
+	for Ti in Tx: assert issubclass(Ti, PyToTeXData)
+
+	result_type: Any = T.__args__[-1]  # Tuple[U1, U2]
 	ttp_argtypes: Union[Type[TeXToPyData], Tuple[Type[TeXToPyData], ...]]
-	if tmp is type(None):
+	if result_type is type(None):
 		ttp_argtypes = ()
-	elif isinstance(tmp, type) and issubclass(tmp, TeXToPyData):
+	elif isinstance(result_type, type) and issubclass(result_type, TeXToPyData):
 		# special case, return a single object instead of a tuple of length 1
-		ttp_argtypes = tmp
+		ttp_argtypes = result_type
 	else:
-		ttp_argtypes = tmp.__args__  # type: ignore
+		ttp_argtypes = result_type.__args__  # type: ignore
 
 	extra=Python_call_TeX_extra(
-			ptt_argtypes=T.__args__[:-1],
+			ptt_argtypes=Tx,
 			ttp_argtypes=ttp_argtypes
 			)  # type: ignore
 	if data in Python_call_TeX_defined:
@@ -1602,15 +1615,26 @@ def build_Python_call_TeX(T: Type, TeX_code: str, *, recursive: bool=True, sync:
 			code, result1=define_Python_call_TeX(TeX_code=TeX_code, ptt_argtypes=[*extra.ptt_argtypes], ttp_argtypes=[ttp_argtypes],
 																  recursive=recursive, sync=sync, finish=finish,
 																  )
-			def result(*args):
-				[tmp]=result1(*args)
-				return tmp
+			def result(*args, engine: Engine):
+				tmp=result1(*args, engine=engine)
+				assert tmp is not None
+				assert len(tmp)==1
+				return tmp[0]
 		else:
+
+			for t in ttp_argtypes:
+				assert issubclass(t, TeXToPyData)
+
 			code, result=define_Python_call_TeX(TeX_code=TeX_code, ptt_argtypes=[*extra.ptt_argtypes], ttp_argtypes=[*ttp_argtypes],
 																  recursive=recursive, sync=sync, finish=finish,
 																  )
 		mark_bootstrap(code)
-		Python_call_TeX_defined[data]=extra, result
+
+		def result2(*args):
+			engine=args[-1]
+			assert isinstance(engine, Engine)
+			return result(*args[:-1], engine=engine)
+		Python_call_TeX_defined[data]=extra, result2
 
 def scan_Python_call_TeX(sourcecode: str)->None:
 	"""
@@ -1683,7 +1707,9 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: List[Type[PyToTeXData]],
 		any |finish| call (which happens most of the time), then the wrapper will call |run_none_finish|.
 
 	Return some TeX code to be executed, and a Python function object that when called will call the TeX function
-	and return the result.
+	on the passed-in TeX engine and return the result.
+
+	Note that the TeX_code must eventually be executed on the corresponding engine for the program to work correctly.
 
 	Possible optimizations:
 		* the |r| is not needed if not recursive and |ttp_argtypes| is nonempty
@@ -1723,7 +1749,7 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: List[Type[PyToTeXData]],
 							   lambda match: argtype.send_code_var(match[1]),
 							   optional=True)
 
-	def f(*args)->Optional[Tuple[TeXToPyData, ...]]:
+	def f(*args, engine: Engine)->Optional[Tuple[TeXToPyData, ...]]:
 		assert len(args)==len(ptt_argtypes)
 
 		# send function header
@@ -1731,20 +1757,20 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: List[Type[PyToTeXData]],
 		if finish:
 			global action_done
 			action_done=True
-		send_raw(identifier+"\n")
+		send_raw(identifier+"\n", engine=engine)
 
 		# send function args
 		for arg, argtype in zip(args, ptt_argtypes):
 			assert isinstance(arg, argtype)
-			arg.write()
+			arg.write(engine=engine)
 
 		if not sync: return None
 
 		# wait for the result
 		if recursive:
-			result_=run_main_loop()
+			result_=run_main_loop(engine=engine)
 		else:
-			result_=run_main_loop_get_return_one()
+			result_=run_main_loop_get_return_one(engine=engine)
 
 		result: List[TeXToPyData]=[]
 		if TTPEmbeddedLine not in ttp_argtypes:
@@ -1753,7 +1779,7 @@ def define_Python_call_TeX(TeX_code: str, ptt_argtypes: List[Type[PyToTeXData]],
 			if argtype_==TTPEmbeddedLine:
 				result.append(TTPEmbeddedLine(result_))
 			else:
-				result.append(argtype_.read())
+				result.append(argtype_.read(engine))
 		return tuple(result)
 
 	return TeX_code, f
@@ -1875,17 +1901,17 @@ r"""
 """, [PTTTeXLine], [])
 
 @export_function_to_module
-def run_tokenized_line_local(line: str, *, check_braces: bool=True, check_newline: bool=True, check_continue: bool=True)->None:
+def run_tokenized_line_local(line: str, *, check_braces: bool=True, check_newline: bool=True, check_continue: bool=True, engine: Engine=  default_engine)->None:
 	check_line(line, braces=check_braces, newline=check_newline, continue_=(False if check_continue else None))
-	run_tokenized_line_local_(PTTTeXLine(line))
+	run_tokenized_line_local_(PTTTeXLine(line), engine=engine)
 
 
 
 @export_function_to_module
-def run_tokenized_line_peek(line: str, *, check_braces: bool=True, check_newline: bool=True, check_continue: bool=True)->str:
+def run_tokenized_line_peek(line: str, *, check_braces: bool=True, check_newline: bool=True, check_continue: bool=True, engine: Engine=  default_engine)->str:
 	check_line(line, braces=check_braces, newline=check_newline, continue_=(True if check_continue else None))
 	return typing.cast(
-			Callable[[PTTTeXLine], Tuple[TTPEmbeddedLine]],
+			Callable[[PTTTeXLine, Engine], Tuple[TTPEmbeddedLine]],
 			Python_call_TeX_local(
 				r"""
 				\cs_new_protected:Npn %name% {
@@ -1893,7 +1919,7 @@ def run_tokenized_line_peek(line: str, *, check_braces: bool=True, check_newline
 					\__data
 				}
 				""")
-			)(PTTTeXLine(line))[0]
+			)(PTTTeXLine(line), engine)[0]
 
 
 run_block_local_=define_Python_call_TeX_local(
@@ -1910,8 +1936,8 @@ r"""
 """, [PTTBlock], [])
 
 @export_function_to_module
-def run_block_local(block: str)->None:
-	run_block_local_(PTTBlock(block))
+def run_block_local(block: str, engine: Engine=  default_engine)->None:
+	run_block_local_(PTTBlock(block), engine=engine)
 
 expand_o_=define_Python_call_TeX_local_sync(
 r"""
@@ -1967,7 +1993,7 @@ r"""
 """, [], [TTPEmbeddedLine])
 
 @export_function_to_module
-def continue_until_passed_back_str()->str:
+def continue_until_passed_back_str(engine: Engine=  default_engine)->str:
 	"""
 	Usage:
 
@@ -1976,10 +2002,10 @@ def continue_until_passed_back_str()->str:
 
 	The function will only return when the |\pythonimmediatecontinue| is called.
 	"""
-	return str(continue_until_passed_back_()[0])
+	return str(continue_until_passed_back_(engine=engine)[0])
 
 @export_function_to_module
-def continue_until_passed_back()->None:
+def continue_until_passed_back(engine: Engine=  default_engine)->None:
 	"""
 	Same as |continue_until_passed_back_str()| but nothing can be returned from TeX to Python.
 	"""
@@ -1988,11 +2014,11 @@ def continue_until_passed_back()->None:
 
 
 @export_function_to_module
-def expand_once()->None:
-	typing.cast(Callable[[], None], Python_call_TeX_local(
+def expand_once(engine: Engine=  default_engine)->None:
+	typing.cast(Callable[[Engine], None], Python_call_TeX_local(
 		r"""
 		\cs_new_protected:Npn %name% { \expandafter \pythonimmediatecontinuenoarg }
-		""", recursive=False, sync=True))()
+		""", recursive=False, sync=True))(engine)
 
 
 @export_function_to_module
@@ -2001,7 +2027,7 @@ def get_arg_str()->str:
 	"""
 	Get a mandatory argument.
 	"""
-	return typing.cast(Callable[[], TTPEmbeddedLine], Python_call_TeX_local(
+	return typing.cast(Callable[[Engine], TTPEmbeddedLine], Python_call_TeX_local(
 		r"""
 		\cs_new_protected:Npn %name% #1 {
 			\immediate\write\__write_file { \unexpanded {
@@ -2009,7 +2035,7 @@ def get_arg_str()->str:
 			}}
 			\__read_do_one_command:
 		}
-		""", recursive=False))()
+		""", recursive=False))(engine)
 
 get_arg_estr_=define_Python_call_TeX_local_sync(
 r"""
@@ -2021,8 +2047,8 @@ r"""
 """, [], [TTPEBlock], recursive=False)
 @export_function_to_module
 @user_documentation
-def get_arg_estr()->str:
-	return str(get_arg_estr_()[0])
+def get_arg_estr(engine: Engine=  default_engine)->str:
+	return str(get_arg_estr_(engine=engine)[0])
 
 
 get_optional_argument_detokenized_=define_Python_call_TeX_local_sync(
@@ -2041,11 +2067,11 @@ r"""
 """, [], [TTPLine], recursive=False)
 @export_function_to_module
 @user_documentation
-def get_optional_arg_str()->Optional[str]:
+def get_optional_arg_str(engine: Engine=  default_engine)->Optional[str]:
 	"""
 	Get an optional argument.
 	"""
-	[result]=get_optional_argument_detokenized_()
+	[result]=get_optional_argument_detokenized_(engine=engine)
 	result_=str(result)
 	if result_=="0": return None
 	assert result_[0]=="1", result_
@@ -2067,8 +2093,8 @@ r"""
 
 @export_function_to_module
 @user_documentation
-def get_optional_arg_estr()->Optional[str]:
-	[result]=get_optional_arg_estr_()
+def get_optional_arg_estr(engine: Engine=  default_engine)->Optional[str]:
+	[result]=get_optional_arg_estr_(engine=engine)
 	result_=str(result)
 	if result_=="0": return None
 	assert result_[0]=="1", result_
@@ -2087,12 +2113,12 @@ r"""
 """, [], [TTPLine], recursive=False)
 @export_function_to_module
 @user_documentation
-def get_verb_arg()->str:
+def get_verb_arg(engine: Engine=  default_engine)->str:
 	"""
 	Get a verbatim argument. Since it's verbatim, there's no worry of |#| being doubled,
 	but it can only be used at top level.
 	"""
-	return str(get_verbatim_argument_()[0])
+	return str(get_verbatim_argument_(engine=engine)[0])
 
 get_multiline_verbatim_argument_=define_Python_call_TeX_local_sync(
 r"""
@@ -2107,11 +2133,11 @@ r"""
 """, [], [TTPBlock], recursive=False)
 @export_function_to_module
 @user_documentation
-def get_multiline_verb_arg()->str:
+def get_multiline_verb_arg(engine: Engine=  default_engine)->str:
 	"""
 	Get a multi-line verbatim argument.
 	"""
-	return str(get_multiline_verbatim_argument_()[0])
+	return str(get_multiline_verbatim_argument_(engine=engine)[0])
 
 newcommand2=define_Python_call_TeX_local(
 r"""
@@ -2152,27 +2178,27 @@ def check_function_name(name: str)->None:
 	if not re.fullmatch("[A-Za-z]+", name) or (len(name)==1 and ord(name)<=0x7f):
 		raise RuntimeError("Invalid function name: "+name)
 
-def newcommand_(name: str, f: Callable)->Callable:
+def newcommand_(name: str, f: Callable, engine: Engine)->Callable:
 	identifier=get_random_identifier()
 
-	newcommand2(PTTVerbatimLine(name), PTTVerbatimLine(identifier))
+	newcommand2(PTTVerbatimLine(name), PTTVerbatimLine(identifier), engine=engine)
 
 	_code=define_TeX_call_Python(
-			lambda: run_code_redirect_print_TeX(f),
+			lambda engine: run_code_redirect_print_TeX(f, engine=engine),
 			name, argtypes=[], identifier=identifier)
 	# ignore _code, already executed something equivalent in the TeX command
 	return f
 
-def renewcommand_(name: str, f: Callable)->Callable:
+def renewcommand_(name: str, f: Callable, engine: Engine)->Callable:
 	identifier=get_random_identifier()
 
-	renewcommand2(PTTVerbatimLine(name), PTTVerbatimLine(identifier))
+	renewcommand2(PTTVerbatimLine(name), PTTVerbatimLine(identifier), engine=engine)
 	# TODO remove the redundant entry from TeX_handlers (although technically is not very necessary, just cause slight memory leak)
 	#try: del TeX_handlers["u"+name]
 	#except KeyError: pass
 
 	_code=define_TeX_call_Python(
-			lambda: run_code_redirect_print_TeX(f),
+			lambda engine: run_code_redirect_print_TeX(f, engine=engine),
 			name, argtypes=[], identifier=identifier)
 	# ignore _code, already executed something equivalent in the TeX command
 	return f
@@ -2180,26 +2206,26 @@ def renewcommand_(name: str, f: Callable)->Callable:
 	
 
 @export_function_to_module
-def newcommand(x: Union[str, Callable, None]=None, f: Optional[Callable]=None)->Callable:
+def newcommand(x: Union[str, Callable, None]=None, f: Optional[Callable]=None, engine: Engine=  default_engine)->Callable:
 	"""
 	Define a new \TeX\ command.
 	If name is not provided, it's automatically deduced from the function.
 	"""
-	if f is not None: return newcommand(x)(f)
+	if f is not None: return newcommand(x, engine=engine)(f)
 	if x is None: return newcommand  # weird design but okay (allow |@newcommand()| as well as |@newcommand|)
-	if isinstance(x, str): return functools.partial(newcommand_, x)
-	return newcommand_(x.__name__, x)
+	if isinstance(x, str): return functools.partial(newcommand_, x, engine=engine)
+	return newcommand_(x.__name__, x, engine=engine)
 
 @export_function_to_module
-def renewcommand(x: Union[str, Callable, None]=None, f: Optional[Callable]=None)->Callable:
+def renewcommand(x: Union[str, Callable, None]=None, f: Optional[Callable]=None, engine: Engine=  default_engine)->Callable:
 	"""
 	Redefine a \TeX\ command.
 	If name is not provided, it's automatically deduced from the function.
 	"""
-	if f is not None: return newcommand(x)(f)
-	if x is None: return newcommand  # weird design but okay (allow |@newcommand()| as well as |@newcommand|)
-	if isinstance(x, str): return functools.partial(renewcommand_, x)
-	return renewcommand_(x.__name__, x)
+	if f is not None: return renewcommand(x, engine=engine)(f)
+	if x is None: return renewcommand  # weird design but okay (allow |@newcommand()| as well as |@newcommand|)
+	if isinstance(x, str): return functools.partial(renewcommand_, x, engine=engine)
+	return renewcommand_(x.__name__, x, engine=engine)
 
 
 # ========
@@ -2219,22 +2245,22 @@ r"""
 
 @export_function_to_module
 @user_documentation
-def put_next(arg: Union[str, Token, BalancedTokenList])->None:
+def put_next(arg: Union[str, Token, BalancedTokenList], engine: Engine=  default_engine)->None:
 	"""
 	Put some content forward in the input stream.
 
 	arg: has type |str| (will be tokenized in the current catcode regime, must be a single line),
 	or |BalancedTokenList|.
 	"""
-	if isinstance(arg, str): put_next_TeX_line(PTTTeXLine(arg))
-	else: arg.put_next()
+	if isinstance(arg, str): put_next_TeX_line(PTTTeXLine(arg), engine=engine)
+	else: arg.put_next(engine=engine)
 
 
 
 # TODO I wonder which one is faster. Need to benchmark...
 @export_function_to_module
 @user_documentation
-def peek_next_meaning()->str:
+def peek_next_meaning(engine: Engine=  default_engine)->str:
 	"""
 	Get the meaning of the following token, as a string, using the current |\escapechar|.
 	
@@ -2243,7 +2269,7 @@ def peek_next_meaning()->str:
 	It's undefined behavior if there's a newline (|\newlinechar| or |^^J|, the latter is OS-specific)
 	in the meaning string.
 	"""
-	return typing.cast(Callable[[], TTPEmbeddedLine], Python_call_TeX_local(
+	return typing.cast(Callable[[Engine], TTPEmbeddedLine], Python_call_TeX_local(
 			r"""
 			\cs_new_protected:Npn \__peek_next_meaning_callback: {
 
@@ -2256,7 +2282,7 @@ def peek_next_meaning()->str:
 			\cs_new_protected:Npn %name% {
 				\futurelet \__tmp \__peek_next_meaning_callback:
 			}
-			""", recursive=False))()
+			""", recursive=False))(engine)
 
 
 if 0:
@@ -2328,7 +2354,7 @@ def parse_meaning_str(s: str)->Optional[Tuple[Catcode, str]]:
 
 @export_function_to_module
 @user_documentation
-def peek_next_char()->str:
+def peek_next_char(engine: Engine=  default_engine)->str:
 	"""
 	Get the character of the following token, or empty string if it's not a character.
 	Will also return nonempty if the next token is an implicit character token.
@@ -2345,17 +2371,19 @@ def peek_next_char()->str:
 	return r[1]
 
 @export_function_to_module
-def get_next_char()->str:
-	result=Token.get_next()
+def get_next_char(engine: Engine=  default_engine)->str:
+	result=Token.get_next(engine=engine)
 	assert isinstance(result, CharacterToken), "Next token is not a character!"
 	return result.chr
 
 # ========
 
 try:
-	send_bootstrap_code()
-	run_main_loop()  # if this returns cleanly TeX has no error. Otherwise some readline() will reach eof and print out a stack trace
-	assert not raw_readline(), "Internal error: TeX sends extra line"
+	engine=ParentProcessEngine()
+	#default_engine
+	send_bootstrap_code(engine=engine)
+	run_main_loop(engine=engine)  # if this returns cleanly TeX has no error. Otherwise some readline() will reach eof and print out a stack trace
+	assert not engine.read(), "Internal error: TeX sends extra line"
 
 except:
 	# see also documentation of run_error_finish.
@@ -2364,7 +2392,7 @@ except:
 
 	if do_run_error_finish:
 		action_done=False  # force run it
-		run_error_finish(PTTBlock("".join(traceback.format_exc())))
+		run_error_finish(PTTBlock("".join(traceback.format_exc())), engine=engine)
 
 	os._exit(0)
 

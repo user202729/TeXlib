@@ -40,45 +40,70 @@
 
 \bool_new:N \_pythonimmediate_mode_multiprocessing_network
 \bool_new:N \_pythonimmediate_mode_unnamed_pipe
+\bool_new:N \_pythonimmediate_mode_child_process
 \str_if_eq:VnT \_pythonimmediate_mode {multiprocessing-network} {\bool_set_true:N \_pythonimmediate_mode_multiprocessing_network}
 \str_if_eq:VnT \_pythonimmediate_mode {unnamed-pipe} {\bool_set_true:N \_pythonimmediate_mode_unnamed_pipe}
-\bool_if:nF {\_pythonimmediate_mode_multiprocessing_network || \_pythonimmediate_mode_unnamed_pipe} {
+\str_if_eq:VnT \_pythonimmediate_mode {child-process} {\bool_set_true:N \_pythonimmediate_mode_child_process}
+\bool_if:nF {\_pythonimmediate_mode_multiprocessing_network || \_pythonimmediate_mode_unnamed_pipe || \_pythonimmediate_mode_child_process} {
     \msg_error:nnV {pythonimmediate} {invalid-mode} \_pythonimmediate_mode
 }
 
-% we need to persistently open the file anyway, so using LaTeX3 stream reference counting doesn't help
-\newread \_pythonimmediate_read_file
+% note on \newread: we need to persistently open the file anyway, so using LaTeX3 stream reference counting doesn't help
 
-%\bench before~setup.
 
-\newwrite \_pythonimmediate_write_file
+% ======== setup read file ========
 
-%\bench before~openin.
-
-% ======== open persistent pipes to the child processes
-\bool_if:NTF \_pythonimmediate_mode_unnamed_pipe {  % in this case make sure the pipe remains open...
+\bool_if:NT \_pythonimmediate_mode_unnamed_pipe {  % in this case make sure the pipe remains open...
+	\newread \_pythonimmediate_read_file
 	\openin \_pythonimmediate_read_file=|"sleep~ 0.5s|\_pythonimmediate_python_executable \space -m ~ pythonimmediate.pytotex ~ \_pythonimmediate_mode"~  % we must use the primitive here to use the pipe file path
 	% TODO sleep infinity causes some resource leak (the process will not exit after TeX exits). Need to fix
 	% but sleep too little might be problematic that it exits before the setup is done
 	% we can just assume machines are not that slow
-} {
+}
+
+\bool_if:NT \_pythonimmediate_mode_multiprocessing_network {
+	\newread \_pythonimmediate_read_file
 	\openin \_pythonimmediate_read_file=|"\_pythonimmediate_python_executable \space -m ~ pythonimmediate.pytotex ~ \_pythonimmediate_mode"~  % we must use the primitive here to use the pipe file path
 }
 
-\immediate\openout \_pythonimmediate_write_file=|"\_pythonimmediate_python_executable \space -m ~ pythonimmediate.main"~
-% note that openout, even to shell, will append .tex if there's no dot in the command
-
-% both processes must be before the \readline below so that the 2 Python processes are started "in parallel"
-\ior_str_get:NN \_pythonimmediate_read_file \_pythonimmediate_dummy_line
-
-\str_if_eq:VnT \_pythonimmediate_dummy_line {} {
-	\msg_error:nn {pythonimmediate} {cannot-read-line}
+\bool_if:NT \_pythonimmediate_mode_child_process {
+	% make read file read from stdin
+	\int_const:Nn \_pythonimmediate_read_file {-1}
 }
 
-\immediate\write\_pythonimmediate_write_file {\_pythonimmediate_dummy_line}
 
-%\bench after~setup.
+% ======== setup write file ========
 
+\newwrite \_pythonimmediate_write_file
+\bool_if:NTF \_pythonimmediate_mode_child_process {
+	\immediate\openout \_pythonimmediate_write_file=/dev/stderr~
+} {
+	\immediate\openout \_pythonimmediate_write_file=|"\_pythonimmediate_python_executable \space -m ~ pythonimmediate.main"~
+	% note that openout, even to shell, will append .tex if there's no dot in the command
+	% so we artificially add a dot here in `.main`
+
+	% both processes must be before the \readline below so that the 2 Python processes are started "in parallel"
+	\ior_str_get:NN \_pythonimmediate_read_file \_pythonimmediate_line  % read one line from pytotex half, forward to textopy half
+
+	\str_if_eq:VnT \_pythonimmediate_line {} {
+		\msg_error:nn {pythonimmediate} {cannot-read-line}
+	}
+
+	% specify whether the engine support Unicode
+	\str_const:Nn \_pythonimmediate_engine_unicode_indicator_pdftex {a}
+	\str_const:Nn \_pythonimmediate_engine_unicode_indicator_ptex   {a}
+	\str_const:Nn \_pythonimmediate_engine_unicode_indicator_uptex  {a}
+
+	\str_const:Nn \_pythonimmediate_engine_unicode_indicator_xetex  {u}
+	\str_const:Nn \_pythonimmediate_engine_unicode_indicator_luatex {u}
+
+	\immediate\write\_pythonimmediate_write_file {
+		\use:c {_pythonimmediate_engine_unicode_indicator_ \c_sys_engine_str}
+		\_pythonimmediate_line
+	}
+}
+
+% ======== bootstrap utility functions
 
 % read one block of \TeX\ code from Python, store into the specified variable
 % the block is delimited using |surround_delimiter()| in Python i.e. the first and last line are identical
@@ -122,8 +147,6 @@
 	\scantokens \expandafter{\_pythonimmediate_code}
 }  % trick described in https://tex.stackexchange.com/q/640274 to scantokens the code with \newlinechar=10
 
-% bootstrap code
-%\bench before~bootstrap.
+% ======== bootstrap code
 \_pythonimmediate_run_block:
-%\bench after~bootstrap.
 

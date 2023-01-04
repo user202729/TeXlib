@@ -22,6 +22,9 @@
 \begin{pycode}
 import pythonimmediate
 
+from pythonimmediate import textopy
+pythonimmediate.default_engine.set_engine(textopy.engine)
+
 x="xxx"
 import sys
 print("======== test stdout ========")
