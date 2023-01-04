@@ -118,6 +118,7 @@ r"""
 	\begingroup
 		\endlinechar=-1~
 		\readline \__read_file to \__line
+		\wlog{debug just read command \__line}
 		\expandafter
 	\endgroup % also this will give an error instead of silently do nothing when command is invalid
 		\csname __run_ \__line :\endcsname
@@ -1234,7 +1235,7 @@ class PTTVerbatimLine(PyToTeXData):
 	The trailing newline is not included, i.e. it's read under |\endlinechar=-1|.
 	"""
 	data: str
-	read_code=r"\ior_str_get:NN \__read_file {} ".format
+	read_code=r"\__str_get:N {} ".format
 	def write(self, engine: Engine)->None:
 		assert "\n" not in self.data
 		assert self.data.rstrip()==self.data, "Cannot send verbatim line with trailing spaces!"
@@ -1269,7 +1270,7 @@ class PTTBlock(PyToTeXData):
 @dataclass
 class PTTBalancedTokenList(PyToTeXData):
 	data: BalancedTokenList
-	read_code=r"\ior_str_get:NN \__read_file {0}  \__tldeserialize_dot:NV {0} {0}".format
+	read_code=r"\__str_get:N {0}   \wlog{{read {0}, going to deserialize}}   \__tldeserialize_dot:NV {0} {0}".format
 	def write(self, engine: Engine)->None:
 		PTTVerbatimLine(self.data.serialize()+".").write(engine=engine)
 

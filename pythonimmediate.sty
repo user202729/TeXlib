@@ -1,5 +1,7 @@
 \ProvidesExplPackage{pythonimmediate}{2022/12/23}{0.0.0}{Library to run Python code}
 
+\errorcontextlines=100~
+
 \RequirePackage{saveenv}
 \RequirePackage{currfile}
 \RequirePackage{l3keys2e}
@@ -68,22 +70,36 @@
 
 \bool_if:NT \_pythonimmediate_mode_child_process {
 	% make read file read from stdin
+	% note that \ior_str_get:NN cannot be used here as it checks for \ifeof which breaks with terminal for some reason
 	\int_const:Nn \_pythonimmediate_read_file {-1}
 }
 
+% ======== copy of ior_str_get but does not check for file end ========
+\cs_generate_variant:Nn \use_ii_i:nn {o}
+\cs_new_protected:Npn \_pythonimmediate_str_get:N #1 {
+	\use_ii_i:on {\the\endlinechar\relax} {
+		\endlinechar=-1~
+		\readline \_pythonimmediate_read_file to #1
+		\endlinechar=
+	}
+}
+
+
 
 % ======== setup write file ========
-
+\RequirePackage{prettytok}\prettyinitterm
 \newwrite \_pythonimmediate_write_file
 \bool_if:NTF \_pythonimmediate_mode_child_process {
-	\immediate\openout \_pythonimmediate_write_file=/dev/stderr~
+	%\immediate\openout \_pythonimmediate_write_file=symlink-to-stderr.txt~
+	% tried this method, it seems to work except that it's buffered when stderr is redirected to a file...
+	\immediate\openout \_pythonimmediate_write_file=|"\_pythonimmediate_python_executable \space -m ~ pythonimmediate.copy_to_stderr"~
 } {
 	\immediate\openout \_pythonimmediate_write_file=|"\_pythonimmediate_python_executable \space -m ~ pythonimmediate.main"~
 	% note that openout, even to shell, will append .tex if there's no dot in the command
 	% so we artificially add a dot here in `.main`
 
 	% both processes must be before the \readline below so that the 2 Python processes are started "in parallel"
-	\ior_str_get:NN \_pythonimmediate_read_file \_pythonimmediate_line  % read one line from pytotex half, forward to textopy half
+	\_pythonimmediate_str_get:N \_pythonimmediate_line  % read one line from pytotex half, forward to textopy half
 
 	\str_if_eq:VnT \_pythonimmediate_line {} {
 		\msg_error:nn {pythonimmediate} {cannot-read-line}
@@ -120,9 +136,6 @@
 
 		\bool_do_until:nn {\tl_if_eq_p:NN \_pythonimmediate_delimiter \_pythonimmediate_line} {
 			\tl_build_gput_right:NV #1 \_pythonimmediate_line
-			\ifeof \_pythonimmediate_read_file
-				\msg_error:nn {pythonimmediate} {internal-error}
-			\fi
 			\readline \_pythonimmediate_read_file to \_pythonimmediate_line
 		}
 		\tl_build_gend:N #1

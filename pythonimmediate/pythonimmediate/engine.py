@@ -71,20 +71,52 @@ class ChildProcessEngine(Engine):
 	def __init__(self, engine_name: EngineName, args: Iterable[str]=())->None:
 		self.engine_name=engine_name
 		self._is_unicode=engine_is_unicode[engine_name]
+
+		# old method, tried, does not work, see details in sty file
+
+		# create a sym link from /dev/stderr to /tmp/.tex-stderr
+		# because TeX can only write to files that contain a period
+		#from pathlib import Path
+		#import tempfile
+		#target=Path(tempfile.gettempdir())/"symlink-to-stderr.txt"
+		#try:
+		#	target.symlink_to(Path("/dev/stderr"))
+		#except FileExistsError:
+		#	# we assume nothing maliciously create a file named `.symlink-to-stderr` that is not a symlink to stderr...
+		#	pass
+
 		self.process=subprocess.Popen(
-				[engine_name, *args, r"\RequirePackage[mode=child-process]{pythonimmediate}\pythonimmediatechildprocessmainloop"],
+				[
+					engine_name, "-shell-escape",
+						*args, r"\RequirePackage[mode=child-process]{pythonimmediate}\pythonimmediatechildprocessmainloop\stop"],
 				stdin=subprocess.PIPE,
-				stdout=subprocess.PIPE,
+				#stdout=subprocess.PIPE,  # we don't need the stdout
+				stdout=subprocess.DEVNULL,
 				stderr=subprocess.PIPE,
+				#cwd=tempfile.gettempdir(),
 				)
 
+		from . import textopy
+		from .textopy import surround_delimiter, send_raw, substitute_private
+		send_raw(surround_delimiter(substitute_private(
+			textopy.bootstrap_code + 
+			r"""
+			\cs_new_eq:NN \pythonimmediatechildprocessmainloop \__read_do_one_command:
+			"""
+			)), engine=self)
+
 	def read(self)->bytes:
-		assert self.process.stdout is not None
-		return self.process.stdout.readline()
+		assert self.process.stderr is not None
+		#print("waiting to read")
+		line=self.process.stderr.readline()
+		#print("reading", line)
+		return line
 
 	def write(self, s: bytes)->None:
 		assert self.process.stdin is not None
+		#print("writing", s)
 		self.process.stdin.write(s)
+		self.process.stdin.flush()
 
 
 class DefaultEngine(Engine):
