@@ -36,10 +36,6 @@ def user_documentation(x: Union[Callable, str])->Any:
 debug=lambda *args, **kwargs: None
 
 
-import argparse
-parser=argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument("mode", choices=["multiprocessing-network", "unnamed-pipe"])
-args=parser.parse_args()
 
 expansion_only_can_call_Python=False  # normally. May be different in LuaTeX etc.
 
@@ -51,39 +47,16 @@ if True:
 
 	raw_readline=sys.__stdin__.readline  # raw_readline() should return "⟨line⟩\n" or "" (if EOF) on each call
 
-if args.mode=="multiprocessing-network":
-	address=("localhost", 7348)  # this must be identical to that of the other half-script
-	#address="./pythonimmediate.socket"
 
-	from multiprocessing.connection import Client
-	connection=Client(address)
-	debug("connected")
+line=raw_readline()
+assert line.endswith("\n")
+from . import communicate
+communicator=communicate.create_communicator(line[:-1])
+def send_raw(s: str)->None:
+	communicator.send(s.encode('u8'))
 
-	def send_raw(s: str)->None:  # send_raw() should get pass the s = "⟨line⟩\n"
-		global connection
-		debug("======== sending", s)
-		connection.send_bytes(s.encode('u8'))
 
-elif args.mode=="unnamed-pipe":
-	pytotex_pid_line=raw_readline()
-	match_=re.fullmatch("pytotex_pid=(\d+)\n", pytotex_pid_line)
-	assert match_, pytotex_pid_line
-	pytotex_pid=int(match_[1])
 
-	connection_=open("/proc/" + str(pytotex_pid) + "/fd/0", "w", encoding='u8',
-			buffering=1  # line buffering
-			)
-
-	def send_raw(s: str)->None:
-		global connection_
-		debug("======== sending", s)
-		connection_.write(s)
-		connection_.flush()  # just in case
-
-else:
-	assert False
-
-# ======== done.
 
 pythonimmediate: Any
 import pythonimmediate  # type: ignore

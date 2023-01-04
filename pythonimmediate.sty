@@ -65,25 +65,17 @@
 	\openin \_pythonimmediate_read_file=|"\_pythonimmediate_python_executable \space -m ~ pythonimmediate.pytotex ~ \_pythonimmediate_mode"~  % we must use the primitive here to use the pipe file path
 }
 
-\immediate\openout \_pythonimmediate_write_file=|"\_pythonimmediate_python_executable \space -m ~ pythonimmediate.main ~ \_pythonimmediate_mode \space"~
+\immediate\openout \_pythonimmediate_write_file=|"\_pythonimmediate_python_executable \space -m ~ pythonimmediate.main"~
 % note that openout, even to shell, will append .tex if there's no dot in the command
 
 % both processes must be before the \readline below so that the 2 Python processes are started "in parallel"
 \ior_str_get:NN \_pythonimmediate_read_file \_pythonimmediate_dummy_line
 
-\bool_if:NT \_pythonimmediate_mode_multiprocessing_network {
-	\str_if_eq:VnF \_pythonimmediate_dummy_line {listener-setup-done} {
-		\msg_error:nn {pythonimmediate} {cannot-read-line}
-	}
+\str_if_eq:VnT \_pythonimmediate_dummy_line {} {
+	\msg_error:nn {pythonimmediate} {cannot-read-line}
 }
-\bool_if:NT \_pythonimmediate_mode_unnamed_pipe {
-	\str_if_in:VnF \_pythonimmediate_dummy_line {pytotex_pid=} {
-		\msg_error:nn {pythonimmediate} {cannot-read-line}
-	}
-}
-\bool_if:NT \_pythonimmediate_mode_unnamed_pipe {
-	\immediate\write\_pythonimmediate_write_file {\_pythonimmediate_dummy_line}  % which contains pytotex's pid
-}
+
+\immediate\write\_pythonimmediate_write_file {\_pythonimmediate_dummy_line}
 
 %\bench after~setup.
 

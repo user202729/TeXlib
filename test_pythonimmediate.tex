@@ -476,6 +476,11 @@ class Test(unittest.TestCase):
 		T.outertest.put_next()
 		self.assertEqual(Token.get_next(), T.outertest)
 
+	def test_deserialize_not_accidentally_define(self)->None:
+		self.assertEqual(
+				TokenList.doc(r'\meaning\undefined').expand_x().str(),
+				r'undefined')
+
 
 suite = unittest.defaultTestLoader.loadTestsFromTestCase(Test)
 unittest.TextTestRunner(failfast=True).run(suite)
