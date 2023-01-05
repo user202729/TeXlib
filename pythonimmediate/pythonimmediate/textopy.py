@@ -6,7 +6,7 @@ receive commands from TeX, then execute it here
 """
 
 
-#from __future__ import annotations
+from __future__ import annotations
 import sys
 import os
 import inspect
@@ -345,7 +345,7 @@ class Token(NToken):
 		return f"<Token: {self.repr1()}>"
 
 	@staticmethod
-	def deserialize(s: str)->"Token":
+	def deserialize(s: str|bytes)->"Token":
 		t=TokenList.deserialize(s)
 		assert len(t)==1
 		return t[0]
@@ -949,7 +949,7 @@ class TokenList(TokenListBaseClass):
 		return "".join(t.serialize() for t in self)
 
 	@classmethod
-	def deserialize(cls: Type[TokenListType], data: str)->TokenListType:
+	def deserialize(cls: Type[TokenListType], data: str|bytes)->TokenListType:
 		result: List[Token]=[]
 		i=0
 		while i<len(data):
@@ -1146,7 +1146,17 @@ class TeXToPyData(ABC):
 #	#@property
 #	#def send_code()->str:
 #	#	...
-	
+
+
+class TTPRawLine(TeXToPyData, bytes):
+	send_code=r"\immediate \write \__write_file {{\unexpanded{{ {} }}}}".format
+	send_code_var=r"\immediate \write \__write_file {{\unexpanded{{ {} }}}}".format
+	@staticmethod
+	def read(engine: Engine)->"TTPRawLine":
+		line=engine.read()
+		assert line[-1]==ord('\n')
+		line=line[:-1]
+		return TTPRawLine(line)
 
 class TTPLine(TeXToPyData, str):
 	send_code=r"\immediate \write \__write_file {{\unexpanded{{ {} }}}}".format
@@ -1308,7 +1318,18 @@ def define_TeX_call_Python(f: Callable[..., None], name: Optional[str]=None, arg
 	"""
 	if argtypes is None:
 		argtypes=[p.annotation for p in inspect.signature(f).parameters.values()]
-		argtypes=[t for t in argtypes if t!=Engine]
+
+	for i, argtype in enumerate(argtypes):
+		if isinstance(argtype, str):
+			assert argtype in globals(), f"cannot resolve string annotation {argtype}"
+			argtypes[i]=argtype=globals()[argtype]
+
+	argtypes=[t for t in argtypes if t is not Engine]  # temporary hack
+
+	for argtype in argtypes:
+		if not issubclass(argtype, TeXToPyData):
+			raise RuntimeError(f"Argument type {argtype} is incorrect, should be a subclass of TeXToPyData")
+
 	if name is None: name=f.__name__
 
 	if identifier is None: identifier=get_random_identifier()
@@ -1345,10 +1366,6 @@ def define_TeX_call_Python(f: Callable[..., None], name: Optional[str]=None, arg
 	TeX_argspec = ""
 	TeX_send_input_commands = ""
 	for i, argtype in enumerate(argtypes):
-		if isinstance(argtype, str):
-			raise RuntimeError("string annotation or `from __future__ import annotations' not yet supported")
-		if not issubclass(argtype, TeXToPyData):
-			raise RuntimeError(f"Argument type {argtype} is incorrect, should be a subclass of TeXToPyData")
 		arg = f"#{i+1}"
 		TeX_send_input_commands += argtype.send_code(arg)
 		TeX_argspec += arg

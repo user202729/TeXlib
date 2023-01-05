@@ -17,19 +17,14 @@
 \let\secondoftwo\@secondoftwo
 \makeatother
 
-\ifdefined\specifymode
-	\expandafter\firstoftwo
-\else
-	\expandafter\secondoftwo
+\unless\ifdefined\specifymode
+	\def\specifymode{multiprocessing-network}
 \fi
-{
-	\def\tmp#1{
-		\usepackage[mode=#1,python-executable=python3.10]{pythonimmediate}
-	}
-	\expandafter\tmp\expandafter{\specifymode}
-}{
-	\usepackage[mode=multiprocessing-network,python-executable=python3.10]{pythonimmediate}
+
+\def\tmp#1{
+	\usepackage[mode=#1,python-executable={PYTHONPATH=/home/user202729/TeX/pythonimmediate/ python3.8}]{pythonimmediate}
 }
+\expandafter\tmp\expandafter{\specifymode}
 
 %\usepackage[mode=unnamed-pipe]{pythonimmediate}
 
