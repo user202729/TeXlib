@@ -348,6 +348,16 @@ class Token(NToken):
 		return t[0]
 
 	@staticmethod
+	def deserialize_bytes(data: bytes, engine: Engine)->"Token":
+		"""
+		See documentation of `TokenList.deserialize_bytes`.
+		"""
+		if engine.is_unicode:
+			return Token.deserialize(data.decode('u8'))
+		else:
+			return Token.deserialize(data)
+
+	@staticmethod
 	def get_next(engine: Engine=  default_engine)->"Token":
 		r"""
 		Get the following token.
@@ -359,7 +369,18 @@ class Token(NToken):
 		tokenize up to 2 tokens ahead (including the returned token),
 		as well as occasionally return the wrong token in unavoidable cases.
 		"""
-		return Token.deserialize(str(get_next_(engine=engine)[0]))
+		return Token.deserialize_bytes(
+			typing.cast(Callable[[Engine], TTPRawLine], Python_call_TeX_local(
+				r"""
+				\cs_new_protected:Npn \__get_next_callback #1 {
+					\peek_analysis_map_break:n { \pythonimmediatecontinue {^^J#1} }
+				}
+				\cs_new_protected:Npn %name% {
+					\peek_analysis_map_inline:n {
+						\__tlserialize_char_unchecked:nNnN {##2}##3{##1} \__get_next_callback
+					}
+				}
+				""", recursive=False))(engine), engine=engine)
 
 	@staticmethod
 	def peek_next(engine: Engine=  default_engine)->"Token":
@@ -985,6 +1006,16 @@ class TokenList(TokenListBaseClass):
 				i+=2
 		return cls(result)
 
+	@classmethod
+	def deserialize_bytes(cls: Type[TokenListType], data: bytes, engine: Engine)->TokenListType:
+		"""
+		Given a bytes object read directly from the engine, deserialize it.
+		"""
+		if engine.is_unicode:
+			return cls.deserialize(data.decode('u8'))
+		else:
+			return cls.deserialize(data)
+
 	def __repr__(self)->str:
 		return '<' + type(self).__name__ + ': ' + ' '.join(t.repr1() for t in self) + '>'
 
@@ -1225,7 +1256,10 @@ class TTPBalancedTokenList(TeXToPyData, BalancedTokenList):
 	send_code_var=r"\__tlserialize_nodot:NV \__tmp {} \immediate \write \__write_file {{\unexpanded\expandafter{{ \__tmp }}}}".format
 	@staticmethod
 	def read(engine: Engine)->"TTPBalancedTokenList":
-		return TTPBalancedTokenList(BalancedTokenList.deserialize(readline(engine=engine)))
+		if engine.is_unicode:
+			return TTPBalancedTokenList(BalancedTokenList.deserialize(readline(engine=engine)))
+		else:
+			return TTPBalancedTokenList(BalancedTokenList.deserialize(engine.read()))
 
 
 class PyToTeXData(ABC):
@@ -1900,17 +1934,6 @@ r"""
 """
 		, [PTTBalancedTokenList], [], recursive=False)
 
-get_next_=define_Python_call_TeX_local_sync(
-r"""
-\cs_new_protected:Npn \__get_next_callback #1 {
-	\peek_analysis_map_break:n { \pythonimmediatecontinue {#1} }
-}
-\cs_new_protected:Npn %name% {
-	\peek_analysis_map_inline:n {
-		\__tlserialize_char_unchecked:nNnN {##2}##3{##1} \__get_next_callback
-	}
-}
-""", [], [TTPEmbeddedLine], recursive=False)
 
 put_next_bgroup=define_Python_call_TeX_local_sync(
 r"""
