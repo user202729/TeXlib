@@ -39,11 +39,13 @@ class Engine(ABC):
 		Read one line from the engine.
 
 		It must not be EOF otherwise there's an error.
+
+		The returned line does not contain the newline character.
 		"""
 		self.check_not_exited_before()
 		result=self._read()
 		self.check_not_exited_after()
-		return result
+		return result[:-1]
 
 	def write(self, s: bytes)->None:
 		self.check_not_exited_before()
@@ -78,13 +80,12 @@ class ParentProcessEngine(Engine):
 	def __init__(self)->None:
 		super().__init__()
 		line=self.read().decode('u8')
-		assert line.endswith("\n")
 
 		self._is_unicode={"a": False, "u": True}[line[0]]
 		line=line[1:]
 
 		from . import communicate
-		self.communicator=communicate.create_communicator(line[:-1])
+		self.communicator=communicate.create_communicator(line)
 
 		sys.stdin=None  # type: ignore
 		# avoid user mistakenly read
@@ -157,7 +158,7 @@ class DefaultEngine(Engine):
 		return self.get_engine().is_unicode
 
 	def _read(self)->bytes:
-		return self.get_engine().read()
+		return self.get_engine()._read()
 
 	def _write(self, s: bytes)->None:
 		self.get_engine().write(s)

@@ -225,9 +225,6 @@ user_scope: Dict[str, Any]={}  # consist of user's local variables etc.
 
 def readline(engine: Engine)->str:
 	line=engine.read().decode('u8')
-
-	assert line[-1]=='\n'
-	line=line[:-1]
 	debug("======== saw line", line)
 	return line
 
@@ -952,6 +949,11 @@ class TokenList(TokenListBaseClass):
 	def deserialize(cls: Type[TokenListType], data: str|bytes)->TokenListType:
 		result: List[Token]=[]
 		i=0
+
+		# hack
+		if isinstance(data, bytes):
+			data="".join(chr(i) for i in data)
+
 		while i<len(data):
 
 			if data[i] in "\\>*":
@@ -1154,8 +1156,6 @@ class TTPRawLine(TeXToPyData, bytes):
 	@staticmethod
 	def read(engine: Engine)->"TTPRawLine":
 		line=engine.read()
-		assert line[-1]==ord('\n')
-		line=line[:-1]
 		return TTPRawLine(line)
 
 class TTPLine(TeXToPyData, str):
