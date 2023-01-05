@@ -70,6 +70,15 @@
 
 \tl_gset:Nn \_prettytok_output_format {}
 
+\int_const:Nn \_prettytok_typeout_stream {128}  % 16 works except on LuaLaTeX
+
+% temporary solution...
+\cs_new_protected:Npn \prettyinittermcat {
+	\global \let \_prettytok_typeout_stream \undefined
+	\newwrite \_prettytok_typeout_stream
+	\immediate \openout \_prettytok_typeout_stream = |"python3 ~ -m ~ pythonimmediate.decode_8bit"~
+}
+
 \precattl_exec:n {
 	\cs_new_protected:Npn \_prettyinit_html_unchecked: {
 		\cs_gset_protected:Npn \pretty_check_already_init: {\msg_error:nn {prettytok} {already-initialized}}
@@ -196,7 +205,7 @@
 		}
 	} {
 		\cs_new_protected:Npn \_prettytok_typeout_content: {
-			\typeout{\_prettytok_content}
+			\immediate\write\_prettytok_typeout_stream{\_prettytok_content}
 		}
 	}
 
