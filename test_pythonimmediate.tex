@@ -162,6 +162,18 @@ class Test(unittest.TestCase):
 		pythonimmediate.put_next('{' + s + '}')
 		self.assertEqual(pythonimmediate.get_arg_estr(), s)
 
+	def test_hash(self):
+		for put, get in [
+				("#", None),
+				("#1#2#3##", None),
+				(r"\#", None),
+				(r"\##", None),
+				(r"#\#", None),
+				]:
+			pythonimmediate.put_next('{' + put + '}')
+			self.assertEqual(pythonimmediate.get_arg_str(), (put if get is None else get))
+
+
 	def test_newcommand_with_name(self):
 		@pythonimmediate.newcommand("testd")
 		def testa():

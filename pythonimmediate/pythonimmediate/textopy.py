@@ -2114,6 +2114,8 @@ def expand_once(engine: Engine=  default_engine)->None:
 		\cs_new_protected:Npn %name% { \expandafter \pythonimmediatecontinuenoarg }
 		""", recursive=False, sync=True))(engine)
 
+def replace_double_hash(s: str)->str:
+	return s.replace("##", "#")
 
 @export_function_to_module
 @user_documentation
@@ -2121,7 +2123,7 @@ def get_arg_str(engine: Engine=  default_engine)->str:
 	"""
 	Get a mandatory argument.
 	"""
-	return typing.cast(Callable[[Engine], TTPEmbeddedLine], Python_call_TeX_local(
+	return replace_double_hash(typing.cast(Callable[[Engine], TTPEmbeddedLine], Python_call_TeX_local(
 		r"""
 		\cs_new_protected:Npn %name% #1 {
 			\immediate\write\__write_file { \unexpanded {
@@ -2129,7 +2131,7 @@ def get_arg_str(engine: Engine=  default_engine)->str:
 			}}
 			\__read_do_one_command:
 		}
-		""", recursive=False))(engine)
+		""", recursive=False))(engine))
 
 get_arg_estr_=define_Python_call_TeX_local_sync(
 r"""
