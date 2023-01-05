@@ -1,5 +1,6 @@
 import subprocess
 import tempfile
+from typing import List
 
 import pytest
 
@@ -10,6 +11,14 @@ from pythonimmediate import TokenList, ControlSequenceToken
 from pythonimmediate import Catcode as C
 
 T=ControlSequenceToken.make
+
+
+from pathlib import Path
+for name in ["test_pythonimmediate.tex", "test_pythonimmediate_file.py"]:
+	a=Path("/tmp")/name
+	a.unlink(missing_ok=True)
+	a.symlink_to(Path(__file__).parent.parent.parent/name)
+
 
 class Test:
 	@pytest.mark.parametrize("engine_name", engine_names)
@@ -34,15 +43,31 @@ class Test:
 
 	@pytest.mark.parametrize("engine_name", engine_names)
 	@pytest.mark.parametrize("communication_method", ["unnamed-pipe", "multiprocessing-network"])
-	def test_subprocess(self, engine_name: str, communication_method: str)->None:
-		from pathlib import Path
-		for name in ["test_pythonimmediate.tex", "test_pythonimmediate_file.py"]:
-			a=Path("/tmp")/name
-			a.unlink(missing_ok=True)
-			a.symlink_to(Path(__file__).parent.parent.parent/name)
-
+	@pytest.mark.parametrize("use_8bit", [True, False])
+	def test_subprocess(self, engine_name: str, communication_method: str, use_8bit: bool)->None:
 		subprocess.run(
-				[engine_name, "-shell-escape", "-8bit", r"\def\specifymode{"+communication_method+r"}\input{/tmp/test_pythonimmediate.tex}"],
+				[engine_name, "-shell-escape", *(
+					["-8bit"] if use_8bit else []
+					), r"\def\specifymode{"+communication_method+r"}\input{/tmp/test_pythonimmediate.tex}"],
 				check=True,
 				cwd=tempfile.gettempdir(),
 				)
+
+	@pytest.mark.parametrize("original, mangled", [
+		("a", "a"),
+		("", ""),
+		("\t", ""),
+		("\t", "\t"),
+		("\t", "^^I"),
+		("\ta", "^^Ia"),
+		("a b", "a b"),
+		("a b  ", "a b"),
+		])
+	def test_mangle(self, original: str, mangled: str)->None:
+		assert pythonimmediate.textopy.can_be_mangled_to(original+"\n", mangled+"\n")
+
+	@pytest.mark.parametrize("original, mangled", [
+		("a", "b")
+		])
+	def test_mangle_incorrect(self, original: str, mangled: str)->None:
+		assert not pythonimmediate.textopy.can_be_mangled_to(original+"\n", mangled+"\n")

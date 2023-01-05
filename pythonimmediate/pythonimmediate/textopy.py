@@ -34,7 +34,7 @@ def user_documentation(x: Union[Callable, str])->Any:
 #debug_file=open(Path(tempfile.gettempdir())/"pythonimmediate_debug_textopy.txt", "w", encoding='u8', buffering=2)
 #debug=functools.partial(print, file=debug_file, flush=True)
 debug=functools.partial(print, file=sys.stderr, flush=True)
-debug=lambda *args, **kwargs: None
+debug=lambda *args, **kwargs: None  # type: ignore
 
 
 
@@ -479,17 +479,30 @@ r"""
 %}
 
 \cs_new:Npn \__prefix_escaper #1 {
-	\int_compare:nNnT {`#1} < {33} { * }
+	\ifnum 0<\__if_weird_charcode_or_space:n {`#1} ~
+		*
+	\fi
 }
 \cs_new:Npn \__content_escaper #1 {
-	\int_compare:nNnTF {`#1} < {33} { \cStr\  \char_generate:nn {`#1+64} {12} } {#1}
+	\ifnum 0<\__if_weird_charcode_or_space:n {`#1} ~
+		\cStr\  \char_generate:nn {`#1+64} {12}
+	\else
+		#1
+	\fi
 }
 
 % fully expand to zero if #1 is not weird, otherwise expand to nonzero
 % weird means as can be seen below <32 or =127 (those that will be ^^-escaped without -8bit)
+% XeLaTeX also make 80..9f weird
 \cs_new:Npn  \__if_weird_charcode:n #1 {
 	\ifnum #1 < 32 ~ 1 \fi
-	\ifnum #1 = 127 ~ 1 \fi
+	\ifnum #1 > 126 ~ \ifnum #1 < 160 ~ 1 \fi \fi
+	0
+}
+
+\cs_new:Npn  \__if_weird_charcode_or_space:n #1 {
+	\ifnum #1 < 33 ~ 1 \fi
+	\ifnum #1 > 126 ~ \ifnum #1 < 160 ~ 1 \fi \fi
 	0
 }
 
@@ -1473,36 +1486,71 @@ r"""
 }
 """)
 
-def normalize_lines(lines: List[str])->List[str]:
-	return [line.rstrip() for line in lines]
+"""
+In some engine, when -8bit option is not enabled, the code will be escaped before being sent to Python.
+So for example if the original code contains a literal tab character, `^^I` might be sent to Python instead.
+This do a fuzzy-normalization over these so that the sourcecode can be correctly matched.
+"""
+potentially_escaped_characters=str.maketrans({
+	chr(i): "^^" + chr(i^0x40)
+	for i in [*range(0, 32), 127]
+	})
+
+def normalize_line(line: str)->str:
+	assert line.endswith("\n")
+	line=line[:-1]
+	while line.endswith("^^I"): line=line[:-3]
+	return line.rstrip(" \t").translate(potentially_escaped_characters)
+
+def can_be_mangled_to(original: str, mangled: str)->bool:
+	r"""
+	if original is put in a TeX file, read engine other catcode regime, and then sent through \write,
+	is it possible that the written content is mangled?
+	"""
+	return normalize_line(original)==normalize_line(mangled)
 
 @define_internal_handler
 def __pycodex(code: TTPBlock, lineno_: TTPLine, filename: TTPLine, fileabspath: TTPLine, engine: Engine)->None:
+	"""
+	Auxiliary function to execute TeX_code in a `pycode` environment.
+	The `code` is not executed immediately, instead we search for the source TeX file that contains the code
+	(it must be found), then read the sowed from that file.
+	TeX might mangle the code a bit before passing it to Python, as such we use `can_be_mangled_to`
+	(might return some false positive)
+	to compare it with the code read from the sourcecode.
+	"""
 	if not code: return
 
 	lineno=int(lineno_)
 	# find where the code comes from... (for easy meaningful traceback)
 	target_filename: Optional[str] = None
 
-	code_lines_normalized=normalize_lines(code.splitlines(keepends=True))
+	code_lines=code.splitlines(keepends=True)
+	file_lines=[]
 
 	for f in (fileabspath, filename):
 		if not f: continue
 		p=Path(f)
 		if not p.is_file(): continue
-		file_lines=p.read_text().splitlines(keepends=True)[lineno-len(code_lines_normalized)-1:lineno-1]
-		if normalize_lines(file_lines)==code_lines_normalized:
+		file_lines=p.read_text().splitlines(keepends=True)[lineno-len(code_lines)-1:lineno-1]
+		if len(file_lines)==len(code_lines) and all(
+			can_be_mangled_to(file_line, code_line) for file_line, code_line in zip(file_lines, code_lines)
+			):
 			target_filename=f
 			break
 
 	if not target_filename:
+		if len(file_lines)==len(code_lines):
+			for file_line, code_line in zip(file_lines, code_lines):
+				if not can_be_mangled_to(file_line, code_line):
+					debug(f"different {file_line!r} {code_line!r}")
 		raise RuntimeError(f"Source file not found! (cwd={os.getcwd()}, attempted {(fileabspath, filename)})")
 
 	with io.StringIO() as t:
 		with RedirectPrintTeX(t):
 			if target_filename:
 				code_=''.join(file_lines)  # restore missing trailing spaces
-			code_="\n"*(lineno-len(code_lines_normalized)-1)+code_
+			code_="\n"*(lineno-len(code_lines)-1)+code_
 			if target_filename:
 				compiled_code=compile(code_, target_filename, "exec")
 				exec(compiled_code, user_scope)
