@@ -12,23 +12,25 @@ user code are not executed here.
 
 import sys
 import signal
-signal.signal(signal.SIGINT, signal.SIG_IGN)  # when the other half terminates this one will terminates "gracefully"
 
-#debug_file=open(Path(tempfile.gettempdir())/"pythonimmediate_debug_pytotex.txt", "w", encoding='u8', buffering=2)
-#debug=functools.partial(print, file=debug_file, flush=True)
-debug=lambda *args, **kwargs: None
+if __name__ == "__main__":
+	signal.signal(signal.SIGINT, signal.SIG_IGN)  # when the other half terminates this one will terminates "gracefully"
 
-from .communicate import MultiprocessingNetworkCommunicator, UnnamedPipeCommunicator
+	#debug_file=open(Path(tempfile.gettempdir())/"pythonimmediate_debug_pytotex.txt", "w", encoding='u8', buffering=2)
+	#debug=functools.partial(print, file=debug_file, flush=True)
+	debug=lambda *args, **kwargs: None
 
-communicator_by_name={
-		"multiprocessing-network": MultiprocessingNetworkCommunicator,
-		"unnamed-pipe": UnnamedPipeCommunicator,
-		}
+	from .communicate import MultiprocessingNetworkCommunicator, UnnamedPipeCommunicator
 
-import argparse
-parser=argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument("mode", choices=list(communicator_by_name.keys()), help="the mode of communication")
-args=parser.parse_args()
+	communicator_by_name={
+			"multiprocessing-network": MultiprocessingNetworkCommunicator,
+			"unnamed-pipe": UnnamedPipeCommunicator,
+			}
+
+	import argparse
+	parser=argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+	parser.add_argument("mode", choices=list(communicator_by_name.keys()), help="the mode of communication")
+	args=parser.parse_args()
 
 
-communicator_by_name[args.mode].forward()
+	communicator_by_name[args.mode].forward()
