@@ -83,9 +83,9 @@ class UnnamedPipeCommunicator(Communicator):
 		import os
 		sys.stdout.write(f"{UnnamedPipeCommunicator.character}{os.getpid()}\n")
 		sys.stdout.flush()
-		for line in sys.stdin:
-			sys.stdout.write(line)
-			sys.stdout.flush()
+		for line in sys.stdin.buffer:
+			sys.stdout.buffer.write(line)
+			sys.stdout.buffer.flush()
 
 
 

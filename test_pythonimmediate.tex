@@ -18,7 +18,7 @@
 \makeatother
 
 \unless\ifdefined\specifymode
-	\def\specifymode{multiprocessing-network}
+	\def\specifymode{unnamed-pipe}
 \fi
 
 \def\tmp#1{
@@ -259,7 +259,7 @@ class Test(unittest.TestCase):
 		# TODO later handle upper bytes for non-Unicode engines as well
 		for s in [
 				chr(i)
-				for i in range(0, (700 if is_unicode else 128))
+				for i in range(0, (700 if is_unicode else 256))
 				]:
 			for t in [
 				Catcode.active(s),

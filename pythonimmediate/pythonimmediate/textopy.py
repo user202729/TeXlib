@@ -966,6 +966,19 @@ class TokenList(TokenListBaseClass):
 	def serialize(self)->str:
 		return "".join(t.serialize() for t in self)
 
+	def serialize_bytes(self, engine: Engine)->bytes:
+		"""
+		Given an engine, serialize it in a form that is suitable for writing directly to the engine.
+		"""
+		if engine.is_unicode:
+			return self.serialize().encode('u8')
+		else:
+			result=self.serialize()
+			try:
+				return bytes(ord(ch) for ch in result)
+			except ValueError:
+				raise ValueError("Cannot serialize TokenList for non-Unicode engine!")
+
 	@classmethod
 	def deserialize(cls: Type[TokenListType], data: str|bytes)->TokenListType:
 		result: List[Token]=[]
@@ -1272,17 +1285,24 @@ class PyToTeXData(ABC):
 		...
 
 @dataclass
-class PTTVerbatimLine(PyToTeXData):
+class PTTVerbatimRawLine(PyToTeXData):
 	r"""
 	Represents a line to be tokenized verbatim. Internally the |\readline| primitive is used, as such, any trailing spaces are stripped.
 	The trailing newline is not included, i.e. it's read under |\endlinechar=-1|.
 	"""
-	data: str
+	data: bytes
 	read_code=r"\__str_get:N {} ".format
 	def write(self, engine: Engine)->None:
-		assert "\n" not in self.data
+		assert b"\n" not in self.data
 		assert self.data.rstrip()==self.data, "Cannot send verbatim line with trailing spaces!"
-		send_raw(self.data+"\n", engine=engine)
+		engine.write(self.data+b"\n")
+
+@dataclass
+class PTTVerbatimLine(PyToTeXData):
+	data: str
+	read_code=PTTVerbatimRawLine.read_code
+	def write(self, engine: Engine)->None:
+		PTTVerbatimRawLine(self.data.encode('u8')).write(engine)
 
 @dataclass
 class PTTInt(PyToTeXData):
@@ -1315,7 +1335,7 @@ class PTTBalancedTokenList(PyToTeXData):
 	data: BalancedTokenList
 	read_code=r"\__str_get:N {0}  \__tldeserialize_dot:NV {0} {0}".format
 	def write(self, engine: Engine)->None:
-		PTTVerbatimLine(self.data.serialize()+".").write(engine=engine)
+		PTTVerbatimRawLine(self.data.serialize_bytes(engine)+b".").write(engine=engine)
 
 
 # ======== define TeX functions that execute Python code ========
