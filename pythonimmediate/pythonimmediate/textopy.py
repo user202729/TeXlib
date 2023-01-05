@@ -225,12 +225,6 @@ user_scope: Dict[str, Any]={}  # consist of user's local variables etc.
 
 def readline(engine: Engine)->str:
 	line=engine.read().decode('u8')
-	if not line:
-		sys.stderr.write("\n\nTraceback (most recent call last):\n")
-		traceback.print_stack(file=sys.stderr)
-		sys.stderr.write("RuntimeError: Fatal irrecoverable TeX error\n\n")
-		os._exit(1)
-
 
 	assert line[-1]=='\n'
 	line=line[:-1]
