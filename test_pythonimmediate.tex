@@ -154,6 +154,14 @@ class Test(unittest.TestCase):
 		pythonimmediate.run_tokenized_line_local(r'\testa')
 		self.assertEqual(x, 2)
 
+	def test_unicode_str(self):
+		s='Æ²×⁴ℝ𝕏'
+		pythonimmediate.put_next('{' + s + '}')
+		self.assertEqual(pythonimmediate.get_arg_str(), s)
+
+		pythonimmediate.put_next('{' + s + '}')
+		self.assertEqual(pythonimmediate.get_arg_estr(), s)
+
 	def test_newcommand_with_name(self):
 		@pythonimmediate.newcommand("testd")
 		def testa():
