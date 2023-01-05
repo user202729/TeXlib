@@ -511,7 +511,8 @@ class Test(unittest.TestCase):
 
 
 suite = unittest.defaultTestLoader.loadTestsFromTestCase(Test)
-unittest.TextTestRunner(failfast=True).run(suite)
+result = unittest.TextTestRunner(failfast=True).run(suite)
+assert not result.errors
 
 x=y=z=1
 \end{pycode}

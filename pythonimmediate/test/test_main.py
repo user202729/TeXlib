@@ -23,22 +23,21 @@ for name in ["test_pythonimmediate.tex", "test_pythonimmediate_file.py"]:
 class Test:
 	@pytest.mark.parametrize("engine_name", engine_names)
 	def test_child_process_engine(self, engine_name: str)->None:
-		for engine_name in ["pdflatex", "xelatex", "lualatex"]:
-			engine=ChildProcessEngine(engine_name)
+		engine=ChildProcessEngine(engine_name)
 
-			with default_engine.set_engine(engine):
-				TokenList([T["def"], T.testa, TokenList.doc("123")]).execute()
-				assert TokenList([T.testa]).expand_x().str() == "123"
+		with default_engine.set_engine(engine):
+			TokenList([T["def"], T.testa, TokenList.doc("123")]).execute()
+			assert TokenList([T.testa]).expand_x().str() == "123"
 
-			assert default_engine.engine is None
+		assert default_engine.engine is None
 
-			with pytest.raises(RuntimeError):
-				TokenList([T["def"], T.testa, TokenList.doc("789")]).execute()
+		with pytest.raises(RuntimeError):
+			TokenList([T["def"], T.testa, TokenList.doc("789")]).execute()
 
-			with ChildProcessEngine("pdflatex") as new_engine:
-				TokenList([T["def"], T.testa, TokenList.doc("456")]).execute(engine=new_engine)
-				assert TokenList([T.testa]).expand_x(engine=engine).str() == "123"
-				assert TokenList([T.testa]).expand_x(engine=new_engine).str() == "456"
+		with ChildProcessEngine("pdflatex") as new_engine:
+			TokenList([T["def"], T.testa, TokenList.doc("456")]).execute(engine=new_engine)
+			assert TokenList([T.testa]).expand_x(engine=engine).str() == "123"
+			assert TokenList([T.testa]).expand_x(engine=new_engine).str() == "456"
 
 
 	@pytest.mark.parametrize("engine_name", engine_names)
