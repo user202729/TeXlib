@@ -241,7 +241,7 @@ class Test(unittest.TestCase):
 				self.assertEqual(pythonimmediate.Token.get_next(), t)
 
 
-			pythonimmediate.put_next(a)
+			a.put_next()
 			c=BalancedTokenList.get_next()
 
 			self.assertEqual(c, a[1:-1])
@@ -307,7 +307,7 @@ class Test(unittest.TestCase):
 		self.assertEqual(pythonimmediate.peek_next_char(), "")
 		pythonimmediate.Token.get_next()
 
-		pythonimmediate.put_next(pythonimmediate.CharacterToken(ord(' '), pythonimmediate.Catcode.space))
+		pythonimmediate.CharacterToken(ord(' '), pythonimmediate.Catcode.space).put_next()
 		self.assertEqual(pythonimmediate.peek_next_char(), " ")
 
 		pythonimmediate.put_next(r"\relax")

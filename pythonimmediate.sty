@@ -55,23 +55,13 @@
 
 % ======== setup read file ========
 
-\bool_if:NT \_pythonimmediate_mode_unnamed_pipe {  % in this case make sure the pipe remains open...
-	\newread \_pythonimmediate_read_file
-	\openin \_pythonimmediate_read_file=|"sleep~ 0.5s|\_pythonimmediate_python_executable \space -m ~ pythonimmediate.pytotex ~ \_pythonimmediate_mode"~  % we must use the primitive here to use the pipe file path
-	% TODO sleep infinity causes some resource leak (the process will not exit after TeX exits). Need to fix
-	% but sleep too little might be problematic that it exits before the setup is done
-	% we can just assume machines are not that slow
-}
-
-\bool_if:NT \_pythonimmediate_mode_multiprocessing_network {
-	\newread \_pythonimmediate_read_file
-	\openin \_pythonimmediate_read_file=|"\_pythonimmediate_python_executable \space -m ~ pythonimmediate.pytotex ~ \_pythonimmediate_mode"~  % we must use the primitive here to use the pipe file path
-}
-
-\bool_if:NT \_pythonimmediate_mode_child_process {
+\bool_if:NTF \_pythonimmediate_mode_child_process {
 	% make read file read from stdin
 	% note that \ior_str_get:NN cannot be used here as it checks for \ifeof which breaks with terminal for some reason
 	\int_const:Nn \_pythonimmediate_read_file {-1}
+} {
+	\newread \_pythonimmediate_read_file
+	\openin \_pythonimmediate_read_file=|"\_pythonimmediate_python_executable \space -m ~ pythonimmediate.pytotex ~ \_pythonimmediate_mode"~
 }
 
 % ======== copy of ior_str_get but does not check for file end ========
