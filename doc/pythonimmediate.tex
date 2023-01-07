@@ -56,6 +56,11 @@ so you don't need to write a single line of \TeX\ code.
 In addition to the \LaTeX\ package, you need the Python \pkg{pythonimmediate-tex} package,
 installation instruction can be found at \url{https://pypi.org/project/pythonimmediate-tex/}.
 
+Remember to enable unrestricted\footnote{
+	There's little point in supporting restricted mode, since it's possible to execute arbitrary shell commands in Python anyway.
+	If it's needed to execute untrusted \TeX\ code, separate sandboxing should be used.
+} shell-escape. (there's a guide on \TeX.SE if necessary: \url{https://tex.stackexchange.com/q/598818/250119})
+
 \subsection{Installation on Overleaf}\label{installation-on-overleaf}
 
 At the point of writing, this package can be used on Overleaf.
@@ -232,16 +237,21 @@ The \TeX\ interface is only used to call Python. Apart from that, all the work c
 
 All functions in this section should be imported from |pythonimmediate| package, unless specified otherwise.
 
+Currently, all the documentations are moved to the Python package documentation,
+see \url{https://pythonimmediate.readthedocs.io/}.
+
+Documentation of a few functions are still kept here for convenience.
+
 \subsubsection{Print to \TeX}\label{print-to-TeX}
 
-\DescribePython{.print()}
+\DescribePython{.print_TeX()}
 \DescribePython{.file}
 These functions are used in |\pyc| command or |pycode| environment.
 
 Unlike most other packages, using |print()| function in Python will print to the console (\TeX\ standard output).
 In order to print \TeX\ code to be executed, you can do one of
 \begin{verbatim}
-pythonimmediate.print(...)
+pythonimmediate.print_TeX(...)
 print(..., file=pythonimmediate.file)
 with contextlib.redirect_stdout(pythonimmediate.file):
 	print(...)
@@ -292,7 +302,8 @@ This is an example of how the functions could be used. The name should be mostly
 \usepackage{pythonimmediate}
 \begin{document}
 \begin{pycode}
-from pythonimmediate import newcommand, peek_next_char, get_next_char, get_arg_str, print
+from pythonimmediate import newcommand, peek_next_char, get_next_char, get_arg_str
+from pythonimmediate import print_TeX as print
 @newcommand
 def innerproduct():
 	s = get_arg_str()    # in the example below this will have the value '\mathbf{a},\mathbf{b}'
@@ -340,7 +351,7 @@ Similar to some functions above, except that the argument is fully expanded and 
 similar to how |\py| command (\ref{py-command}) reads its arguments.
 
 \DescribePython{.execute()}
-Takes a string and execute it immediately. (so that any |.execute()| will be executed before any |.print()|)
+Takes a string and execute it immediately. (so that any |.execute()| will be executed before any |.print_TeX()|)
 
 Assuming \TeX\ is in errorstopmode (i.e. errors halt \TeX\ execution),
 any error in \TeX\ will create an error in Python and the traceback should point to the correct line of code.
