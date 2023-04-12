@@ -1,0 +1,24 @@
+\RequirePackage{newunicodechar}
+
+%  make it so that newunicodechar does not complain when character is already defined
+\csname sys_if_engine_pdftex:T\endcsname {
+	\begingroup
+	\makeatletter
+	\@firstofone{
+	\endgroup%
+	%
+	\def\newunicodechar#1#2{%
+	\@tempswafalse
+	\edef\nuc@tempa{\detokenize{#1}}%
+	\if\relax\nuc@tempa\relax
+	\nuc@emptyargerr
+	\else
+	\edef\@tempb{\expandafter\@car\nuc@tempa\@nil}%
+	\nuc@check
+	\if@tempswa
+	\@namedef{u8:\nuc@tempa}{#2}%
+	\fi
+	\fi
+	}
+	}
+}
