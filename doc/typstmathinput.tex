@@ -1,0 +1,141 @@
+\ProvidesFile{typstmathinput.tex}[2023/03/28 0.0.0 Typst-style math input format]
+\RequirePackage{fvextra}
+\documentclass{l3doc}
+\EnableCrossrefs
+\CodelineIndex
+\fvset{breaklines=true,gobble=0,tabsize=4,frame=single,numbers=left,numbersep=3pt}
+\AtBeginDocument{\DeleteShortVerb\"}  % https://tex.stackexchange.com/a/650966/250119
+\MakeOuterQuote{"}
+\usepackage{hyperref}
+%\usepackage{typstmathinput}
+\usepackage{saveenv}
+\usepackage{silence}
+\usepackage{typstmathinput}
+\usepackage{unicode-math}
+%\WarningFilter{latex}{Marginpar on page}
+\begin{document}
+\typstmathinputenable
+\GetFileInfo{\jobname.tex}
+
+\title{\pkg{\jobname} --- \fileinfo
+\thanks{This file describes version \fileversion, last revised \filedate.}
+}
+\author{user202729}
+\date{Released \filedate}
+
+\maketitle
+
+\section{Introduction}
+
+Typst is a new typesetting system that aims to be as powerful as \LaTeX\ while being much easier to learn.
+
+Unfortunately, at the time of writing Typst has several issues
+(refer to \url{https://github.com/typst/typst/issues})
+that may make it unusable for some purposes.
+
+As such, this package allows the user to enter \emph{math formulas} in Typst input format
+while using \LaTeX.
+
+This package requires the engine Lua\LaTeX.
+
+\section{Usage}
+
+First include the package:
+\begin{verbatim}
+\usepackage{typstmathinput}
+\end{verbatim}
+
+Then you can type math input similar to Typst: the following code, taken from \href{https://typst.app/docs/reference/math/}{Typst tutorial} on math mode
+
+\newenvironment{demo}{\saveenv\tmp}{\endsaveenv
+\scantokens\expandafter{\expanded{\string\begin{verbatim}^^J\tmp\string\end{verbatim}}}
+gives the result:
+
+\begingroup
+\scantokens\expandafter{\tmp}
+\endgroup
+}
+
+\begin{demo}
+$ A = pi r^2 $
+$ "area" = pi dot.op "radius"^2 $
+$ cal(A) :=
+    { x in RR | x "is natural" } $
+$ x < y => x gt.eq.not y $
+$ sum_(k=0)^n k
+    &= 1 + ... + n \
+    &= (n(n+1)) / 2 $
+$ frac(a^2, 2) $
+$ vec(1, 2, delim: "[") $
+$ mat(1, 2; 3, 4) $
+$ lim_x =
+    op("lim", limits: #true)_x $
+\end{demo}
+
+\section{Limitations}
+
+Note that this only handle math mode, that is, you cannot use |*text*| for bold, etc.
+Package \pkg{markdown} might be of interest.
+
+It does not work inside environments such as |\begin{align*}...\end{align*}|,
+or |\[...\]|,
+however you can manually trigger the parsing, and you can use Typst's dedicated syntax for math alignment.
+
+Note that if you use packages such as |fancyvrb|
+or |csquotes| and make \verb+|+ or \texttt{\string"} have special meaning
+(verbatim or smart quote respectively),
+they might not work in math environments.
+
+|$$...$$| is not supported (although this is not used in Typst anyway, put a space around the dollar to
+use display mode)
+
+This calls Typst executable plus |pdftotext| for each formula being defined, which makes it extremely slow --
+although some caching is in effect, so it will only be slow the first time.
+
+%Only a small number of symbols are defined, although this is customizable, refer to the section below.
+
+%\LaTeX\ names of symbols are still usable, for example |$hbar$|.
+
+%It's possible to use unbalanced braces inside math
+
+\section{Advanced usage}
+
+You can optionally enable or disable the special handling:
+
+\DescribeMacro{\typstmathinputenable}
+\DescribeMacro{\typstmathinputdisable}
+These macros can be used to enable or disable the special handling of the |$...$|.
+
+\begin{demo}
+With Typst-input-math:
+$P => sin theta + cos phi = tan tau$
+\typstmathinputdisable
+
+Without Typst-input-math:
+$P \implies \sin \theta + \cos \phi = \tan \tau$
+\end{demo}
+
+%\DescribeMacro{typstmathinput.parse()}
+%This Lua function can be used to parse a Typst-style input to give TeX-style input.
+%For example the Lua code
+%\begin{verbatim}
+%print(typstmathinput.parse("sin theta", false))
+%\end{verbatim}
+%will print |\sin \theta |.
+%
+%The second argument is a boolean that indicates whether the input is in display mode.
+%
+%\DescribeMacro{\typstmathinputdefine}
+%Define new symbols in Typst. Use as follows:
+%\begin{verbatim}
+%\typstmathinputdefine{planck.reduce}{\hbar}
+%\end{verbatim}
+%The first argument is the symbol name in Typst environment, the second argument is some \LaTeX\ code.
+%
+%You can also use an Unicode character as the first argument.
+
+
+\PrintChanges
+\PrintIndex
+\Finale
+\end{document}
