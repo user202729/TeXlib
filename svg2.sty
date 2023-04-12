@@ -1,0 +1,112 @@
+\usepackage{luacode}
+% ======== code taken from https://tex.stackexchange.com/a/408014/250119 ========
+% LuaTeX only. But allow \includesvg without temporary file
+% ======== actually I don't need this anymore because matplotlib exists ========
+\begin{luacode}
+local ffi = require("ffi")
+
+ffi.cdef[[
+// Types
+typedef struct FILE_tag FILE;
+typedef struct RsvgHandle_tag RsvgHandle;
+typedef struct cairo_surface_tag cairo_surface_t;
+typedef enum cairo_status_tag cairo_status_t;
+typedef struct cairo_tag cairo_t;
+typedef int (*cairo_write_func_t)(void *, const unsigned char *, unsigned int);
+
+typedef struct {
+    int domain;
+    int code;
+    char *message;
+} GError;
+
+typedef struct {
+    int width;
+    int height;
+    double em;
+    double ex;
+} RsvgDimensionData;
+
+// Conversion functions
+RsvgHandle * rsvg_handle_new_from_file(const char *, GError **);
+void rsvg_handle_get_dimensions(RsvgHandle *, RsvgDimensionData *);
+cairo_surface_t * cairo_pdf_surface_create_for_stream(cairo_write_func_t, FILE *, double, double);
+cairo_status_t cairo_surface_status(cairo_surface_t *surface);
+cairo_t * cairo_create(cairo_surface_t *);
+cairo_status_t cairo_status(cairo_t *cr);
+void cairo_scale(cairo_t *, double, double);
+int rsvg_handle_render_cairo(RsvgHandle *, cairo_t *);
+
+// Cleanup functions
+void cairo_destroy(cairo_t *);
+void cairo_surface_destroy(cairo_surface_t *);
+void g_object_unref(void *);
+]]
+
+local lcairo = ffi.load("cairo")
+local lrsvg = ffi.load("rsvg-2")
+
+local CAIRO_STATUS_SUCCESS = 0
+
+function svg_to_pdf(params, filename)
+    -- Open input file
+    local err = ffi.new("GError*[1]", ffi.NULL)
+    local rsvg = lrsvg.rsvg_handle_new_from_file(filename, err)
+    if rsvg == ffi.NULL then
+        tex.error(ffi.string(err[0].message))
+    end
+    -- Get size of image
+    local dimensions = ffi.new("RsvgDimensionData[1]")
+    lrsvg.rsvg_handle_get_dimensions(rsvg, dimensions)
+
+    local width = params.scale * dimensions[0].width
+    local height = params.scale * dimensions[0].height
+
+    -- Open cairo PDF canvas of same size and associate callback function
+    local output = ""
+    function rsvg_cairo_write_func(_, data, length)
+       output = output .. ffi.string(data, length)
+       return CAIRO_STATUS_SUCCESS
+    end
+    local surface = lcairo.cairo_pdf_surface_create_for_stream(
+       rsvg_cairo_write_func, nil, width, height);
+    local status = lcairo.cairo_surface_status(surface)
+    if status ~= CAIRO_STATUS_SUCCESS then
+        tex.error("Cairo surface error (code " .. status .. ")")
+    end
+
+    -- Render SVG on the canvas
+    local cr = lcairo.cairo_create(surface)
+    local status = lcairo.cairo_status(cr)
+    if status ~= CAIRO_STATUS_SUCCESS then
+        tex.error("Cairo error (code " .. status .. ")")
+    end
+    lcairo.cairo_scale(cr, params.scale, params.scale);
+    local success = lrsvg.rsvg_handle_render_cairo(rsvg, cr)
+    if success == 0 then
+        tex.error("Rsvg rendering failed")
+    end
+
+    -- Clean up
+    if (cr ~= ffi.NULL) then lcairo.cairo_destroy(cr) end
+    if (surface ~= ffi.NULL) then lcairo.cairo_surface_destroy(surface) end
+    if (rsvg ~= ffi.NULL) then lrsvg.g_object_unref(rsvg) end
+    if (err[0] ~= ffi.NULL) then lrsvg.g_object_unref(err[0]) end
+
+    return output
+end
+\end{luacode}
+
+\newcommand\includesvg[2][scale=1]{%
+  \leavevmode
+  \luaexec{
+    local stream = svg_to_pdf({#1},[[#2]])
+    local identifier
+    if status.luatex_version < 108 then
+        _, identifier = epdf.openMemStream(stream,\#stream,[[#2]])
+    else
+        identifier = pdfe.new(stream,\#stream,[[#2]])
+    end
+    node.write(img.node { filename = identifier })
+  }%
+}
