@@ -79,8 +79,11 @@ This package provides tools to create your own verbatim environments, and works 
 \ExplSyntaxOff
 \end{verbatim}
 
+\begin{sloppypar}\hbadness=2000
 defines an environment that saves the data similar to \env{saveenv} environment described below (with the overhead of |\tl_build_*| functions),
 but inside |\ExplSyntaxOn| environment it generates a spurious space at the beginning of the string.
+\end{sloppypar}
+
 \end{itemize}
 
 
