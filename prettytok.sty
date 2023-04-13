@@ -1,19 +1,36 @@
 \ProvidesExplPackage{prettytok}{2022/08/05}{0.1.0}{Pretty-print token list}
 \RequirePackage{precattl}
+\RequirePackage{l3keys2e}
+
+
+\keys_define:nn{prettytok}{
+	mode.choices:nn={ term-8bit, term-shell, html }{
+		\str_set:Nx \_prettytok_mode {\l_keys_choice_tl}
+	},
+	mode.initial:n = { term-8bit },
+
+	ignore-tlanalysis-bug.bool_set:N=\_prettytok_ignore_tlanalysis_bug,
+
+	html-file-name.tl_set:N=\_prettytok_html_file_name,
+	html-file-name.initial:x={pretty-\jobname.html},
+	html-refresh-strategy.tl_set:N=\_prettytok_html_refresh_strategy,
+	html-refresh-strategy.initial:n=4,
+	html-refresh-duration.tl_set:N=\_prettytok_html_refresh_duration,
+	html-refresh-duration.initial:n=1000,
+
+	term-prefix.tl_set:N=\prettytermprefix,
+	term-prefix.initial:n={>~},
+	term-prefix-more.tl_set:N=\prettytermprefixmore,
+	term-prefix-more.initial:n={>~ ..~},
+	term-wrap-limit.tl_set:N=\prettytermwraplimit,
+	term-wrap-limit.initial:n=70,
+
+}
+\ProcessKeysOptions{prettytok}
 
 
 % ======== check tl_analysis bug.
-\msg_new:nnn {prettytok} {tl-analysis-bug}
-	{
-		Because~of~an~tl-analysis~bug~(see~https://github.com/latex3/latex3/issues/1073),~functions~will~not~be~usable~inside~tl-analysis~functions!~
-		Upgrade~your~LaTeX~version,~or~
-		define~macro~"prettyignoretlanalysisbug"~before~loading~the~package~to~ignore~this~error.
-	}
-
-\ifdefined \prettyignoretlanalysisbug
-	\relax
-\else
-\begingroup
+\bool_if:NF \_prettytok_ignore_tlanalysis_bug {
 	\tl_set:Nn \_prettytok_test {}
 	\tl_analysis_map_inline:nn {ab} {
 		\tl_analysis_map_inline:nn {cd} {
@@ -21,10 +38,16 @@
 		}
 	}
 	\tl_if_eq:NnF \_prettytok_test {ac.ad.bc.bd.} {
+		\msg_new:nnn {prettytok} {tl-analysis-bug}
+		{
+			Because~of~an~tl-analysis~bug~(see~https://github.com/latex3/latex3/issues/1073),~
+			functions~will~not~be~usable~inside~tl-analysis~functions!~
+			Upgrade~your~LaTeX~version,~or~
+			pass-option~"ignore-tlanalysis-bug"~to~ignore~this~error.
+		}
 		\msg_error:nn {prettytok} {tl-analysis-bug}
 	}
-\endgroup
-\fi
+}
 
 % ======== load Lua module.
 \sys_if_engine_luatex:T{
@@ -35,7 +58,6 @@
 }
 
 % ======== main code start.
-
 \cs_generate_variant:Nn \exp_args:NNn {NNx}
 \cs_generate_variant:Nn \iow_open:Nn {NV}
 \cs_generate_variant:Nn \exp_args:NNn {NNV}
@@ -48,67 +70,72 @@
 \cs_generate_variant:Nn \tl_build_put_right:Nn {NV}
 \cs_generate_variant:Nn \iow_now:Nn {NV}
 
-\iow_new:N \_prettytok_file
-\ior_new:N \_prettytok_input_template_file
 
+\str_if_eq:VnTF \_prettytok_mode {html} {
+	\iow_new:N \_prettytok_file
+	\ior_new:N \_prettytok_input_template_file
 
-\exp_args:NNx \providecommand \prettyfilename {pretty-\jobname.html}
-\providecommand \prettyrefreshstrategy {4}
-\providecommand \prettyrefreshduration {1000}
+	\iow_open:NV \_prettytok_file \_prettytok_html_file_name
 
-\msg_new:nnn {prettytok} {already-initialized} {Output~file~is~already~initialized!}
+	\precattl_exec:n{
+	% write the template
+	\ior_open:Nn \_prettytok_input_template_file {prettytok_template.html}
+	\ior_str_map_variable:NNn \_prettytok_input_template_file \_prettytok_line {
+		\str_replace_all:Nnn \_prettytok_line {\cO\^^I} {~}  % workaround: XeTeX prints literal tab character as ^^I which obviously breaks JavaScript
+		\iow_now:NV \_prettytok_file \_prettytok_line
+	}
+	\ior_close:N \_prettytok_input_template_file
 
-\cs_new_eq:NN \pretty_check_already_init: \relax
+	% refresh strategy
+	\iow_now:Nx \_prettytok_file {set_refresh_strategy(\_prettytok_html_refresh_strategy,\_prettytok_html_refresh_duration)}
 
-\prg_new_conditional:Npnn \pretty_if_initialized: {p, T, F, TF} {
-	\ifx \pretty_check_already_init: \relax
-		\prg_return_false:
-	\else
-		\prg_return_true:
-	\fi
-}
+	\cs_new_protected:Npn \pretty:n #1 {
 
-\tl_gset:Nn \_prettytok_output_format {}
-
-\int_const:Nn \_prettytok_typeout_stream {128}  % 16 works except on LuaLaTeX
-
-% temporary solution...
-\cs_new_protected:Npn \prettyinittermcat {
-	\global \let \_prettytok_typeout_stream \undefined
-	\newwrite \_prettytok_typeout_stream
-	\immediate \openout \_prettytok_typeout_stream = |"python3 ~ -m ~ pythonimmediate.decode_8bit"~
-}
-
-\precattl_exec:n {
-	\cs_new_protected:Npn \_prettyinit_html_unchecked: {
-		\cs_gset_protected:Npn \pretty_check_already_init: {\msg_error:nn {prettytok} {already-initialized}}
-		\cs_gset_eq:NN \pretty:n \prettyhtml:n
-		\tl_gset:Nn \_prettytok_output_format {html}
-
-		\iow_open:NV \_prettytok_file \prettyfilename
-
-		% write the template
-		\begingroup
-			\ior_open:Nn \_prettytok_input_template_file {prettytok_template.html}
-			\ior_str_map_variable:NNn \_prettytok_input_template_file \_prettytok_line {
-				\str_replace_all:Nnn \_prettytok_line {\cO\^^I} {~}  % workaround: XeTeX prints literal tab character as ^^I which obviously breaks JavaScript
-				\iow_now:NV \_prettytok_file \_prettytok_line
+		% ======== the actual content. Collect to one \write to put them on the same line (also maybe for efficiency???)
+		\tl_build_begin:N \_prettytok_content
+		\tl_build_put_right:Nn \_prettytok_content {print_tl(}
+		\tl_analysis_map_inline:nn {#1} {
+			% by documentation of \tl_analysis_map_inline:nn: #1=token, #2=char code, #3=catcode
+			\int_compare:nNnTF {##2} = {-1} {
+				% token is control sequence
+				\tl_if_eq:onTF {##1} {\cFrozenRelax} {
+					\tl_build_put_right:Nn \_prettytok_content {csfrozenrelax(),}
+				} {
+					\tl_build_put_right:Nn \_prettytok_content {cs(}
+					\tl_if_eq:xoF {\use:c {}} {##1} {
+						\str_map_inline:xn {\exp_after:wN \cs_to_str:N ##1} {  % side note, must use str here to preserve spaces
+							\tl_build_put_right:Nx \_prettytok_content {\int_eval:n {`####1},}
+						}
+					}
+					\tl_build_put_right:Nn \_prettytok_content {),}
+				}
 			}
-			\ior_close:N \_prettytok_input_template_file
-		\endgroup
-
-		% refresh strategy
-		\iow_now:Nx \_prettytok_file {set_refresh_strategy(\prettyrefreshstrategy,\prettyrefreshduration)}
+			{
+				% token is not control sequence
+				\tl_build_put_right:Nn \_prettytok_content {token(##2, "##3"),}
+			}
+		}
+		\tl_build_put_right:Nn \_prettytok_content {)//</script><script>}
+		\tl_build_end:N \_prettytok_content
+		\iow_now:NV \_prettytok_file \_prettytok_content
+	}
 	}
 
-	\cs_new_protected:Npn \prettyinit: {
-		\pretty_check_already_init:
-		\_prettyinit_html_unchecked:
+} {
+	\str_if_eq:VnTF \_prettytok_mode {term-shell} {
+		\newwrite \_prettytok_typeout_stream
+		\sys_get_shell:nnN {kpsewhich~ prettytok-decode-8bit.py} {\cctab_select:N \c_other_cctab} \_prettytok_decode_executable_path
+		\immediate \openout \_prettytok_typeout_stream = {|\_prettytok_decode_executable_path}
+	} {
+		\int_const:Nn \_prettytok_typeout_stream {128}  % 16 works except on LuaLaTeX
 	}
 
+
+	\precattl_exec:n{
 	\str_gset:Nn \_prettytok_gray {\cO\^^[[90m}
 	\str_gset:Nn \_prettytok_red {\cO\^^[[31m}
 	\str_gset:Nn \_prettytok_green {\cO\^^[[38;5;121m}  % this is the color vim use for green on my machine. Anyway~
+	%\str_gset:Nn \_prettytok_green {\cO\^^[[92m}
 	\str_gset:Nn \_prettytok_yellow {\cO\^^[[93m}
 	%\str_gset:Nn \_prettytok_white {\cO\^^[[0m}  % i.e. the default
 	\str_gset:Nn \_prettytok_white {\cO\^^[[97m}  % vim terminal has a quirk that if a line wraps, the status at the start of the line is considered "default" for that line, so need to explicitly specify color as white
@@ -161,10 +188,6 @@
 	}
 	\cs_generate_variant:Nn \_prettytok_term_prepare_print_char:n {x}
 
-	\str_gset:Nn \prettytermprefix {>~}
-	\str_gset:Nn \prettytermprefixmore {>~ ..~}
-	\tl_gset:Nn \prettytermwraplimit {90}
-
 	\int_new:N \_prettytok_content_len
 
 	% only call this on content that takes visible width. For example don't use this to set color
@@ -209,7 +232,7 @@
 		}
 	}
 
-	\cs_new_protected:Npn \prettyterm:n #1 {
+	\cs_new_protected:Npn \pretty:n #1 {
 		\tl_build_begin:N \_prettytok_content
 		\int_zero:N \_prettytok_content_len
 		\_prettytok_append_content:V \prettytermprefix
@@ -264,58 +287,10 @@
 
 		\_prettytok_typeout_content:
 	}
-
-	\cs_new_protected:Npn \prettyinitterm: {
-		\pretty_check_already_init:
-		\cs_gset:Npn \pretty_check_already_init: {\msg_error:nn {prettytok} {already-initialized}}
-		\tl_gset:Nn \_prettytok_output_format {term}
-
-		\cs_gset_eq:NN \pretty:n \prettyterm:n
 	}
+
 }
 
-\cs_new_eq:NN \prettyinit \prettyinit:
-\cs_new_eq:NN \prettyinitterm \prettyinitterm:
-
-
-% ======== define \prettyhtml:n.
-\precattl_exec:n {
-	\cs_new_protected:Npn \prettyhtml:n #1 {
-
-		% ======== the actual content. Collect to one \write to put them on the same line (also maybe for efficiency???)
-		\tl_build_begin:N \_prettytok_content
-		\tl_build_put_right:Nn \_prettytok_content {print_tl(}
-		\tl_analysis_map_inline:nn {#1} {
-			% by documentation of \tl_analysis_map_inline:nn: #1=token, #2=char code, #3=catcode
-			\int_compare:nNnTF {##2} = {-1} {
-				% token is control sequence
-				\tl_if_eq:onTF {##1} {\cFrozenRelax} {
-					\tl_build_put_right:Nn \_prettytok_content {csfrozenrelax(),}
-				} {
-					\tl_build_put_right:Nn \_prettytok_content {cs(}
-					\tl_if_eq:xoF {\use:c {}} {##1} {
-						\str_map_inline:xn {\exp_after:wN \cs_to_str:N ##1} {  % side note, must use str here to preserve spaces
-							\tl_build_put_right:Nx \_prettytok_content {\int_eval:n {`####1},}
-						}
-					}
-					\tl_build_put_right:Nn \_prettytok_content {),}
-				}
-			}
-			{
-				% token is not control sequence
-				\tl_build_put_right:Nn \_prettytok_content {token(##2, "##3"),}
-			}
-		}
-		\tl_build_put_right:Nn \_prettytok_content {)//</script><script>}
-		\tl_build_end:N \_prettytok_content
-		\iow_now:NV \_prettytok_file \_prettytok_content
-	}
-}
-
-\cs_new_protected:Npn \pretty:n #1 {
-	\prettyinitterm:
-	\pretty:n {#1}
-}
 
 % ======== Lua expandable variant.
 \sys_if_engine_luatex:T {
@@ -334,18 +309,19 @@
 	}
 }
 
-\cs_new_protected:Npn \pretty:w { \pretty_aux:w \relax }
-\cs_new_protected:Npn \pretty_aux:w #1 \prettystop {
-	\pretty:o {
-		\use_none:n % gobble the \relax here
-		#1
-	} #1 \prettystop
-}
+% ======== w variant.
 
+\cs_new_protected:Npn \pretty:w { \pretty_aux:w \empty }
+\cs_new_protected:Npn \pretty_aux:w #1 \prettystop {
+	\pretty:o { #1 }  % use o-expansion to remove the \empty
+	#1 \prettystop
+}
 \cs_new:Npn \prettystop {}
 
+% ======== other variants.
 \cs_generate_variant:Nn \pretty:n {x, o, V}
-\def \pretty:N {\pretty:n}  % note that \pretty:n might be redefined to be \prettyterm:n later
+\cs_new_eq:NN \pretty:N \pretty:n
+\cs_generate_variant:Nn \pretty:N {c}
 
 \cs_new_protected:Npn \prettythenrun:n #1 {
 	\pretty:n {running~#1}
@@ -356,16 +332,8 @@
 	\prettythenrun:n {#1}
 }
 
-% ======== normal-catcode alias
-\def\prettyN{\pretty:n}
-\let\prettyX\pretty:x
-\let\prettyO\pretty:o
-\let\prettyV\pretty:V
-\let\prettyW\pretty:w
-\let\prettyeN\prettye:n
-\let\prettyeW\prettye:w
-
-\cs_generate_variant:Nn \pretty:N {c}
+\cs_new_protected:Nn \prettyshow:N { \pretty:o {\meaning #1} }
+\cs_generate_variant:Nn \prettyshow:N {c}
 
 
 % ======== generate \pretty:nn, \pretty:nnn, etc.
@@ -402,12 +370,13 @@
 	}
 \endgroup
 
-
-\cs_new_protected:Nn \prettyshow:N {
-	\exp_args:No \pretty:n {\meaning #1}
-}
-\cs_generate_variant:Nn \prettyshow:N {c}
+% ======== normal-catcode alias
+\let\prettyN\pretty:n
+\let\prettyX\pretty:x
+\let\prettyO\pretty:o
+\let\prettyV\pretty:V
+\let\prettyW\pretty:w
+\let\prettyeN\prettye:n
+\let\prettyeW\prettye:w
 \let\prettyshowN\prettyshow:N
 \let\prettyshowC\prettyshow:c
-
-

@@ -60,21 +60,11 @@ local function prettyprint_one_arg(tokenlist)
 end
 
 local function get_output_format()
-	return token.get_macro "_prettytok_output_format"
+	return token.get_macro "_prettytok_mode"
 end
 
 local function get_file_number()
 	return token.get_mode(token.create("_prettytok_file"))
-end
-
-local function error_uninitialized()
-	error "Must initialize before using Lua prettyprint functions"
-end
-
-local function check_initialized()
-	if get_output_format()=="" then
-		error_uninitialized()
-	end
 end
 
 function prettyprint(...)
@@ -89,7 +79,8 @@ function prettyprint(...)
 		end
 
 		texio.write(prettyfilenumber, s..")//</script><script>\n")
-	elseif output_format=="term" then
+	else
+		assert(output_format=="term-8bit" or output_format=="term-shell")
 		texio.write_nl("")
 
 		local content=""
@@ -237,13 +228,10 @@ function prettyprint(...)
 		setcolor(white)
 
 		typeout_content()
-	else
-		error_uninitialized()
 	end
 end
 
 function prettyprintw()
-	check_initialized()
 	local callback=token.scan_toks()
 	local extra=token.scan_toks()
 	local s={}

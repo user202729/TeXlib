@@ -1,8 +1,8 @@
 %! TEX program = lualatex
 \ProvidesFile{prettytok.tex} [2022/08/05 v0.1.0 ]
+\RequirePackage{fvextra}
 \documentclass{l3doc}
 \usepackage[svgnames]{xcolor}
-\RequirePackage{fvextra}
 \EnableCrossrefs
 \CodelineIndex
 \fvset{breaklines=true,gobble=0,tabsize=4,frame=single,numbers=left,numbersep=3pt}
@@ -11,7 +11,7 @@
 \begin{document}
 \GetFileInfo{\jobname.tex}
 
-\title{\textsf{prettytok} --- Pretty-print token lists\thanks{This file
+\title{\pkg{prettytok} --- Pretty-print token lists\thanks{This file
 	describes version \fileversion, last revised \filedate.}
 }
 \author{user202729%
@@ -29,13 +29,23 @@ Can be used to replace |\tl_analysis_show:n|.
 
 \section{Motivation}
 
-\TeX's default mechanism for debug-printing (|\showtokens{...}|, |\typeout{\unexpanded{...}}|, |\show...|) has a few limitations
+\TeX/\LaTeX's default mechanism for debug-printing -- that is, the following:
+\begin{itemize}
+	\item |\showtokens{...}|,
+	\item |\show...|,
+	\item |\typeout{\unexpanded{...}}|,
+	\item |\tl_show:n|,
+	\item etc.
+\end{itemize}
+has a few limitations:
 
 \begin{itemize}
-	\item |\show| and similar is considered an error and stops the TeX run. (this point is partially fixable, see the package author's question \url{https://tex.stackexchange.com/q/621919/250119})
+	\item |\show| and similar is considered an error and stops the \TeX\ run. (this point is partially fixable, see the package writer's question \url{https://tex.stackexchange.com/q/621919/250119})
 	\item If there's some unprintable character in the output (for example, |^^J|, |^^M|, |^^I| -- literal tab character), it's not easy to distinguish between them.
 	\item If some token has unexpected catcode (most commonly, letter versus other), it's not easy to distinguish as well.
-	\item They does not work in expansion-only context. (apart from |\msg_expandable_error:nn|, but this one suffers from the first problem as well)
+	\item They does not work in expansion-only context.
+
+		(apart from |\msg_expandable_error:nn|, but this one suffers from the first problem as well)
 \end{itemize}
 
 |\tl_analysis_show:n| attempts to fix the third problem, but is very, very verbose and does not fix the other problems.
@@ -49,248 +59,11 @@ And some more additional (expandable in \LuaTeX) functions to inspect the conten
 
 \section{Usage}
 
-See subsection~\ref{subsec:full-example} for a full example.
-
-\subsection{Main function}
-\begin{function}{\pretty:n,\pretty:x,\pretty:o,\pretty:V}
-	\begin{syntax}
-		\cs{pretty:n} \Arg{token list}
-	\end{syntax}
-	Print the content of \meta{token list}.
-\end{function}
-
-\begin{function}{\pretty:N,\pretty:c}
-	\begin{syntax}
-		\cs{pretty:N} \meta{token}
-		\cs{pretty:c} \Arg{control sequence name}
-	\end{syntax}
-	Print \meta{token}.
-
-	This function is not very useful. Usually it's preferable to use |\pretty:V| to print a token list variable's value,
-	or |\prettyshow:N| to print a control sequence's meaning.
-\end{function}
-
-\begin{function}{\prettyinit:}
-	\begin{syntax}
-		\cs{prettyinit:}
-	\end{syntax}
-	Do necessary initialization for output to HTML file.
-
-	This should be called right after the package is loaded, after setting the configuration variables described below.
-\end{function}
-
-\begin{function}{\prettyinitterm:}
-	\begin{syntax}
-		\cs{prettyinitterm:}
-	\end{syntax}
-	Same as above. However, if this is used, the information is printed on the terminal instead of to the HTML file.
-
-	This might require |-8bit| option on engines other than \LuaTeX, see \url{https://tex.stackexchange.com/q/168460/250119}.
-
-	Besides, this drops the distinction between the catcode of some tokens (for example \verb|{}$#&^_| are all shown as the same color as "special catcode"),
-	which is available in the tooltip in the HTML version.
-\end{function}
-
-\subsection{Expandable interface (\LuaTeX\ only)}
-
-\cs{prettyinit:} or \cs{prettyinitterm:} must be called before calling the functions in this section.
-
-\begin{function}[EXP]{\prettye:n}
-	\begin{syntax}
-		\cs{prettye:n} \Arg{token list}
-	\end{syntax}
-	Print the token list, similar to \cs{pretty:n}, but is fully expandable.
-\end{function}
-
-\begin{function}[EXP]{\prettye:w}
-	\begin{syntax}
-		\cs{prettye:w} \meta{tokens} \cs{prettystop}
-	\end{syntax}
-	Print the tokens until \cs{prettystop} is seen. Useful for inspecting the content of the input stream.
-
-	As a debugging tool, it's possible to execute |\everyeof{\prettystop}| to avoid runaway printing in weird catcode environments.
-\end{function}
-
-The idea is that it can be inserted "anywhere" without affecting how the function works (as long as the function does not rely on the exact number of expansion steps).
-
-Note that the input stream will be tokenized and has catcode frozen;
-besides, currently some implementation details (it can be fixed, but the package author does not
-have an immediate need for it, see \url{https://tex.stackexchange.com/q/335994/250119}) means control sequences not
-in the hash table will be destroyed.
-Use with care.
-
-For example
-\begin{verbatim}
-\ExplSyntaxOn
-\def \f #1 {\prettye:w 789}
-\f 123456 \prettystop
-\end{verbatim}
-will print out |78923456|.
-
-\begin{function}[EXP]{\prettye:nw}
-	\begin{syntax}
-		\cs{prettye:nw} \Arg {callback} \meta{tokens} \cs{prettystop}
-	\end{syntax}
-	Same as above, but has a callback, that is, code that is put in the input stream after the content is printed.
-
-	Useful if you want to fine-tune what is printed exactly.
-	(\texttt{\cs{prettye:w} \meta{callback} \meta{tokens}} is functionally the same, but the callback
-	is also printed, which will clutter the debug output)
-
-	For example
-\begin{verbatim}
-\prettye:nw {\somecode ...} 123 \prettystop
-\end{verbatim}
-will print |123|, then after some expansion steps results in the input stream contain
-|\somecode ... 123 \prettystop|
-\end{function}
-
-\subsection{Lua programming interface}
-
-\cs{prettyinit:} or \cs{prettyinitterm:} must also be called before calling the functions in this section.
-
-\begin{function}{prettyprint}
-	\begin{syntax}
-		|prettyprint(|\meta{content}|)|
-	\end{syntax}
-	Print the content, which should be a table of token objects.
-
-	For convenience, you can pass multiple arguments. Strings are also supported.
-\end{function}
-
-
-\subsection{View result}
-
-If terminal output is selected, the output is on the terminal, no special action required. (although see the note on |-8bit| above)
-
-Otherwise, the result is printed to a HTML file named |pretty-|\meta{jobname}|.html| by default.
-Open the file in any browser to view the result.
-
-Note that the HTML file will not be touched if nothing is printed, as such it's encouraged to add a line such as |\pretty:n {start}| right after loading the file.
-
-Why HTML file?
-
-\begin{itemize}
-	\item If the \TeX\ program stops with error / has some error that corrupts the PDF output, the output will even with corrupted more by the debug print.
-	\item Printing to the console is extremely limited (difficult syntax highlighting/scrolling/line wrapping), and most likely cluttered with the traceback/other \TeX\ default output.
-
-		(nevertheless, there might be plan to support output to console with syntax highlighting later.)
-	\item Output to another \TeX\ file to be compiled works as well; however it's necessary to run another instance of |latexmk| (or other tool used to compile \TeX\ code)
-		and compiling \TeX\ file takes longer than loading a HTML file.
-\end{itemize}
-
-By default, the output refreshes whenever the \TeX\ file is recompiled. The behavior
-can be customized with \cs{prettyrefreshstrategy} and \cs{prettyrefreshduration}.
-
-\subsection{Additional functions}
-
-There are also these functions, for convenience.
-
-\begin{function}{\pretty:nn, \pretty:nnn}
-	\begin{syntax}
-		\cs{pretty:nn} \Arg{token list} \Arg{token list}
-		\cs{pretty:nnn} \Arg{token list} \Arg{token list} \Arg{token list}
-	\end{syntax}
-	Print multiple token lists. Its effect is similar to multiple consecutive calls to \cs{pretty:n}.
-\end{function}
-
-\begin{function}[EXP]{\prettye:nn, \prettye:nnn}
-	\begin{syntax}
-		\cs{prettye:nn} \Arg{token list} \Arg{token list}
-		\cs{prettye:nnn} \Arg{token list} \Arg{token list} \Arg{token list}
-	\end{syntax}
-	Similar to multiple consecutive calls to \cs{prettye:n}.
-\end{function}
-
-\begin{function}[EXP]{\prettye:nnw, \prettye:nnnw}
-	\begin{syntax}
-		\cs{prettye:nnw}  \Arg{callback} \Arg{token list} \meta{tokens} \cs{prettystop}
-		\cs{prettye:nnnw} \Arg{callback} \Arg{token list} \Arg{token list} \meta{tokens} \cs{prettystop}
-	\end{syntax}
-	Similar to call(s) to \cs{prettye:n} followed by a call to \cs{prettye:nw}.
-
-	For example
-\begin{verbatim}
-\prettye:nnw {\somecode ...} {123} 456 \prettystop
-\end{verbatim}
-will print |123456|, then, after some expansion steps, |\somecode ... 456 \prettystop| remains in the input stream.
-\end{function}
-
-\begin{function}{\pretty:w}
-	\begin{syntax}
-		\cs{pretty:w} \meta{token list} \cs{prettystop}
-	\end{syntax}
-	Print the content of \meta{token list}.
-
-	Same restriction applies -- the catcode is frozen.
-
-	In addition -- for now, it must be brace-balanced.  Use \cs{prettye:w} instead if possible.
-\end{function}
-
-\begin{function}[EXP]{\prettystop}
-	\begin{syntax}
-		\cs{prettystop}
-	\end{syntax}
-	Only used as a delimiter for |:w| functions. For convenience, this function is defined to do nothing.
-\end{function}
-
-\begin{function}{\prettyshow:N,\prettyshow:c}
-	\begin{syntax}
-		\cs{prettyshow:N} \meta{token}
-		\cs{prettyshow:c} \Arg{control sequence name}
-	\end{syntax}
-	Show the meaning of a |N|-type argument.
-\end{function}
-
-\subsection{\LaTeXe\ interface}
-
-\begin{function}{\prettyN,\prettyX,\prettyO,\prettyV,\prettyW,\prettyinit,\prettyinitterm\prettyshowN,\prettyshowC}
-	\begin{syntax}
-		\tn{prettyN} \Arg{token list}
-		\tn{prettyX} \Arg{token list}
-		\tn{prettyO} \Arg{token list}
-		\tn{prettyV} \meta{tl var}
-		\cs{prettyW} \meta{token list} \cs{prettystop}
-		\tn{prettyinit}
-		\tn{prettyinitterm}
-		\tn{prettyshowN} \meta{token}
-		\tn{prettyshowC} \Arg{control sequence name}
-	\end{syntax}
-	Alias of the correspondingly-named commands.
-\end{function}
-
-\begin{function}[EXP]{\prettyeN,\prettyeW}
-	\begin{syntax}
-		\cs{prettyeN} \Arg{token list}
-		\cs{prettyeW} \meta{tokens} \cs{prettystop}
-	\end{syntax}
-	Alias of the correspondingly-named commands. Only available in \LuaTeX.
-\end{function}
-
-\subsection{\label{subsec:full-example}Full example}
+\subsection{A complete example}
 
 For a full example, the following code, which prints several things, both using the \LaTeXe\ interface
-and using the \pkg{expl3}-style interface, using both expandable and unexpandable command (the former requires \LuaTeX, as mentioned above):
-\begin{verbatim}
-\documentclass{article}
-\usepackage{prettytok}
-
-\prettyinitterm
-
-\prettyN{123{4 5}\6}
-\prettyN{#&^_:}
-\edef\mytest{\prettyeN{\error}}
-
-\prettyN {very long long long long long long long long long long long long long long argument \argument\argument\test123456}
-\prettyeN {very long long long long long long long long long long long long long long argument \argument\argument\test123456}
-
-\ExplSyntaxOn
-\pretty:n {#&^_:}
-\ExplSyntaxOff
-
-\begin{document}
-\end{document}
-\end{verbatim}
+and using the \pkg{expl3}-style interface, using both expandable and unexpandable command (the former requires \LuaTeX, as mentioned in \ref{subsec:expandable-interface}):
+\VerbatimInput{prettytok-test.tex}
 The corresponding output (in the current version) is:
 \begingroup%
 \ExplSyntaxOn
@@ -314,35 +87,79 @@ The corresponding output (in the current version) is:
 > 123\spec\{4␣5\spec\}\cmd{6}
 > \spec{\#\&\textasciicircum\_}:
 > \cmd{error}
-> \letr{very␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣argument}␣\cmd{argument}
-> .. \cmd{argument} \cmd{test} 123456
-> \letr{very␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣argument}␣\cmd{argument}
-> .. \cmd{argument} \cmd{test} 123456
+> \letr{very␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long}
+> .. \letr{␣long␣argument}␣\cmd{argument} \cmd{argument} \cmd{test} 123456
+> \letr{very␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long␣long}
+> .. \letr{␣long␣argument}␣\cmd{argument} \cmd{argument} \cmd{test} 123456
 > \spec{\#\&\textasciicircum}\letr{\_:}
+> \letr{abc}␣
 }\endgroup
 
-\subsection{Customization for HTML output}
+\subsection{Loading the package}
 
-These variables can be redefined before the
-first call to \cs{pretty:n} or \cs{prettyinit:} to customize the behavior.
+\begin{verbatim}
+\usepackage{prettytok}
+\end{verbatim}
 
-\begin{variable}{\prettyfilename}
+There are several options that can be passed to the package.
+
+\begin{variable}{mode=}
+	Specify the working mode of the package. It can either be:
+\begin{itemize}
+	\item |html|: output to a HTML file named for example |pretty-abc.html| (although this can be customized) if the main \TeX\ file is named |abc.tex|.
+		
+	\item |term-8bit|: this is the default.
+
+		Assume XTerm-compatible system, output to the terminal.
+
+		Requires |-8bit| option on engines other than \LuaTeX, see the following link: \\
+		\url{https://tex.stackexchange.com/q/168460/250119}.
+
+		Besides, this drops the distinction between the catcode of some tokens (for example \verb|{}$#&^_| are all shown as the same color as "special catcode"),
+		which is available in the tooltip in the HTML version.
+
+		This might work on Windows, although the package writer have not tested it.
+		Refer to \url{https://stackoverflow.com/q/2048509/5267751}
+		and \url{https://superuser.com/q/413073/577463}.
+
+
+	\item |term-shell|: 
+		To output colored text to the terminal, |--8bit| flag is needed otherwise the terminal escape codes will be
+		changed to |^^[| etc.
+		A workaround, using \TeX\ Live's behavior when the file name has the form \verb+|...+,
+		is provided with this option.
+
+		Requires |--shell-escape| flag. May not be very reliable.
+
+		Refer to \url{https://tex.stackexchange.com/a/670572/250119} for more details.
+\end{itemize}
+Pass like a normal option. For example |\usepackage[mode=term-shell]{prettytok}|.
+\end{variable}
+
+\subsubsection{HTML configuration}
+
+These options are only available if |mode=html|.
+
+\begin{variable}{html-file-name=}
 	The output file name. Defaults to |pretty-|\meta{jobname}|.html|, as mentioned above.
 \end{variable}
 
-\begin{variable}{\prettyrefreshstrategy}
+\begin{variable}{html-refresh-strategy=}
 	The auto-refresh strategy. Allowed values are 0-4. 0 is no refresh. \\
 	Which value works best depends on the particular browser. \\
-	On Google Chrome, passing |--allow-file-access-from-files| may be useful.
+	If you're using Google Chrome to view the output HTML,
+	invoking the browser from the command-line with |--allow-file-access-from-files| flag may be useful.
 \end{variable}
 
-\begin{variable}{\prettyrefreshduration}
+\begin{variable}{html-refresh-duration=}
 	The duration between two consecutive refresh check, in milliseconds. Defaults to 1000.
 \end{variable}
 
-\subsection{Customization for terminal output}
+\subsubsection{Terminal configuration}
 
-\begin{variable}{\prettytermprefix,\prettytermprefixmore}
+These options are only available if |mode=term-8bit| or |mode=term-shell|.
+
+\begin{variable}{term-prefix=,term-prefix-more=}
 	Strings consist of prefixes to be output before each terminal line.
 
 	This might be useful for log-filtering/output-filtering tools such as |texfot| to recognize the output line.
@@ -350,17 +167,213 @@ first call to \cs{pretty:n} or \cs{prettyinit:} to customize the behavior.
 	Defaults to \verb*|> | and \verb*|> .. | respectively.
 \end{variable}
 
-\begin{variable}{\prettytermwraplimit}
+\begin{variable}{term-wrap-limit=}
 	Estimated line length limit. Set this to a little smaller than your terminal width.
 
-	Note that this is a \meta{tl var}, so it should be set like |\tl_gset:Nn \prettytermwraplimit {80}| instead of |\int_set:Nn \prettytermwraplimit {80}|.
+	Defaults to 70.
 \end{variable}
+
+\subsection{Main function}
+\begin{function}{\pretty:n,\pretty:x,\pretty:o,\pretty:V}
+	\begin{syntax}
+		\cs{pretty:n} \Arg{token list}
+	\end{syntax}
+	Print the content of \meta{token list}.
+
+	This is a simple replacement of the functions above. (|\tl_analysis_show:n|, etc.)
+\end{function}
+
+\begin{function}{\pretty:w}
+	\begin{syntax}
+		\cs{pretty:w} \meta{token list} \cs{prettystop}
+	\end{syntax}
+	Print the content of \meta{token list}.
+	
+The purpose of this function is that
+it can be inserted "anywhere" in order to \emph{inspect the input stream}
+without affecting how the function works.
+
+Note that the input stream will be tokenized and has catcode frozen.
+
+For example
+\begin{verbatim}
+\ExplSyntaxOn
+\def \f #1 {\prettye:w 789}
+\f 123456 \prettystop
+\end{verbatim}
+will print out |78923456|.
+
+For now, it must be brace-balanced.  Use \cs{prettye:w} instead if this is a problem.
+\end{function}
+
+\begin{function}[EXP]{\prettystop}
+	\begin{syntax}
+		\cs{prettystop}
+	\end{syntax}
+	Only used as a delimiter for |:w| functions. For convenience, this function is defined to do nothing.
+\end{function}
+
+\begin{function}{\prettyshow:N,\prettyshow:c}
+	\begin{syntax}
+		\cs{prettyshow:N} \meta{token}
+		\cs{prettyshow:c} \Arg{control sequence name}
+	\end{syntax}
+	Show the meaning of a |N|-type argument.
+\end{function}
+
+\begin{function}{\pretty:N,\pretty:c}
+	\begin{syntax}
+		\cs{pretty:N} \meta{token}
+		\cs{pretty:c} \Arg{control sequence name}
+	\end{syntax}
+	Print \meta{token}.
+
+	It may also be useful to use |\pretty:V| to print a token list variable's value,
+	or |\prettyshow:N| to print a control sequence's meaning.
+\end{function}
+
+\begin{function}{\pretty:nn, \pretty:nnn}
+	\begin{syntax}
+		\cs{pretty:nn} \Arg{token list} \Arg{token list}
+		\cs{pretty:nnn} \Arg{token list} \Arg{token list} \Arg{token list}
+	\end{syntax}
+	Print multiple token lists. Its effect is similar to multiple consecutive calls to \cs{pretty:n}.
+\end{function}
+
+
+
+
+
+
+\subsection{Expandable interface (\LuaTeX\ only)}
+\label{subsec:expandable-interface}
+
+\begin{function}[EXP]{\prettye:n}
+	\begin{syntax}
+		\cs{prettye:n} \Arg{token list}
+	\end{syntax}
+	Print the token list, similar to \cs{pretty:n}, but is fully expandable.
+\end{function}
+
+\begin{function}[EXP]{\prettye:w}
+	\begin{syntax}
+		\cs{prettye:w} \meta{tokens} \cs{prettystop}
+	\end{syntax}
+	Print the tokens until \cs{prettystop} is seen. Useful for inspecting the content of the input stream.
+
+	As a debugging tool, it's possible to execute |\everyeof{\prettystop}| to avoid runaway printing in weird catcode environments.
+
+	Currently some implementation details (it can be fixed, but the package writer does not
+have an immediate need for it, see \url{https://tex.stackexchange.com/q/335994/250119}) means control sequences not
+in the hash table will be destroyed.
+Use with care.
+
+\end{function}
+
+\begin{function}[EXP]{\prettye:nn, \prettye:nnn}
+	\begin{syntax}
+		\cs{prettye:nn} \Arg{token list} \Arg{token list}
+		\cs{prettye:nnn} \Arg{token list} \Arg{token list} \Arg{token list}
+	\end{syntax}
+	Similar to multiple consecutive calls to \cs{prettye:n}.
+\end{function}
+
+
+
+\begin{function}[EXP]{\prettye:nw}
+	\begin{syntax}
+		\cs{prettye:nw} \Arg{callback} \meta{tokens} \cs{prettystop}
+	\end{syntax}
+	Same as above, but has a callback, that is, code that is put in the input stream after the content is printed.
+
+	Useful if you want to fine-tune what is printed exactly.
+	(\texttt{\cs{prettye:w} \meta{callback} \meta{tokens}} is functionally the same, but the callback
+	is also printed, which will clutter the debug output)
+
+	For example
+\begin{verbatim}
+\prettye:nw {\somecode ...} 123 \prettystop
+\end{verbatim}
+will print |123|, then after some expansion steps results in the input stream contain
+|\somecode ... 123 \prettystop|.
+\end{function}
+
+\begin{function}[EXP]{\prettye:nnw, \prettye:nnnw}
+	\begin{syntax}
+		\cs{prettye:nnw}  \Arg{callback} \Arg{token list} \meta{tokens} \cs{prettystop}
+		\cs{prettye:nnnw} \Arg{callback} \Arg{token list} \Arg{token list} \meta{tokens} \cs{prettystop}
+	\end{syntax}
+	Similar to call(s) to \cs{prettye:n} followed by a call to \cs{prettye:nw}.
+
+	For example
+\begin{verbatim}
+\prettye:nnw {\somecode ...} {123} 456 \prettystop
+\end{verbatim}
+will print |123456|, then, after some expansion steps, |\somecode ... 456 \prettystop| remains in the input stream.
+\end{function}
+
+\subsection{Lua programming interface}
+
+\begin{function}{prettyprint}
+	\begin{syntax}
+		|prettyprint(|\meta{content}|)|
+	\end{syntax}
+	Print the content, which should be a table of token objects.
+
+	For convenience, you can pass multiple arguments. Strings are also supported.
+\end{function}
+
+
+\subsection{View result}
+
+If terminal output is selected, the output is on the terminal, no special action required. (although you may have to enable either |--8bit| or |--shell-escape|)
+
+Otherwise, the result is printed to a HTML file named |pretty-|\meta{jobname}|.html| by default.
+Open the file in any browser to view the result.
+
+Why HTML file?
+
+\begin{itemize}
+	\item If the \TeX\ program stops with error / has some error that corrupts the PDF output, the output will even with corrupted more by the debug print.
+	\item Printing to the console is rather limited (difficult syntax highlighting/scrolling/line wrapping), and most likely cluttered with the traceback/other \TeX\ default output.
+
+		(nevertheless, there might be plan to support output to console with syntax highlighting later.)
+	\item Output to another \TeX\ file to be compiled works as well; however it's necessary to run another instance of |latexmk| (or other tool used to compile \TeX\ code)
+		and compiling \TeX\ file takes longer than loading a HTML file.
+\end{itemize}
+
+By default, the output refreshes whenever the \TeX\ file is recompiled. The behavior
+can be customized with \cs{prettyrefreshstrategy} and \cs{prettyrefreshduration}.
+
+\subsection{\LaTeXe\ interface}
+
+\begin{function}{\prettyN,\prettyX,\prettyO,\prettyV,\prettyW,\prettyshowN,\prettyshowC}
+	\begin{syntax}
+		\tn{prettyN} \Arg{token list}
+		\tn{prettyX} \Arg{token list}
+		\tn{prettyO} \Arg{token list}
+		\tn{prettyV} \meta{tl var}
+		\cs{prettyW} \meta{token list} \cs{prettystop}
+		\tn{prettyshowN} \meta{token}
+		\tn{prettyshowC} \Arg{control sequence name}
+	\end{syntax}
+	Alias of the correspondingly-named commands.
+\end{function}
+
+\begin{function}[EXP]{\prettyeN,\prettyeW}
+	\begin{syntax}
+		\cs{prettyeN} \Arg{token list}
+		\cs{prettyeW} \meta{tokens} \cs{prettystop}
+	\end{syntax}
+	Alias of the correspondingly-named commands. Only available in \LuaTeX.
+\end{function}
+
 
 \section{Implementation}
 
 Unfortunately, the implementation is not typesetted in \TeX. Read the |.sty| file.
 
-Remark: it's possible to do expandable printing in other engines as well by, for example, turning on `\tracingmacros`, parse the token list somehow
+Remark: it's possible to do expandable printing in other engines as well by, for example, turning on |\tracingmacros|, parse the token list somehow
 (and use some not-always-exact logic to distinguish normal character and active character with same meaning;
 then grep the resulting log file for special markers.
 
