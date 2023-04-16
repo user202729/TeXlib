@@ -1,9 +1,10 @@
 \ProvidesExplPackage{typstmathinput}{2023/03/28}{0.0.0}{Typst-style math input format}
 \RequirePackage{amsmath}
 \RequirePackage{pythonimmediate}
+\providecommand\typstmathinputextrapreamble{}
 {
 	%\directlua{typstmathinput = require "typstmathinput"}
-	\catcode `$ \active
+	%\catcode `$ \active
 	\cs_new_protected:Npn \typstmathinput_dollar {
 		\begingroup
 		% optionally change the catcode for convenience but not strictly required
@@ -13,10 +14,10 @@
 		\char_set_catcode_other:N \}
 		\char_set_catcode_other:N \&
 		\char_set_catcode_other:N \^
-		\char_set_catcode_other:N \%
+		%\char_set_catcode_other:N \%
 		\typstmathinput_dollar_aux \empty
 	}
-	\cs_new_protected:Npn \typstmathinput_dollar_aux #1 $ {
+	\cs_new_protected:Npn \typstmathinput_dollar_aux #1 ◇ {
 		\endgroup
 		%\directlua{typstmathinput.printdollar("\luaescapestring{\unexpanded\expandafter{#1}}")}
 		\expandafter \typstmathinput_printdollar_py \expandafter {#1}
@@ -25,8 +26,13 @@
 	\cs_new_protected:Npn \typstmathinput_printdollar_py {\pyc{typstmathinput_printdollar_py()}}
 
 	\cs_new_protected:Npn \typstmathinputenable {
-		\catcode `$ \active
-		\let $ \typstmathinput_dollar
+		%\catcode `$ \active
+		%\let $ \typstmathinput_dollar
+		\sys_if_engine_pdftex:TF {
+			\expandafter \let \csname \detokenize{u8:◇}\endcsname \typstmathinput_dollar
+		} {
+			\errmessage{weird}
+		}
 	}
 	\cs_new_protected:Npn \typstmathinputdisable { \char_set_catcode_math_toggle:N \$ }
 	\cs_new_protected:Npn \typstmathinputnormcat {

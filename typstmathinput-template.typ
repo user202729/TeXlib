@@ -2,6 +2,7 @@
 #let alignpoint=$&$.body.func()
 #let mathstyle=$upright(A)$.body.func()
 #let space=$a b$.body.children.at(1).func()
+#set page(width: 100cm)
 
 #{
 assert(repr(alignpoint)=="alignpoint")
@@ -22,16 +23,20 @@ assert(repr(space)=="space")
 #let textstyle=1
 #let scriptstyle=2
 #let scriptscriptstyle=3
-#let nextstyle(x) = {
+// type enum STYLE = {displaystyle, textstyle, scriptstyle, scriptscriptstyle}
+
+#let nextstyle(x) = { // style → style
   assert(0<=x and x<=3)
   calc.min(x+1, scriptscriptstyle)
 }
-#let nextscriptstyle(x) = {
+#let nextscriptstyle(x) = { // style → style
   calc.max(scriptstyle, nextstyle(x))
 }
 #let defaultstyleheight(x) = {if x>=scriptstyle{0.55} else {1}}
 
-#let cat(style, ..a) = {
+// type struct TEX = {body: str, height: float, align: bool, linebreak: bool}
+
+#let cat(style, ..a) = { // style, ⟨str|tex⟩... -> tex
   let result=(
     body: "",
     height: defaultstyleheight(style),
@@ -56,31 +61,77 @@ assert(repr(space)=="space")
   result
 }
 
-#let setheight(x, height) = {
+#let vcat(..a) = { // ⟨str|tex⟩... -> tex
+  let result=(
+    body: "",
+    height: 0,
+    align: false,
+    linebreak: false,
+  )
+  for x in a.pos() {
+    if type(x)=="string" {
+      x=(
+        body: x, height: 0, align: false, linebreak: false
+      )
+    }else{
+      assert(type(x)=="dictionary", message: "unexpected type "+type(x))
+    }
+    result=(
+      body: result.body+x.body,
+      height: result.height+x.height,
+      align: result.align or x.align,
+      linebreak: result.linebreak or x.linebreak,
+    )
+  }
+  result
+}
+
+#let setheight(x, height) = { // tex, float -> tex
   x.height=height
   x
 }
-#let prependbody(x, pre) = {
-  x.body=pre+x.body
+#let adddelimsize(x, delimsize) = { // tex, str[Literal["\\big", ...]] -> tex
+  if x.body=="" { x.body="." }
+  x.body=delimsize+x.body
   x
 }
 
-#let equation_body_to_latex(x, style) = {cat(style, ..{
+#let delimtomatenv(x) = { // content → (str, str)
+  let delim="(" // assume this is the default, not necessarily true
+  if x.has("delim"){ delim=x.delim }
+  if      delim=="("{ ("\\begin{pmatrix}", "\\end{pmatrix}") }
+  else if delim=="["{ ("\\begin{bmatrix}", "\\end{bmatrix}") }
+  else if delim=="{"{ ("\\begin{Bmatrix}", "\\end{Bmatrix}") }
+  else if delim=="|"{ ("\\begin{vmatrix}", "\\end{vmatrix}") }
+  else if delim=="||"{ ("\\begin{Vmatrix}", "\\end{Vmatrix}") }
+  else if delim==none{ ("\\begin{matrix}", "\\end{matrix}") }
+  else { ("\\text{unknown delim " + repr(delim) + "}\\begin{matrix}", "\\end{matrix}") }
+}
+
+// content, style → tex
+#let equation_body_to_latex(x, style, spacebefore: false, spaceafter: false) = {cat(style, ..{
   if x.func()==sequence{
-    for y in x.children{
-      (equation_body_to_latex(y, style),)
+    let l=x.children
+    for (i, y) in l.enumerate(){
+      (equation_body_to_latex(y, style,
+        spacebefore: if i>0{l.at(i - 1).func()==space} else {spacebefore},
+        spaceafter: if i < l.len()-1{l.at(i+1).func()==space} else {spaceafter},
+      ),)
     }
   }else if x.func()==math.lr{
     assert(x.body.func()==sequence)
     if x.body.children.len()<=2{
-      for i, y in x.body.children{
+      for (i, y) in x.body.children.enumerate(){
         (equation_body_to_latex(y, style),)
       }
     }else{
       let tmp=cat(style, ..{
-        for i, y in x.body.children{
+        for (i, y) in x.body.children.enumerate(){
           if i>0 and x.body.children.len()-1>i{
-            (equation_body_to_latex(y, style),)
+            (equation_body_to_latex(y, style,
+              spacebefore: x.body.children.at(i - 1).func()==space,
+              spaceafter: x.body.children.at(i+1).func()==space,
+            ),)
           }
         }
       })
@@ -91,10 +142,44 @@ assert(repr(space)=="space")
         else if tmp.height<=2.1 {"\\bigg"}
         else {"\\Bigg"}
       }
-      (prependbody(equation_body_to_latex(x.body.children.at(0), style), bracketstyle),
+      (adddelimsize(equation_body_to_latex(x.body.children.at(0), style), bracketstyle),
       tmp,
-      prependbody(equation_body_to_latex(x.body.children.at(-1), style), bracketstyle))
+      adddelimsize(equation_body_to_latex(x.body.children.at(-1), style), bracketstyle))
     }
+  }else if x.func()==math.vec{
+    let (startenv, stopenv)=delimtomatenv(x)
+    (vcat(..{
+      (startenv,)
+      for (i, v) in x.children.enumerate(){
+        if i>0{ ("\\\\",) }
+        (equation_body_to_latex(v, style),)
+      }
+      (stopenv,)
+    }),)
+  }else if x.func()==math.cases{
+    (vcat(..{
+      ("\\begin{cases}",)
+      for (i, row) in x.children.enumerate(){
+        if i>0{ ("\\\\",) }
+        (equation_body_to_latex(row, style),)
+      }
+    ("\\end{cases}",)
+    }),)
+  }else if x.func()==math.mat{
+    let (startenv, stopenv)=delimtomatenv(x)
+    (vcat(..{
+      (startenv,)
+      for (i, row) in x.rows.enumerate(){
+        if i>0{ ("\\\\",) }
+        (cat(style, ..{
+          for (j, v) in row.enumerate(){
+            if j>0{ ("&",) }
+            (equation_body_to_latex(v, style),)
+          }
+        }),)
+      }
+    (stopenv,)
+    }),)
   }else if x.func()==math.op{
     ({
       if x.limits{
@@ -108,24 +193,32 @@ assert(repr(space)=="space")
   }else if x.func()==space{
     ()
     //"\\ "
+  }else if x.func()==h{
+    ("\\hspace{" + repr(x.amount) + "}"
+    ,)  // a bit ugly with repr but okay
+  }else if x.func()==math.equation{
+    // just flatten it
+    (equation_body_to_latex(x.body, style),)
   }else if x.func()==text{
-    let content={
-      let wrap_in_text
-      if x.text.match(regex("^\\d+$"))!=none {
-        wrap_in_text=false
-      }else{
-        wrap_in_text=x.text.clusters().len()>1
+    let wrap_in_text = {
+      if x.text.match(regex("^\\d+$"))!=none {false}
+      else{
+        x.text.clusters().len()>1
       }
+    }
+    let content={
       if wrap_in_text { "\\text{" }
       x.text
         .replace("{", "\\{")
         .replace("}", "\\}")
       if wrap_in_text { "}" }
     }
-    if style==displaystyle and (content=="∑" or content=="∏"){
+    if style==displaystyle and (content=="∑" or content=="∏" or content=="∫"){
       content=setheight(cat(style, content), 1.4)
     }
+    if spacebefore and (content=="|" or content=="‖" or wrap_in_text){ ("\\ ",) }
     (content,)
+    if spaceafter and (content=="|" or content=="‖" or wrap_in_text){ ("\\ ",) }
   }else if x.func()==math.root{
     ("\\sqrt",)
     if x.has("index"){
@@ -156,6 +249,11 @@ assert(repr(space)=="space")
     let tmp=equation_body_to_latex(x.num, nextstyle(style))
     let tmp2=equation_body_to_latex(x.denom, nextstyle(style))
     let tmp3=cat(style, "\\frac{", tmp, "}{", tmp2, "}")
+    (setheight(tmp3, tmp.height+tmp2.height),)
+  }else if x.func()==math.binom{
+    let tmp=equation_body_to_latex(x.upper, nextstyle(style))
+    let tmp2=equation_body_to_latex(x.lower, nextstyle(style))
+    let tmp3=cat(style, "\\binom{", tmp, "}{", tmp2, "}")
     (setheight(tmp3, tmp.height+tmp2.height),)
   }else if x.func()==mathstyle{
     if x.has("bold"){
@@ -195,6 +293,7 @@ assert(repr(space)=="space")
   }
 })}
 
+// content[$...$] → tex
 #let equation_to_latex(x) = {
   assert(x.func()==math.equation)
   if x.block {
@@ -226,18 +325,41 @@ asserte( equation_body_to_latex($a/b$.body, textstyle).height, 1.1 )
 asserte( equation_body_to_latex($∑$.body, textstyle).height, 1 )
 asserte( equation_body_to_latex($∑$.body, displaystyle).height, 1.4 )
 
+asserte( equation_body_to_latex($vec(1, 2)$.body, displaystyle).height, 2 )
+asserte( equation_body_to_latex($mat(1, 2; 3, 4; 5, 6)$.body, displaystyle).height, 3 )
+asserte( equation_body_to_latex($mat(1, 2/3; 3, 4; 5, 6)$.body, displaystyle).height, 4 )
+
 }
 
 //#import "/home/user202729/TeX/typstmathinput-template.typ": equation_to_latex
-//#let a =($ (sum (0) x)+111+2^3/4+max_(i=1)^10(i^2)+max(x^2)+root(3, x)+sqrt(x)||{a} + "{text}" + floor(2)-(1|2) - (1 | 2)+upright(A) italic(A) bold(A) sans(A) frak(A) mono(A) bb(A) cal(A) & 1 $)
-////#let a=($lr((1+2)) + (1+2)$)
-//
-//
-//#a
-//
-//>> #raw(equation_to_latex(a))
-//
-//#repr(a)
+
+#let a =($ 
+binom(1, 2)
+    vec(1, 2, delim: "[")
+    mat(1, 2; 3, 4; delim: "[")
+    vec(1, 2, delim: "|")
+    vec(1, 2, delim: "||")
+    vec(1, 2, delim: "{")
+    mat(1, 2/3; 3, 4)
+1 + #($λ n$)
+λ'
+cases(1 &"if" τ_i a, 3&"otherwise")
+(a|b) (a | b)
+vec(1, 2, 3) mat(1, 2; 3, 4) (sum (0) x)+111+2^3/4+max_(i=1)^10(i^2)+max(x^2)+root(3, x)+sqrt(x)||{a} + "{text}" + floor(2)-(1|2) - (1 | 2)+upright(A) italic(A) bold(A) sans(A) frak(A) mono(A) bb(A) cal(A) & 1 $)
+#let a=($
+[τ_i+1<μ ≤ τ_i] = cases(1 "if" τ_i+1<μ ≤ τ_i \ 0 "otherwise").
+$)
+
+#a
+
+>> #raw(equation_to_latex(a))
+
+>> #raw(equation_to_latex(a).replace(" ", "<SP>"))
+
+repr: #raw(repr(a))
+
+//#let x = 1em
+//#("a" + repr(1em))
 
 //$  #style(styles=>measure($1/2$, styles))  (1/2) ^(   #style(styles=>measure($1/2$, styles))   1/2)  $
 //$ 1/2 + sqrt(sqrt(sqrt(2))) + \(sqrt(2)\)  $
