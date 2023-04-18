@@ -1,6 +1,6 @@
 #!/bin/python3
 """
-temporary file
+A hack to allow decoding for example ^^[ to the proper escape sequence.
 """
 
 import sys

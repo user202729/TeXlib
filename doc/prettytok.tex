@@ -1,5 +1,5 @@
 %! TEX program = lualatex
-\ProvidesFile{prettytok.tex} [2022/08/05 v0.1.0 ]
+\ProvidesFile{prettytok.tex} [2023/04/18 v0.2.0 ]
 \RequirePackage{fvextra}
 \documentclass{l3doc}
 \usepackage[svgnames]{xcolor}
@@ -8,7 +8,9 @@
 \fvset{breaklines=true,gobble=0,tabsize=4,frame=single,numbers=left,numbersep=3pt}
 \AtBeginDocument{\DeleteShortVerb\"}
 \MakeOuterQuote{"}
+\usepackage{cleveref}
 \begin{document}
+\hfuzz=1pt
 \GetFileInfo{\jobname.tex}
 
 \title{\pkg{prettytok} --- Pretty-print token lists\thanks{This file
@@ -101,13 +103,15 @@ The corresponding output (in the current version) is:
 \usepackage{prettytok}
 \end{verbatim}
 
+\subsection{Options}
+
 There are several options that can be passed to the package.
 
+Usage example: |\usepackage[mode=term-shell]{prettytok}|.
+
 \begin{variable}{mode=}
-	Specify the working mode of the package. It can either be:
+	Specify the working mode of the package, that is, where the output is displayed. It can either be:
 \begin{itemize}
-	\item |html|: output to a HTML file named for example |pretty-abc.html| (although this can be customized) if the main \TeX\ file is named |abc.tex|.
-		
 	\item |term-8bit|: this is the default.
 
 		Assume XTerm-compatible system, output to the terminal.
@@ -122,7 +126,6 @@ There are several options that can be passed to the package.
 		Refer to \url{https://stackoverflow.com/q/2048509/5267751}
 		and \url{https://superuser.com/q/413073/577463}.
 
-
 	\item |term-shell|: 
 		To output colored text to the terminal, |--8bit| flag is needed otherwise the terminal escape codes will be
 		changed to |^^[| etc.
@@ -132,32 +135,46 @@ There are several options that can be passed to the package.
 		Requires |--shell-escape| flag. May not be very reliable.
 
 		Refer to \url{https://tex.stackexchange.com/a/670572/250119} for more details.
+
+	\item |html|: output to a HTML file named for example |pretty-abc.html| (although this can be customized,
+		refer to \hyperref[opt:html-file-name]{|html-file-name=|}%
+		) if the main \TeX\ file is named |abc.tex|.
+
+		Open the file in any browser to view the result.
+
+		Using this option, the output will not be cluttered with the traceback/other \TeX\ default output.
+
+By default, the output refreshes whenever the \TeX\ file is recompiled. The behavior
+can be customized with \hyperref[opt:html-refresh-strategy]{|html-refresh-strategy=|} and \hyperref[opt:html-refresh-duration]{|html-refresh-duration=|}.
+
 \end{itemize}
-Pass like a normal option. For example |\usepackage[mode=term-shell]{prettytok}|.
 \end{variable}
+
+Currently, it's not supported to print the debug output to the PDF itself,
+because if the \TeX\ program stops with error / has some error that corrupts the PDF output, the output will even with corrupted more by the debug print.
 
 \subsubsection{HTML configuration}
 
-These options are only available if |mode=html|.
+These options are only meaningful if |mode=html|.
 
-\begin{variable}{html-file-name=}
+\begin{variable}{html-file-name=}\label{opt:html-file-name}
 	The output file name. Defaults to |pretty-|\meta{jobname}|.html|, as mentioned above.
 \end{variable}
 
-\begin{variable}{html-refresh-strategy=}
+\begin{variable}{html-refresh-strategy=}\label{opt:html-refresh-strategy}
 	The auto-refresh strategy. Allowed values are 0-4. 0 is no refresh. \\
 	Which value works best depends on the particular browser. \\
 	If you're using Google Chrome to view the output HTML,
 	invoking the browser from the command-line with |--allow-file-access-from-files| flag may be useful.
 \end{variable}
 
-\begin{variable}{html-refresh-duration=}
+\begin{variable}{html-refresh-duration=}\label{opt:html-refresh-duration}
 	The duration between two consecutive refresh check, in milliseconds. Defaults to 1000.
 \end{variable}
 
 \subsubsection{Terminal configuration}
 
-These options are only available if |mode=term-8bit| or |mode=term-shell|.
+These options are only meaningful if |mode=term-8bit| or |mode=term-shell|.
 
 \begin{variable}{term-prefix=,term-prefix-more=}
 	Strings consist of prefixes to be output before each terminal line.
@@ -172,6 +189,38 @@ These options are only available if |mode=term-8bit| or |mode=term-shell|.
 
 	Defaults to 70.
 \end{variable}
+
+\begin{variable}{term-shell-decode-cmd=}
+	Only meaningful with |mode=term-shell|.
+
+	Normally you would not need to explicitly pass this option, unless something does not work.
+
+	By default, a file named \file{prettytok-decode-8bit.py}
+	should be included in your \TeX\ distribution, and
+	the package runs |kpsewhich prettytok-decode-8bit.py| to find the location
+	of that file in order to execute it.
+	However, if by any reason this does not work, you can specify an explicit command such as
+	|python3 /full/path/to/prettytok-decode-8bit.py| to override it.
+
+	Passing blank value invokes the default behavior (runs |kpsewhich|).
+
+	Alternatively, you can also choose to explicitly pass the path in order to save a call to |kpsewhich|
+	to make the program a bit faster.
+
+	If you \emph{really} want to, special characters may be passed by prefixing them with |\|.
+	\DisableQuotes
+	But |\"| won't work anyway (as far as the package writer know, this is impossible in non-\LuaTeX\ engines).
+	\EnableQuotes
+	\begin{texnote} The path is interpreted by detokenizing the value in |escapechar=-1|. \end{texnote}
+\end{variable}
+
+\begin{variable}{term-shell-decode-cmd-print=}
+	If |mode=term-shell|, print out the command correspond to |term-shell-decode-cmd| on the console, for debugging purpose.
+
+	Example output: 
+	|The value of term-shell-decode-cmd is: [[[./prettytok-decode-8bit.py]]]|
+\end{variable}
+
 
 \subsection{Main function}
 \begin{function}{\pretty:n,\pretty:x,\pretty:o,\pretty:V}
@@ -324,26 +373,7 @@ will print |123456|, then, after some expansion steps, |\somecode ... 456 \prett
 \end{function}
 
 
-\subsection{View result}
 
-If terminal output is selected, the output is on the terminal, no special action required. (although you may have to enable either |--8bit| or |--shell-escape|)
-
-Otherwise, the result is printed to a HTML file named |pretty-|\meta{jobname}|.html| by default.
-Open the file in any browser to view the result.
-
-Why HTML file?
-
-\begin{itemize}
-	\item If the \TeX\ program stops with error / has some error that corrupts the PDF output, the output will even with corrupted more by the debug print.
-	\item Printing to the console is rather limited (difficult syntax highlighting/scrolling/line wrapping), and most likely cluttered with the traceback/other \TeX\ default output.
-
-		(nevertheless, there might be plan to support output to console with syntax highlighting later.)
-	\item Output to another \TeX\ file to be compiled works as well; however it's necessary to run another instance of |latexmk| (or other tool used to compile \TeX\ code)
-		and compiling \TeX\ file takes longer than loading a HTML file.
-\end{itemize}
-
-By default, the output refreshes whenever the \TeX\ file is recompiled. The behavior
-can be customized with \cs{prettyrefreshstrategy} and \cs{prettyrefreshduration}.
 
 \subsection{\LaTeXe\ interface}
 

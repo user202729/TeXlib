@@ -1,4 +1,4 @@
-\ProvidesExplPackage{prettytok}{2022/08/05}{0.1.0}{Pretty-print token list}
+\ProvidesExplPackage{prettytok}{2023-04-18}{0.2.0}{Pretty-print token list}
 \RequirePackage{precattl}
 \RequirePackage{l3keys2e}
 
@@ -10,6 +10,10 @@
 	mode.initial:n = { term-8bit },
 
 	ignore-tlanalysis-bug.bool_set:N=\_prettytok_ignore_tlanalysis_bug,
+
+	term-shell-decode-cmd.tl_set:N=\_prettytok_term_shell_decode_cmd,
+	term-shell-decode-cmd.initial:n={},
+	term-shell-decode-cmd-print.bool_set:N=\_prettytok_term_shell_decode_cmd_print,
 
 	html-file-name.tl_set:N=\_prettytok_html_file_name,
 	html-file-name.initial:x={pretty-\jobname.html},
@@ -124,8 +128,18 @@
 } {
 	\str_if_eq:VnTF \_prettytok_mode {term-shell} {
 		\newwrite \_prettytok_typeout_stream
-		\sys_get_shell:nnN {kpsewhich~ prettytok-decode-8bit.py} {\cctab_select:N \c_other_cctab} \_prettytok_decode_executable_path
-		\immediate \openout \_prettytok_typeout_stream = {|\_prettytok_decode_executable_path}
+		\tl_if_empty:NTF \_prettytok_term_shell_decode_cmd {
+			\sys_get_shell:nnN {kpsewhich~ prettytok-decode-8bit.py} {\cctab_select:N \c_other_cctab} \_prettytok_term_shell_decode_cmd
+		} {
+			\begingroup
+				\escapechar=-1~
+				\str_gset:NV \_prettytok_term_shell_decode_cmd \_prettytok_term_shell_decode_cmd
+			\endgroup
+		}
+		\bool_if:NT \_prettytok_term_shell_decode_cmd_print {
+			\typeout{^^JThe~ value~ of~ term-shell-decode-cmd~ is:~ [[[\_prettytok_term_shell_decode_cmd]]]^^J}
+		}
+		\immediate \openout \_prettytok_typeout_stream = {|\_prettytok_term_shell_decode_cmd}
 	} {
 		\int_const:Nn \_prettytok_typeout_stream {128}  % 16 works except on LuaLaTeX
 	}
