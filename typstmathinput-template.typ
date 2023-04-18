@@ -3,6 +3,7 @@
 #let mathstyle=$upright(A)$.body.func()
 #let space=$a b$.body.children.at(1).func()
 #set page(width: 100cm)
+// we do the above to avoid pdftotext removing spaces when they coincide with newlines
 
 #{
 assert(repr(alignpoint)=="alignpoint")
@@ -216,9 +217,14 @@ assert(repr(space)=="space")
     if style==displaystyle and (content=="∑" or content=="∏" or content=="∫"){
       content=setheight(cat(style, content), 1.4)
     }
-    if spacebefore and (content=="|" or content=="‖" or wrap_in_text){ ("\\ ",) }
-    (content,)
-    if spaceafter and (content=="|" or content=="‖" or wrap_in_text){ ("\\ ",) }
+
+    if content=="|" and spacebefore and spaceafter { ("\\mid ",) }
+    else if content=="‖" and spacebefore and spaceafter { ("\\parallel ",) }
+    else {
+      if spacebefore and (content=="|" or content=="‖" or wrap_in_text){ ("\\ ",) }
+      (content,)
+      if spaceafter and (content=="|" or content=="‖" or wrap_in_text){ ("\\ ",) }
+    }
   }else if x.func()==math.root{
     ("\\sqrt",)
     if x.has("index"){
@@ -344,11 +350,11 @@ binom(1, 2)
 1 + #($λ n$)
 λ'
 cases(1 &"if" τ_i a, 3&"otherwise")
-(a|b) (a | b)
-vec(1, 2, 3) mat(1, 2; 3, 4) (sum (0) x)+111+2^3/4+max_(i=1)^10(i^2)+max(x^2)+root(3, x)+sqrt(x)||{a} + "{text}" + floor(2)-(1|2) - (1 | 2)+upright(A) italic(A) bold(A) sans(A) frak(A) mono(A) bb(A) cal(A) & 1 $)
-#let a=($
+(a|b) (a | b) (a || b)
+vec(1, 2, 3) mat(1, 2; 3, 4) (sum (0) x)+111+2^3/4+max_(i=1)^10(i^2)+max(x^2)+root(3, x)+sqrt(x)||{a} + "{text}" + floor(2)-(1|2) - (1 | 2)+upright(A) italic(A) bold(A) sans(A) frak(A) mono(A) bb(A) cal(A) & 1
 [τ_i+1<μ ≤ τ_i] = cases(1 "if" τ_i+1<μ ≤ τ_i \ 0 "otherwise").
 $)
+
 
 #a
 
