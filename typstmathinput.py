@@ -1,5 +1,6 @@
 import tempfile
 from pathlib import Path
+import itertools
 import subprocess
 import shutil
 import hashlib
@@ -9,6 +10,7 @@ from typing import Dict, Union
 from pythonimmediate import*
 from pythonimmediate.engine import default_engine
 import shelve
+import atexit
 
 tmpdir=Path(tempfile.gettempdir())/".typstmathinput-tmp"
 tmpdir.mkdir(exist_ok=True)
@@ -22,45 +24,77 @@ if cache.get(template_hash_cache_key)!=template_hash:
 	cache.clear()
 	cache[template_hash_cache_key]=template_hash
 
-def input_hash(s: str, extra_preamble: str)->str:
-	return hashlib.sha256((str(len(s)) + "|" + s + extra_preamble).encode('u8')).hexdigest()
 
-def typst_formula_to_tex(s: str, extra_preamble: str)->str:
-	hash_=input_hash(s, extra_preamble)
-	result: str=typing.cast(str, cache.get(hash_))
-	if result: return result
+@dataclass(frozen=True)
+class Input:
+	s: str  # the formula. Must not start or end with "$", but the return value will be wrapped in \(...\) or similar
+	extra_preamble: str
+	def hash(self)->str:
+		return hashlib.sha256((str(len(self.s)) + "|" + self.s + self.extra_preamble).encode('u8')).hexdigest()
 
-	# s must not start or end with "$", but the return value will be wrapped in $...$ or similar
+def typst_formulas_to_tex(l: list[str], extra_preamble: str)->list[str]:
+	# no caching, preamble must be the same
+	delimiter = "XXXtypstmathinput-delimiterXXX"
 	with tempfile.NamedTemporaryFile(dir=tmpdir, prefix="", suffix=".typ", delete=False, mode="w") as f:
 		n=Path(f.name)
 		f.write(r"""
 #import "typstmathinput-template.typ": equation_to_latex
 """ + extra_preamble + r"""
 #set page(width: 100cm)
+""" +
+
+(r'#raw("\n' + delimiter + r'\n")').join(
+r"""
 #raw(equation_to_latex($""" + s + r"""$))
-""")
+""" for s in l)
+		  )
 		# .replace(" ", "<SP>")
+
+	def invalid_formula_error(errortext: str)->None:
+		if len(l)==1:
+			raise RuntimeError(f"Formula ${l[0]}$ is invalid: {errortext}")
+		else:
+			raise RuntimeError(f"Some formula is invalid: {errortext}")
+
 	try:
 		process=subprocess.run(["typst", "compile", n, n.with_suffix(".pdf")], cwd=tmpdir, stderr=subprocess.PIPE)
 		if process.returncode!=0:
 			try: errortext=process.stderr.decode('u8')
 			except UnicodeDecodeError: errorcontext=repr(process.stderr)
-			raise RuntimeError(f"Formula ${s}$ is invalid: {errortext}")
+			invalid_formula_error(errortext)
 	finally: n.unlink(missing_ok=True)
+
 	if not n.with_suffix(".pdf").is_file():
-		raise ValueError(f"Formula ${s}$ is invalid -- Typst finishes but does not provide PDF")
+		invalid_formula_error("Typst finishes but does not provide PDF")
+
 	try: subprocess.run(["pdftotext", n.with_suffix(".pdf")], cwd=tmpdir, check=True)
 	finally: n.with_suffix(".pdf").unlink(missing_ok=True)
+
 	try: result=n.with_suffix(".txt").read_text().replace("\n", "").replace("\x0c", "")
 	finally: n.with_suffix(".txt").unlink(missing_ok=True)
 
-	cache[hash_]=result
-	return result
+	result_=result.split(delimiter)
+	assert len(result_)==len(l)
+	return result_
 
 
 if not T.typstmathinputextrapreamble.defined():
 	T.typstmathinputextrapreamble.assign_value(BalancedTokenList([]))
 
+
+formula_counter: int=0
+pending_formulas: list[Input]=[]
+
+def process_pending_formulas()->None:
+	# group pending_formulas by preamble
+	key=lambda f: f.extra_preamble
+	for k, g_ in itertools.groupby(sorted(pending_formulas, key=key), key=key):
+		g=list(g_)
+		result=typst_formulas_to_tex([x.s for x in g], k)
+		for f, r in zip(pending_formulas, result):
+			cache[f.hash()]=r
+
+atexit.register(process_pending_formulas)
 
 def handle_formula(engine: "Engine")->None:
 	with group:  # we use the group to set the catcode temporarily
@@ -79,10 +113,21 @@ def handle_formula(engine: "Engine")->None:
 	s = re.sub(r'√\s*\(', ' sqrt(', s)
 	s = re.sub(r'√\s*(\d+|\w+)', r' sqrt(\1)', s)
 
-	execute(typst_formula_to_tex(
-		s,
-		var["typstmathinputextrapreamble"],
-		)+"%")
+	input_=Input(s, var["typstmathinputextrapreamble"])
+	input_hash=input_.hash()
+	tmp=cache.get(input_hash)
+	if tmp is not None:
+		execute(tmp+"%")
+	else:
+		global formula_counter
+		formula_counter+=1
+		if formula_counter>=5:
+			TokenList(r"\textbf{??}").execute()
+			pending_formulas.append(input_)
+		else:
+			tmp_: str=typst_formulas_to_tex([s], input_.extra_preamble)[0]
+			cache[input_hash]=tmp_
+			execute(tmp_+"%")
 
 	finish_listen()
 handle_formula_identifier = add_handler(handle_formula)
