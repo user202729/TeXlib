@@ -1,3 +1,4 @@
+%! TEX program = pdflatex
 \ProvidesFile{typstmathinput.tex}[2023/03/28 0.0.0 Typst-style math input format]
 \RequirePackage{fvextra}
 \documentclass{l3doc}
@@ -71,6 +72,13 @@ $ mat(1, 2; 3, 4) $
 $ lim_x =
     op("lim", limits: #true)_x $
 \end{demo}
+
+Currently, some preprocessing is done before passing the data to Typst, in order to handling
+superscript/subscript characters and square root Unicode sign correctly,
+refer to Typst feature requests \href{https://github.com/typst/typst/issues/592}{\#592}
+and \href{https://github.com/typst/typst/issues/516}{\#516} for details.
+
+When these feature requests are implemented, this package should be amended to remove the patches.
 
 \section{Limitations}
 

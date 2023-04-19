@@ -202,17 +202,18 @@ assert(repr(space)=="space")
     (equation_body_to_latex(x.body, style),)
   }else if x.func()==text{
     let wrap_in_text = {
-      if x.text.match(regex("^\\d+$"))!=none {false}
-      else{
+      if x.text.match(regex("^[0-9.]+$"))!=none {
+        false
+      }else{
         x.text.clusters().len()>1
       }
     }
     let content={
-      if wrap_in_text { "\\text{" }
+      if wrap_in_text { "\\text{\\textcolor{red}{" }
       x.text
         .replace("{", "\\{")
         .replace("}", "\\}")
-      if wrap_in_text { "}" }
+      if wrap_in_text { "}}" }
     }
     if style==displaystyle and (content=="∑" or content=="∏" or content=="∫"){
       content=setheight(cat(style, content), 1.4)
@@ -221,9 +222,11 @@ assert(repr(space)=="space")
     if content=="|" and spacebefore and spaceafter { ("\\mid ",) }
     else if content=="‖" and spacebefore and spaceafter { ("\\parallel ",) }
     else {
-      if spacebefore and (content=="|" or content=="‖" or wrap_in_text){ ("\\ ",) }
+      // currently Typst code such as `x "is natural"` will make the TeX code omit the space before the quote.
+      // there seems to be no good solution? Just stick with typing `x" is natural"` instead
+      //if spacebefore and (content=="|" or content=="‖" or wrap_in_text){ ("\\mathrel{}",) }
       (content,)
-      if spaceafter and (content=="|" or content=="‖" or wrap_in_text){ ("\\ ",) }
+      //if spaceafter and (content=="|" or content=="‖" or wrap_in_text){ ("\\mathrel{}",) }
     }
   }else if x.func()==math.root{
     ("\\sqrt",)
