@@ -6,23 +6,58 @@ import shutil
 import hashlib
 import re
 import typing
-from typing import Dict, Union
+from typing import Dict, Union, Optional
 from pythonimmediate import*
+from pythonimmediate import simple
 from pythonimmediate.engine import default_engine
 import shelve
 import atexit
+from functools import lru_cache
 
-tmpdir=Path(tempfile.gettempdir())/".typstmathinput-tmp"
-tmpdir.mkdir(exist_ok=True)
-template_file=Path(__file__).parent/"typstmathinput-template.typ"
-shutil.copy(template_file, tmpdir)
-template_hash=hashlib.sha256((tmpdir/template_file.name).read_bytes()).digest()
+execute(r"""
+\keys_define:nn{typstmathinput}{
+	cache-location.tl_set:N=\_typstmathinput_cache_location,
+	cache-location.initial:n={},
 
-cache=shelve.open(str(tmpdir/"cache"))
-template_hash_cache_key="_template_hash_"
-if cache.get(template_hash_cache_key)!=template_hash:
-	cache.clear()
-	cache[template_hash_cache_key]=template_hash
+	ignore-template.bool_set:N=\_typstmathinput_ignore_template,
+}
+\ProcessKeysOptions{typstmathinput}
+""")
+cache_location=T._typstmathinput_cache_location.value().expand_estr()
+ignore_template=T._typstmathinput_ignore_template.e3bool()
+
+
+template_hash: Optional[bytes]=None
+cache: Optional[shelve.Shelf[str]]=None
+
+@lru_cache(maxsize=1)
+def initialize_tmpdir()->Path:
+	tmpdir=Path(tempfile.gettempdir())/".typstmathinput-tmp"
+	tmpdir.mkdir(exist_ok=True)
+	return tmpdir
+
+@lru_cache(maxsize=1)
+def initialize_template()->bytes:
+	tmpdir=initialize_tmpdir()
+	template_file=Path(__file__).parent/"typstmathinput-template.typ"
+	shutil.copy(template_file, tmpdir)
+	template_hash=hashlib.sha256((tmpdir/template_file.name).read_bytes()).digest()
+	return template_hash
+
+@lru_cache(maxsize=1)
+def initialize_cache()->shelve.Shelf[str]:
+	global cache_location
+	if not cache_location:
+		tmpdir=initialize_tmpdir()
+		cache_location=str(tmpdir/"cache")
+	cache=shelve.open(cache_location)
+	if not ignore_template:
+		template_hash_cache_key="_template_hash_"
+		template_hash=initialize_template()
+		if cache.get(template_hash_cache_key)!=template_hash:
+			cache.clear()
+			cache[template_hash_cache_key]=template_hash
+	return cache
 
 
 @dataclass(frozen=True)
@@ -34,6 +69,8 @@ class Input:
 
 def typst_formulas_to_tex(l: list[str], extra_preamble: str)->list[str]:
 	# no caching, preamble must be the same
+	initialize_template()
+	tmpdir=initialize_tmpdir()
 	delimiter = "XXXtypstmathinput-delimiterXXX"
 	with tempfile.NamedTemporaryFile(dir=tmpdir, prefix="", suffix=".typ", delete=False, mode="w") as f:
 		n=Path(f.name)
@@ -59,8 +96,8 @@ r"""
 	try:
 		process=subprocess.run(["typst", "compile", n, n.with_suffix(".pdf")], cwd=tmpdir, stderr=subprocess.PIPE)
 		if process.returncode!=0:
-			try: errortext=process.stderr.decode('u8')
-			except UnicodeDecodeError: errorcontext=repr(process.stderr)
+			try: errortext="\n"+process.stderr.decode('u8')
+			except UnicodeDecodeError: errortext="\n"+repr(process.stderr)
 			invalid_formula_error(errortext)
 	finally: n.unlink(missing_ok=True)
 
@@ -91,6 +128,7 @@ def process_pending_formulas()->None:
 	for k, g_ in itertools.groupby(sorted(pending_formulas, key=key), key=key):
 		g=list(g_)
 		result=typst_formulas_to_tex([x.s for x in g], k)
+		cache=initialize_cache()
 		for f, r in zip(pending_formulas, result):
 			cache[f.hash()]=r
 
@@ -103,7 +141,7 @@ def handle_formula(engine: "Engine")->None:
 		s: str=BalancedTokenList([
 				(Catcode.space(' ') if t==T.par else t)
 				for t in BalancedTokenList.get_until(delimiter, remove_braces=False)
-				]).detokenize()
+				]).simple_detokenize(simple.default_get_catcode)
 
 	# preprocess it before passing to Typst
 	superscript: Dict[str, Union[str, int, None]] = dict(zip("⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼", "0123456789+-="))
@@ -115,6 +153,7 @@ def handle_formula(engine: "Engine")->None:
 
 	input_=Input(s, var["typstmathinputextrapreamble"])
 	input_hash=input_.hash()
+	cache=initialize_cache()
 	tmp=cache.get(input_hash)
 	if tmp is not None:
 		execute(tmp+"%")
@@ -144,6 +183,7 @@ def typstmathinputenable()->None:
 	check_valid_delimiter(s)
 	if s in enabled:
 		raise RuntimeError(f"'{s}' is already enabled!")
+	enabled.add(s)
 
 	if s=="$" or default_engine.is_unicode:
 		if s=="$" and catcode[s]!=Catcode.math_toggle:
@@ -165,6 +205,7 @@ def typstmathinputdisable()->None:
 	check_valid_delimiter(s)
 	if s not in enabled:
 		raise RuntimeError(f"'{s}' is already disabled!")
+	enabled.remove(s)
 
 	if s=="$":
 		catcode["$"]=Catcode.math_toggle
@@ -184,5 +225,9 @@ def typstmathinputnormcat()->None:
 	"""
 	catcode["|"]=catcode['"']=Catcode.other
 
+T.typstmathinputtext.assign_equal(T.text)
+r"""
+Alias ``\text{...}`` → ``\typstmathinputtext{...}``. User can redefine this function to customize the behavior.
+"""
 
 execute(r'\AtBeginDocument{\typstmathinputenable{◇}}')

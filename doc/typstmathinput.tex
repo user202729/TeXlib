@@ -1,4 +1,4 @@
-%! TEX program = pdflatex
+%! TEX program = lualatex
 \ProvidesFile{typstmathinput.tex}[2023/03/28 0.0.0 Typst-style math input format]
 \RequirePackage{fvextra}
 \documentclass{l3doc}
@@ -15,7 +15,7 @@
 \usepackage{unicode-math}
 %\WarningFilter{latex}{Marginpar on page}
 \begin{document}
-\typstmathinputenable
+\typstmathinputenable{$}
 \GetFileInfo{\jobname.tex}
 
 \title{\pkg{\jobname} --- \fileinfo
@@ -117,11 +117,23 @@ These macros can be used to enable or disable the special handling of the |$...$
 \begin{demo}
 With Typst-input-math:
 $P => sin theta + cos phi = tan tau$
-\typstmathinputdisable
+\typstmathinputdisable{$}
 
 Without Typst-input-math:
 $P \implies \sin \theta + \cos \phi = \tan \tau$
 \end{demo}
+
+\DescribeMacro{\typstmathinputtext}
+By default, it's an alias for \pkg{amsmath}'s |\text| command. You can redefine it
+to customize the behavior.
+
+\begin{demo}
+Normal behavior: $"hello world"$
+
+\renewcommand\typstmathinputtext[1]{\textcolor{red}{\text{#1}}}
+Redefined: $"hello world"$
+\end{demo}
+
 
 %\DescribeMacro{typstmathinput.parse()}
 %This Lua function can be used to parse a Typst-style input to give TeX-style input.
