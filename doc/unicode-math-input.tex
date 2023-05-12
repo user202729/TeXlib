@@ -13,6 +13,8 @@
 \setmonofont{DejaVu Sans Mono}[Scale=0.8]
 \usepackage[bold-style=ISO]{unicode-math}
 \tracinglostchars=3
+\newcommand\csref[1]{\texttt{\hyperref[doc/function//#1]{\textbackslash #1}}}
+\newcommand\varref[1]{\texttt{\hyperref[doc/function//#1]{#1}}}
 \begin{document}
 \hfuzz=1pt
 \GetFileInfo{\jobname.tex}
@@ -103,7 +105,7 @@ We need to get the following things correct:
 		
 		We handle |\big \Big \bigg \Bigg| and the |\bigl|, |\bigr| variants etc.
 
-		Pass the option \hyperref[doc/function//ignore-patch-delimiter-commands]{|ignore-patch-delimiter-commands|} to disable the behavior in case of package clash.
+		Pass the option \varref{ignore-patch-delimiter-commands} to disable the behavior in case of package clash.
 
 	\item in \pkg{unicode-math}, |a`| renders as |a^{\backprime}| i.e. $a^{\backprime}$.
 		We will not modify the default behavior i.e. $a\text{`}$ in this package.
@@ -117,7 +119,7 @@ We need to get the following things correct:
 	\item |$2³⁴$| (consecutive Unicode characters for superscript/subscript, refer to \url{https://tex.stackexchange.com/q/344160/250119}.) Also need to handle |'| similarly.
 
 	\item This packages does modify the default definition of |'| to allow |G'²| to work however.
-		Pass the option \hyperref[doc/function//ignore-patch-prime]{|ignore-patch-prime|} to disable the behavior in case of package clash.
+		Pass the option \varref{ignore-patch-prime} to disable the behavior in case of package clash.
 
 	\item The original implementation of |'| is somewhat interesting that it allows sequences such as |G'^\bgroup 123\egroup| to work,
 		we will not emulate it here.
@@ -225,7 +227,7 @@ Because by default the \pkg{unicode-math} package will already allow entering Un
 	For example you can |\renewcommand\umiMathbf[1]{\mathbf{#1}}| which is the default behavior.
 
 	More usefully, you may want to |\renewcommand\umiMathbf{\bm}| to make entered characters such as
-	$𝐚$ appear bold italic in the output (which is |unicode-math| behavior
+	$𝐚$ appear bold italic in the output, remember to load package \pkg{bm} if you want to do so (which is |unicode-math| behavior
 	with |[bold-style=ISO]| package option).
 \end{function}
 
@@ -233,9 +235,11 @@ Because by default the \pkg{unicode-math} package will already allow entering Un
 	\begin{syntax}
 		|\umiFrac {1} {2}|
 	\end{syntax}
-	Not to be used directly, but you can redefine it such as |\renewcommand\umiFrac[2]{\tfrac{#1}{#2}}|
-	(or shorter, |\let\umiFrac\tfrac|)
+	Not to be used directly, but you can redefine it such as 
+	|\let\umiFrac\tfrac| (or more clearly, |\renewcommand\umiFrac[2]{\tfrac{#1}{#2}}|)
 	to customize the appearance of Unicode characters like |½|.
+
+	If you want to customize the appearance of individual symbols, consider using \csref{umiDefineMathChar}.
 \end{function}
 
 \begin{function}{\umiDefineMathChar}
@@ -245,6 +249,9 @@ Because by default the \pkg{unicode-math} package will already allow entering Un
 	Does what it says.
 
 	Note that the Unicode character must be braced.
+
+	(You may choose to call \csref{umiPatchCmdUnicodeArg}| \umiDefineMathChar|
+	beforehand so bracing is not necessary, but this is not really recommended)
 
 	This might or might not destroy the existing text-mode definition. For now,
 	one way to preserve it is |\umiDefineMathChar {²} {\TextOrMath{\texttwosuperior}{^2}}|.
@@ -273,13 +280,17 @@ Because by default the \pkg{unicode-math} package will already allow entering Un
 	As mentioned before, in Lua\LaTeX\ once a command is redefined, the Unicode character does not automatically update.
 
 	This command will check all the normal delimiter Unicode characters. In PDF\LaTeX\ this command does nothing.
+
+	Another way is to use \csref{umiDefineMathDelimiter} to manually refresh individual Unicode characters,
+	this is also useful if you define an Unicode character that is not "normally" a delimiter.
 \end{function}
 
 \begin{variable}{ignore-refresh-delimiter-list}
 	Package option.
 
-	The command above will be run |\AtBeginDocument|. Pass this to disable it running.
-	Only needed if there's some package clash.
+	\csref{umiRefreshDelimiterList} will be run |\AtBeginDocument|. Pass this to disable it running.
+
+	Only needed if there's some package clash or if there's spurious warning on "not determined to be a delimiter" etc.
 \end{variable}
 
 \begin{function}{\umiPatchCmdUnicodeArg,\umiUnpatchCmdUnicodeArg}
