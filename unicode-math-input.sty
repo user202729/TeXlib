@@ -21,8 +21,6 @@
 }
 \ProcessKeysOptions{unicode-math-input}
 
-\errorcontextlines=10
-
 \cs_new_protected:Npn \umiMathbf    {\__umi_check_math_alphabet \mathbf     \umiMathbf     }
 \cs_new_protected:Npn \umiMathit    {\__umi_check_math_alphabet \mathit     \umiMathit     }
 \cs_new_protected:Npn \umiMathbfit  {\__umi_check_math_alphabet \bm         \umiMathbfit   }
@@ -177,7 +175,7 @@
 				%\typeout{setting delcode #1 to \int_to_hex:n {\int_mod:nn {\str_range:Vnn \g_tmpb_str {12} {-1}} {"1000000}} }
 				\global\delcode `#1 = \int_mod:nn {\str_range:Vnn \g_tmpb_str {12} {-1}} {"1000000} \relax
 			} {
-				\typeout{>> |\g_tmpb_str|}
+				%\typeout{>> |\g_tmpb_str|}
 				\__umi_check_delimiter_defined_not_delimiter #1 #2
 			}
 		}
