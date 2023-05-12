@@ -1,5 +1,5 @@
 %! TEX program = lualatex
-\ProvidesFile{unicode-math-input.tex} [2023/05/10 v0.0.0 ]
+\ProvidesFile{unicode-math-input.tex} [2023/05/12 v0.0.0 ]
 \RequirePackage{fvextra}
 \documentclass{l3doc}
 \usepackage[svgnames]{xcolor}
@@ -198,10 +198,11 @@ changed.
 \end{quote}
 
 This feature is currently unimplemented.
+
+\item At the moment, following a Unicode superscript character, double superscript will not be defined --
+	that is, |G²^3^4| will just display as |G^{234}| --
+	while this is fixable, we don't see much point in detecting this error.
 \end{itemize}
-
-
-
 
 \section{Usage}
 

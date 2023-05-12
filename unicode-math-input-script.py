@@ -1,6 +1,6 @@
 #!/bin/python3
-# this file is not used while TeX is running. It's for generating unicode-math-input-table.tex file only.
-# this requires pythonimmediate (not sure which version is compatible but commit e48bf6c4a999c4c6467cef7d00894cdf2cb7faf0 is)
+# This file is not used while TeX is running. It's for generating unicode-math-input-table.tex file only.
+# This requires pythonimmediate (not sure which version is compatible but commit 63f94476a5cb11e33db1215a9bf7c17657d9773d on Python 3.10.10 is)
 
 from __future__ import annotations
 
@@ -556,14 +556,14 @@ def is_okay(csname: str)->bool:
 	return False
 #
 # print bad ones
-for unicode_char, csnames in unicode_math_table.items():
-	if ord(unicode_char) >= 0x80 and all( not is_okay(csname) for csname in csnames ):
-		print(unicode_char, csnames)
+for unicode_char, csnames_ in unicode_math_table.items():
+	if ord(unicode_char) >= 0x80 and all( not is_okay(csname) for csname in csnames_ ):
+		print(unicode_char, csnames_)
 
 
 # print okay ones
-for unicode_char, csnames in unicode_math_table.items():
-	valid_csnames = [ csname for csname in csnames if T[csname].meaning_str()!="undefined" ]
+for unicode_char, csnames_ in unicode_math_table.items():
+	valid_csnames = [ csname for csname in csnames_ if T[csname].meaning_str()!="undefined" ]
 	if ord(unicode_char) >= 0x80 and valid_csnames:
 		print(unicode_char, valid_csnames)
 
