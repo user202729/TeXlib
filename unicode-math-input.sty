@@ -1,0 +1,691 @@
+\RequirePackage{expl3}
+\RequirePackage{iftex}
+\ProvidesExplPackage{unicode-math-input}{2023-05-10}{0.0.0}{Allow entering Unicode symbols in math formulas}
+
+\makeatletter
+\AtBeginDocument{
+	\@ifpackageloaded{unicode-math}{
+		\msg_new:nnn {unicode-math-input} {unicode-math-clash} {
+			You~don't~need~this~package~if~you~use~unicode-math~package!
+		}
+		\msg_error:nn {unicode-math-input} {unicode-math-clash}
+	}{}
+}
+\makeatother
+
+\RequirePackage{l3keys2e}
+\keys_define:nn{unicode-math-input}{
+	ignore-refresh-delimiter-list   .bool_set:N=\__umi_ignore_refresh_delimiter_list,
+	ignore-patch-delimiter-commands .bool_set:N=\__umi_ignore_patch_delimiter_commands,
+	ignore-patch-prime              .bool_set:N=\__umi_ignore_patch_prime,
+}
+\ProcessKeysOptions{unicode-math-input}
+
+\errorcontextlines=10
+
+\cs_new_protected:Npn \umiMathbf    {\__umi_check_math_alphabet \mathbf     \umiMathbf     }
+\cs_new_protected:Npn \umiMathit    {\__umi_check_math_alphabet \mathit     \umiMathit     }
+\cs_new_protected:Npn \umiMathbfit  {\__umi_check_math_alphabet \bm         \umiMathbfit   }
+\cs_new_protected:Npn \umiMathscr   {\__umi_check_math_alphabet \mathscr    \umiMathscr    }
+\cs_new_protected:Npn \umiMathbfscr {\__umi_check_math_alphabet \mathbfscr  \umiMathbfscr  }
+\cs_new_protected:Npn \umiMathfrak  {\__umi_check_math_alphabet \mathfrak   \umiMathfrak   }
+\cs_new_protected:Npn \umiMathbb    {\__umi_check_math_alphabet \mathbb     \umiMathbb     }
+\cs_new_protected:Npn \umiMathbbit  {\__umi_check_math_alphabet \mathbbit   \umiMathbbit   }
+\cs_new_protected:Npn \umiMathbffrak{\__umi_check_math_alphabet \mathbffrak \umiMathbffrak }
+\cs_new_protected:Npn \umiMathsf    {\__umi_check_math_alphabet \mathsf     \umiMathsf     }
+\cs_new_protected:Npn \umiMathsfbf  {\__umi_check_math_alphabet \mathsfbf   \umiMathsfbf   }
+\cs_new_protected:Npn \umiMathsfit  {\__umi_check_math_alphabet \mathsfit   \umiMathsfit   }
+\cs_new_protected:Npn \umiMathsfbfit{\__umi_check_math_alphabet \mathsfbfit \umiMathsfbfit }
+\cs_new_protected:Npn \umiMathtt    {\__umi_check_math_alphabet \mathtt     \umiMathtt     }
+
+\msg_new:nnn {unicode-math-input} {define-math-alphabet} {
+	Please~load~a~package~that~defines~#1,~or~manually~define~#2.
+}
+\cs_new_protected:Npn \__umi_check_math_alphabet#1#2{
+	\ifdefined#1
+		\expandafter#1
+	\else
+		\msg_error:nnnn {unicode-math-input} {define-math-alphabet} #1 #2
+	\fi
+}
+
+\msg_new:nnn {unicode-math-input} {internal-error} {
+	Internal~error!
+}
+\cs_new_protected:Npn \__umi_internal_error {
+	\msg_error:nn {unicode-math-input} {internal-error}
+}
+
+\msg_new:nnn {unicode-math-input} {undefined-cs} {
+	Please~load~a~package~that~defines~any~of~#1~to~use~this~Unicode~symbol.
+}
+% take 2 control sequences, return the first one that is defined. They must not peek ahead
+\cs_new_protected:Npn \__umi_alternatives #1 #2 {
+	\ifdefined #1
+		#1
+	\else
+		\ifdefined #2
+			#2
+		\else
+			\msg_error:nnn {unicode-math-input} {undefined-cs} {#1#2}
+		\fi
+	\fi
+}
+
+% #1 is control sequence, #2 is anything (must not peek ahead!)
+\cs_new_protected:Npn \__umi_alternatives_iisafe #1 #2 {
+	\ifdefined #1
+		\expandafter#1
+	\else
+		#2
+	\fi
+}
+
+% e.g. '\__umi_alternatives_not \nexists \exists' → \nexists or \not\exists
+% both must be control sequences
+\cs_new_protected:Npn \__umi_alternatives_not #1 #2 {
+	\ifdefined #1
+		#1
+	\else
+		\ifdefined #2
+			\not#2
+		\else
+			\msg_error:nnn {unicode-math-input} {undefined-cs} {#1#2}
+		\fi
+	\fi
+}
+
+% ======== \__umi_require_math
+\msg_new:nnn {unicode-math-input} {not-math-mode} {
+	This~symbol~can~only~be~used~in~math~mode!
+}
+\cs_new_protected:Npn \__umi_require_math {
+	\ifmmode\else \msg_error:nn {unicode-math-input} {not-math-mode} \fi
+}
+
+% ======== \__umi_define_char
+
+\cs_new_protected:Npn \__umi_define_char_single #1 #2{  % this function is \__umi_define_char if simply redefining the character and setting the mathcode to "8000 suffices
+	\ifnum \str_count:n{#1}=1
+	\else
+		\__umi_internal_error
+	\fi
+	\int_case:nnF{\catcode `#1}{
+		{11}{}  % letter
+		{12}{}  % other
+		{13}{}  % active
+	}{
+		\__umi_internal_error  % otherwise the character won't be active in math mode...
+	}
+
+	\global\mathcode `#1="8000~
+	\expandafter \expandafter \expandafter \cs_gset_protected:Npn \char_generate:nn {`#1}{13} {
+		#2
+	}
+}
+
+\ifTUTeX
+	\cs_new_eq:NN \__umi_if_engine_unicode \use_i:nn
+\else
+	\cs_new_eq:NN \__umi_if_engine_unicode \use_ii:nn
+\fi
+
+\__umi_if_engine_unicode {
+	\cs_new_eq:NN \__umi_define_char \__umi_define_char_single
+
+	% as documented in the documentation, for Unicode engines we need to handle the delimiters specially.
+	\cs_new_protected:Npn \__umi_define_char_maybe_delimiter #1 #2 {
+		\ifnum \tl_count:n {#2}=1 \else \__umi_internal_error \fi
+		\tl_if_head_is_N_type:nF {#2} {\__umi_internal_error}
+
+		\__umi_define_char #1 #2
+		\tl_build_put_right:Nn \__umi_delimiter_list {\__umi_check_delimiter #1 #2}
+	}
+
+	\msg_new:nnn {unicode-math-input} {not-delimiter} {
+		The~Unicode~character~#1~is~mapped~to~#2,~but~the~latter~is~not~determined~to~be~a~delimiter.
+	}
+
+	\cs_generate_variant:Nn \str_if_eq:nnTF {x}
+	\cs_generate_variant:Nn \str_range:nnn {V}
+	\cs_generate_variant:Nn \cs_replacement_spec:N {c}
+
+	% e.g. \__umi_check_delimiter_aux ⟨ \langle
+	% #2 must be a single token
+	% on successful, just set (globally)
+	% on unsuccessful (if #2 is undefined) call \__umi_check_delimiter_undefined #1 #2
+	% on unsuccessful (if #2 is defined but not a delimiter) call \__umi_check_delimiter_defined_not_delimiter #1 #2
+	% caller of this function should set these 2 functions in advance
+	\cs_new_protected:Npn \__umi_check_delimiter_aux #1 #2 {
+		\begingroup
+		\escapechar=`\/~
+
+		\str_gset:Nx \g_tmpb_str {\cs_replacement_spec:N #2}
+
+		% some introspection is needed to determine what it is...
+		% e.g. 'macro:->/protect /langle ' → 'macro:->/delimiter "426830A ' (for old LaTeX versions)
+		\str_if_eq:VnT \g_tmpb_str {/protect~#2~} {
+			\str_gset:Nx \g_tmpb_str {\cs_replacement_spec:c {\cs_to_str:N #2 ~}}
+		}
+		\endgroup
+
+		\str_if_eq:VnTF \g_tmpb_str {/scan_stop:~} {
+			\__umi_check_delimiter_undefined #1 #2
+		} {
+			% e.g. '/delimiter "426830A '
+			\str_if_eq:xnTF {\str_range:Vnn \g_tmpb_str {1} {11}} {/delimiter~} {
+				%\typeout{setting delcode #1 to \int_to_hex:n {\int_mod:nn {\str_range:Vnn \g_tmpb_str {12} {-1}} {"1000000}} }
+				\global\delcode `#1 = \int_mod:nn {\str_range:Vnn \g_tmpb_str {12} {-1}} {"1000000} \relax
+			} {
+				\typeout{>> |\g_tmpb_str|}
+				\__umi_check_delimiter_defined_not_delimiter #1 #2
+			}
+		}
+	}
+
+
+	\cs_new_eq:NN \umiDefineMathChar \__umi_define_char_single
+	\cs_new_protected:Npn \umiDefineMathDelimiter #1 #2 {
+		\cs_new_protected:Npn \__umi_check_delimiter_defined_not_delimiter ##1 ##2 {
+			\msg_error:nnnn {unicode-math-input} {not-delimiter} {##1} {##2}
+		}
+		\cs_new_eq:NN \__umi_check_delimiter_undefined \__umi_check_delimiter_defined_not_delimiter
+		\ifnum \str_count:n{#1}=1 \else \__umi_internal_error \fi
+		\ifnum \tl_count:n {#2}=1 \else \__umi_internal_error \fi
+		\tl_if_head_is_N_type:nF {#2} {\__umi_internal_error}
+		\__umi_define_char #1 #2
+		\__umi_check_delimiter_aux #1 #2
+	}
+
+} {
+	\cs_new:Npn \__umi_take_IeC \IeC #1 \__umi_delimiter { \unexpanded{#1} }
+
+	\cs_new_protected:Npn \__umi_define_char #1 #2{
+		\ifnum \str_count:n{#1}=1
+			\__umi_define_char_single #1 {#2}
+		\else
+			\str_set:Nx \l_tmpa_str{u8:\detokenize{#1}}
+			\ifcsname \l_tmpa_str\endcsname
+				% the character is already defined, check if it's LaTeX default definition
+				\begingroup
+				\escapechar=-1~
+				\str_gset:Nx \g_tmpb_str { \expandafter\meaning\csname \l_tmpa_str\endcsname }
+				\str_gset:Nx \g_tmpb_str { \str_range:Nnn \g_tmpb_str {1} {12} }
+				\endgroup
+				\str_if_eq:VnTF \g_tmpb_str {macro:->IeC~} {
+					% it probably is, tack on the math definition
+					\cs_gset_protected:cpx {\l_tmpa_str} {
+						\noexpand\mode_if_math:TF {
+							\unexpanded{#2}
+						} {
+							\expandafter\expandafter\expandafter \__umi_take_IeC  \csname \l_tmpa_str\endcsname \__umi_delimiter
+						}
+					}  % this is already protected, no need protected@empty
+
+					% in summary if the existing definition is 
+					%   \u8:×:
+					%   macro:->\IeC {\texttimes }
+					% then the new definition is
+					%   \protected macro:->\mode_if_math:TF {\times} {\texttimes}
+					% as expected.
+					% we use \mode_if_math:TF just in case the thing inside peeks ahead.
+				} {
+					% ... cannot redefine...?
+					\__umi_internal_error
+				}
+			\else
+				% the character is not defined, just redefine it
+				\cs_gset_protected:cpn {\l_tmpa_str} {\__umi_require_math #2}
+			\fi
+		\fi
+	}
+
+	\cs_new_eq:NN \__umi_define_char_maybe_delimiter \__umi_define_char
+
+	\cs_new_protected:Npn \umiDefineMathChar #1 #2{
+		\ifnum \str_count:n{#1}=1
+			\__umi_define_char_single #1 {#2}
+		\else
+			\cs_gset_protected:cpn {u8:\detokenize{#1}} {\__umi_require_math #2}
+		\fi
+	}
+	\cs_new_eq:NN \umiDefineMathDelimiter \umiDefineMathChar
+}
+
+\__umi_if_engine_unicode {
+	\tl_build_begin:N \__umi_delimiter_list
+} {}
+\input unicode-math-input-table.tex
+\__umi_if_engine_unicode {
+	\tl_build_end:N \__umi_delimiter_list
+	\cs_new_protected:Npn \umiRefreshDelimiterList{
+		\cs_new_eq:NN \__umi_check_delimiter_undefined \use_none:nn
+		\cs_new_protected:Npn \__umi_check_delimiter_defined_not_delimiter ##1 ##2 {
+			\msg_warning:nnnn {unicode-math-input} {not-delimiter} {##1} {##2}
+		}
+		\cs_new_eq:NN \__umi_check_delimiter \__umi_check_delimiter_aux
+		\__umi_delimiter_list
+	}
+	\bool_if:NF\__umi_ignore_refresh_delimiter_list{
+		\AtBeginDocument{\umiRefreshDelimiterList}
+	}
+} {
+	\cs_new_eq:NN \umiRefreshDelimiterList \relax
+}
+
+\cs_new_eq:NN \__umi_special_handle \__umi_define_char
+
+\cs_new_eq:NN \umiFrac \frac
+
+% ======== after the superscript collection, \umiPrime\umiPrime... should be replaced with \dprime etc. smartly
+\cs_new_protected:Npn \umiPrime{ \__umi_prime }  % indirection layer for fast meaning-equality checking
+\cs_new_eq:NN \umiPrimeNormalDefinition \umiPrime
+\cs_new_protected:Npn \__umi_prime {
+	\peek_meaning_collect_inline:Nn \umiPrime {
+		% note that ##1 misses one \prime as expands to this current function
+		\int_case:nnF { \tl_count:n {##1} } {
+			1 {\__umi_alternatives_iisafe \dprime {\prime\prime}}
+			2 {\__umi_alternatives_iisafe \trprime{\prime\prime\prime}}
+			3 {\__umi_alternatives_iisafe \qprime {\prime\prime\prime\prime}}
+		} {
+			% complicated way to repeat '\prime' <count #1> times
+			\cs_gset_eq:NN \umiPrime \prime
+			\prime ##1
+			\cs_gset_eq:NN \umiPrime \umiPrimeNormalDefinition
+		}
+	}
+}
+
+% similar for backprime
+\cs_new_protected:Npn \umiBackprime{ \__umi_backprime }
+\cs_new_eq:NN \umiBackprimeNormalDefinition \umiBackprime
+\cs_new_protected:Npn \__umi_backprime {
+	\peek_meaning_collect_inline:Nn \umiBackprime {
+		\int_case:nnF { \tl_count:n {##1} } {
+			1 {\__umi_alternatives_iisafe \backdprime {\backprime\backprime}}
+			2 {\__umi_alternatives_iisafe \backtrprime {\backprime\backprime\backprime}}
+		} {
+			\cs_gset_eq:NN \umiBackprime \backprime
+			\backprime ##1
+			\cs_gset_eq:NN \umiBackprime \umiBackprimeNormalDefinition
+		}
+	}
+}
+
+\__umi_special_handle{ı}{\imath}
+\__umi_special_handle{ȷ}{\jmath}
+
+\__umi_special_handle{↉}{\umiFrac{0}{3} }
+\__umi_special_handle{⅒}{\umiFrac{1}{10}}
+\__umi_special_handle{⅑}{\umiFrac{1}{9} }
+\__umi_special_handle{⅛}{\umiFrac{1}{8} }
+\__umi_special_handle{⅐}{\umiFrac{1}{7} }
+\__umi_special_handle{⅙}{\umiFrac{1}{6} }
+\__umi_special_handle{⅕}{\umiFrac{1}{5} }
+\__umi_special_handle{¼}{\umiFrac{1}{4} }
+\__umi_special_handle{⅓}{\umiFrac{1}{3} }
+\__umi_special_handle{⅜}{\umiFrac{3}{8} }
+\__umi_special_handle{⅖}{\umiFrac{2}{5} }
+\__umi_special_handle{½}{\umiFrac{1}{2} }
+\__umi_special_handle{⅗}{\umiFrac{3}{5} }
+\__umi_special_handle{⅝}{\umiFrac{5}{8} }
+\__umi_special_handle{⅔}{\umiFrac{2}{3} }
+\__umi_special_handle{¾}{\umiFrac{3}{4} }
+\__umi_special_handle{⅘}{\umiFrac{4}{5} }
+\__umi_special_handle{⅚}{\umiFrac{5}{6} }
+\__umi_special_handle{⅞}{\umiFrac{7}{8} }
+\__umi_special_handle{√}{\sqrt}
+\__umi_special_handle{∛}{\sqrt[3]}
+\__umi_special_handle{∜}{\sqrt[4]}
+
+
+% ======== the following routine handles both superscript and subscript collection.
+
+% like this:
+% \__umi_superscript {12} ≡ ^{12}
+% \__umi_superscript {12}^{34} ≡ ^{1234}
+% \__umi_superscript {12}^{34}^{56} ≡ ^{123456}  (unintended but okay no problem)
+% \__umi_superscript {12}' ≡ ^{12\prime}         (something like this)
+% \__umi_superscript {12} \__umi_superscript {34} ≡ ^{1234}
+% \__umi_superscript {12} \__umi_superscript {34} ^{56} ≡ ^{123456}
+% we will not deal with ^\bgroup...\egroup
+
+\cs_new_protected:Npn \__umi_superscript {
+	\cs_gset_eq:NN \__umi_superscript ^
+	\cs_gset_eq:NN \__umi_script_cat ^
+	\cs_gset:Npn \__umi_script_collect_done {\cs_gset_eq:NN \__umi_superscript \__umi_superscript_normal}
+	\__umi_script
+}
+\cs_new_protected:Npn \__umi_subscript {
+	\cs_gset_eq:NN \__umi_subscript \sb
+	\cs_gset_eq:NN \__umi_script_cat \sb
+	\cs_gset:Npn \__umi_script_collect_done {\cs_gset_eq:NN \__umi_subscript \__umi_subscript_normal}
+	\__umi_script
+}
+\cs_new_eq:NN \__umi_superscript_normal \__umi_superscript
+\cs_new_eq:NN \__umi_subscript_normal \__umi_subscript
+
+% in order to use the function below the caller should (do as what \__umi_superscript does above...)
+
+\cs_new_protected:Npn \__umi_script #1 {
+	% * store the argument
+	\tl_set:Nn \l_tmpa_tl {#1}
+	% * f-expand following stuff exclude the \__umi_*script token itself which has been set to ^ or _
+	% by the code above
+	\expandafter \__umi_continue_script_aux \exp:w\exp_end_continue_f:w
+}
+
+\cs_new_protected:Npn \__umi_continue_script_aux {
+	\peek_catcode_remove:NTF \__umi_script_cat {
+		% * in this case following is either \__umi_script token or ^{something} as usual, we handle both the same way
+		\__umi_continue_script_auxii
+	} {
+		% * following may be some other-catcode token
+		\peek_catcode:NTF ? {
+			\__umi_replace_other_active
+		} {
+			\__umi_script_collect_done
+			\__umi_script_cat{\l_tmpa_tl}
+		}
+	}
+}
+
+\cs_new_protected:Npn \__umi_continue_script_auxii #1 {
+	\tl_put_right:Nn \l_tmpa_tl {#1}
+	\expandafter \__umi_continue_script_aux \exp:w\exp_end_continue_f:w
+}
+
+% the active mathcode value.
+\int_const:Nn \__umi_active_mathcode {\mathcode `'}
+
+\use:x{
+	\cs_new:Npn \noexpand\__umi_gobble_the_character \detokenize{the~character~} {`}
+}
+% effectively the result will be that
+% \int_eval:n {\__umi_gobble_the_character 'the character a'} = 65
+
+\cs_new_protected:Npn \__umi_replace_other_active #1 {
+	% * if following is some other-catcode and the mathcode is active, replace it with the active token and retry
+	% (we ignore the case of letter-catcode)
+	\int_compare:nNnTF {\mathcode \expandafter \__umi_gobble_the_character \meaning #1} = {\__umi_active_mathcode} {
+		\expandafter \__umi_continue_script_aux \exp:w\exp_end_continue_f:w
+		\char_generate:nn {\expandafter \__umi_gobble_the_character \meaning #1} {13}
+	} {
+		\cs_gset_eq:NN \__umi_script \__umi_put_script_normal
+		^{\l_tmpa_tl} #1
+	}
+}
+
+% ======== patch \big etc.
+
+
+\__umi_if_engine_unicode {
+	\cs_new_eq:NN \umiPatchCmdUnicodeArg \use_none:n
+	\cs_new_eq:NN \umiPatchCmdUnicodeArgExtraGroup \use_none:n
+	\cs_new_eq:NN \umiPatchCmdUnicodeTwoArgs \use_none:n
+	\cs_new_eq:NN \umiUnpatchCmdUnicodeArg \use_none:n
+} {
+
+	% usage:
+	% \umiBraceNext {abc...} xyz... ≡ abc... xyz...
+	% \umiBraceNext {abc...} αyz... ≡ abc... {α}yz...
+	\cs_new_protected:Npn \umiBraceNext #1 {
+		\tl_set:Nn \l_tmpa_tl {#1}
+		\peek_N_type:TF {
+			\__umi_brace_next_aux
+		} {
+			\l_tmpa_tl
+		}
+	}
+
+	\cs_new_protected:Npn \__umi_brace_next_aux #1 {
+		\begingroup
+		\escapechar=`\\~  % just in case there's \⟨single byte⟩ ...
+		\int_compare:nNnTF {\str_count:n {#1}} = {1} {
+			\endgroup
+			\csname __umi_brace_handle_\string#1 \endcsname
+		} {
+			\endgroup
+			\l_tmpa_tl
+		}
+		#1
+	}
+
+	\def \__umi_brace_error             {\__umi_internal_error \l_tmpa_tl}
+	\def \__umi_brace_two   #1 #2       {\l_tmpa_tl {#1 #2}}
+	\def \__umi_brace_three #1 #2 #3    {\l_tmpa_tl {#1 #2 #3}}
+	\def \__umi_brace_four  #1 #2 #3 #4 {\l_tmpa_tl {#1 #2 #3 #4}}
+
+	\int_step_inline:nnn {"00} {"7F} {
+		\expandafter\let\csname __umi_brace_handle_ \char_generate:nn {#1} {12} \endcsname \relax
+	}
+	\int_step_inline:nnn {"80} {"BF} {
+		\expandafter\let\csname __umi_brace_handle_ \char_generate:nn {#1} {12} \endcsname \__umi_brace_error
+	}
+	\int_step_inline:nnn {"C0} {"DF} {
+		\expandafter\let\csname __umi_brace_handle_ \char_generate:nn {#1} {12} \endcsname \__umi_brace_two
+	}
+	\int_step_inline:nnn {"E0} {"EF} {
+		\expandafter\let\csname __umi_brace_handle_ \char_generate:nn {#1} {12} \endcsname \__umi_brace_three
+	}
+	\int_step_inline:nnn {"F0} {"F7} {
+		\expandafter\let\csname __umi_brace_handle_ \char_generate:nn {#1} {12} \endcsname \__umi_brace_four
+	}
+	\int_step_inline:nnn {"F8} {"FF} {
+		\expandafter\let\csname __umi_brace_handle_ \char_generate:nn {#1} {12} \endcsname \__umi_brace_error
+	}
+
+	\cs_new_protected:Npn \umiPatchCmdUnicodeArg #1 {  % #1 = \big
+		\exp_args:NNc \__umi_patch_cmd_aux #1 {umi-before-patch~\cs_to_str:N #1}
+	}
+	\cs_new_protected:Npn \__umi_patch_cmd_aux #1 #2 {  % #1 = \big, #2 = \umi-before-patch␣big
+		\cs_new_eq:NN #2 #1  % error if #2 already defined i.e. already patched
+		\cs_gset_protected:Npn #1 {\umiBraceNext #2}
+	}
+
+	% the situation for \big / \bigl is a bit complicated -- \bigl = \mathopen \big,
+	% and \mathopen expect implicit {...} right after it without any assignment
+	% while it's possible to patch the source code of \big in a more sophisticated way to keep the implicit group
+	% it's simpler to just pile on another implicit group...
+	% consequently, \Bigl etc. does not need patching
+	\cs_new_protected:Npn \umiPatchCmdUnicodeArgExtraGroup #1 {  % #1 = \big
+		\exp_args:NNc \__umi_patch_cmd_extra_group_aux #1 {umi-before-patch~\cs_to_str:N #1}
+	}
+	\cs_new_protected:Npn \__umi_patch_cmd_extra_group_aux #1 #2 {  % #1 = \big, #2 = \umi-before-patch␣big
+		\cs_new_eq:NN #2 #1  % error if #2 already defined i.e. already patched
+		\cs_gset_protected:Npn #1 {\bgroup \umiBraceNext {\__umi_patch_cmd_extra_group_auxii #2}}
+	}
+	\cs_new_protected:Npn \__umi_patch_cmd_extra_group_auxii #1 #2 { #1 {#2} \egroup }
+
+	\cs_new_protected:Npn \umiPatchCmdUnicodeTwoArgs #1 {
+		\exp_args:NNc \__umi_patch_cmd_two_aux #1 {umi-before-patch~\cs_to_str:N #1}
+	}
+	\cs_new_protected:Npn \__umi_patch_cmd_two_aux #1 #2 {  % #1 = \frac, #2 = \umi-before-patch␣frac
+		\cs_new_eq:NN #2 #1
+		\cs_gset_protected:Npn #1 {
+			\umiBraceNext {\__umi_patch_cmd_two_auxii #2}
+		}
+	}
+	\cs_new_protected:Npn \__umi_patch_cmd_two_auxii #1 #2 {  % #1 = \umi-before-patch␣frac, #2 = {α}
+		\umiBraceNext {
+			#1 {#2}
+		}
+	}
+
+	\msg_new:nnn {unicode-math-input} {unpatch-without-patch} {
+		#1 was~not~patched!
+	}
+	\cs_new_protected:Npn \umiUnpatchCmdUnicodeArg #1 {
+		\bgroup \exp_args:NNc \egroup \__umi_unpatch_cmd {umi-before-patch~\cs_to_str:N #1} #1
+	}
+	\cs_new_protected:Npn \__umi_unpatch_cmd #1 #2 {
+		\ifdefined #1 \else \msg_error:nnn {unicode-math-input} {unpatch-without-patch} {#2} \fi
+		\cs_gset_eq:NN #2 #1
+		\cs_undefine:N #1
+	}
+
+	\bool_if:NF\__umi_ignore_patch_delimiter_commands{
+		\AtBeginDocument{
+			\umiPatchCmdUnicodeArgExtraGroup \big
+			\umiPatchCmdUnicodeArgExtraGroup \Big
+			\umiPatchCmdUnicodeArgExtraGroup \bigg
+			\umiPatchCmdUnicodeArgExtraGroup \Bigg
+		}
+	}
+
+}
+
+
+% ======== definitions.
+
+\msg_new:nnn {unicode-math-input} {prime-already-patched} {
+	The~'~symbol~is~already~patched,~call~umiUnpatchPrime~first?
+}
+\msg_new:nnn {unicode-math-input} {prime-not-patched} {
+	The~'~symbol~is~not~patched,~call~umiPatchPrime~first?
+}
+
+\cs_new_protected:Npn \umiPatchPrime {
+	\ifdefined \__umi_prime_backup
+		\msg_error:nn {unicode-math-input} {prime-already-patched}
+	\else
+		\__umi_backup_prime_definition
+		\__umi_special_handle{'}{\__umi_superscript \umiPrime}
+	\fi
+}
+
+\cs_new_protected:Npn \umiUnpatchPrime {
+	\ifdefined \__umi_prime_backup
+		\__umi_restore_prime_definition
+		\cs_undefine:N \__umi_prime_backup
+	\else
+		\msg_error:nn {unicode-math-input} {prime-not-patched}
+	\fi
+}
+
+
+\cs_gset_protected:Npn \__umi_gtmp #1 {  % auxiliary to define the following commands where #1 is \cA\'
+	\cs_new_protected:Npn \__umi_backup_prime_definition {
+		\cs_gset_eq:NN \__umi_prime_backup #1
+	}
+	\cs_new_protected:Npn \__umi_restore_prime_definition {
+		\cs_gset_eq:NN #1 \__umi_prime_backup
+	}
+}
+\expandafter \expandafter \expandafter \__umi_gtmp \char_generate:nn {`'} {13}
+
+\bool_if:NF\__umi_ignore_patch_prime{
+	\AtBeginDocument{\umiPatchPrime}
+}
+
+\__umi_special_handle{′}{\__umi_superscript \umiPrime}
+\__umi_special_handle{″}{\__umi_superscript{\umiPrime\umiPrime}}
+\__umi_special_handle{‴}{\__umi_superscript{\umiPrime\umiPrime\umiPrime}}
+\__umi_special_handle{⁗}{\__umi_superscript{\umiPrime\umiPrime\umiPrime\umiPrime}}
+\__umi_special_handle{‵}{\__umi_superscript \umiBackprime}
+\__umi_special_handle{‶}{\__umi_superscript{\umiBackprime\umiBackprime}}
+\__umi_special_handle{‷}{\__umi_superscript{\umiBackprime\umiBackprime\umiBackprime}}
+
+\__umi_special_handle{⁰}{\__umi_superscript 0}
+\__umi_special_handle{¹}{\__umi_superscript 1}
+\__umi_special_handle{²}{\__umi_superscript 2}
+\__umi_special_handle{³}{\__umi_superscript 3}
+\__umi_special_handle{⁴}{\__umi_superscript 4}
+\__umi_special_handle{⁵}{\__umi_superscript 5}
+\__umi_special_handle{⁶}{\__umi_superscript 6}
+\__umi_special_handle{⁷}{\__umi_superscript 7}
+\__umi_special_handle{⁸}{\__umi_superscript 8}
+\__umi_special_handle{⁹}{\__umi_superscript 9}
+\__umi_special_handle{⁺}{\__umi_superscript +}
+\__umi_special_handle{⁻}{\__umi_superscript -}
+\__umi_special_handle{⁼}{\__umi_superscript =}
+\__umi_special_handle{⁽}{\__umi_superscript (}
+\__umi_special_handle{⁾}{\__umi_superscript )}
+\__umi_special_handle{ᴬ}{\__umi_superscript A}
+\__umi_special_handle{ᴮ}{\__umi_superscript B}
+\__umi_special_handle{ᴰ}{\__umi_superscript D}
+\__umi_special_handle{ᴱ}{\__umi_superscript E}
+\__umi_special_handle{ᴳ}{\__umi_superscript G}
+\__umi_special_handle{ᴴ}{\__umi_superscript H}
+\__umi_special_handle{ᴵ}{\__umi_superscript I}
+\__umi_special_handle{ᴶ}{\__umi_superscript J}
+\__umi_special_handle{ᴷ}{\__umi_superscript K}
+\__umi_special_handle{ᴸ}{\__umi_superscript L}
+\__umi_special_handle{ᴹ}{\__umi_superscript M}
+\__umi_special_handle{ᴺ}{\__umi_superscript N}
+\__umi_special_handle{ᴼ}{\__umi_superscript O}
+\__umi_special_handle{ᴾ}{\__umi_superscript P}
+\__umi_special_handle{ᴿ}{\__umi_superscript R}
+\__umi_special_handle{ᵀ}{\__umi_superscript T}
+\__umi_special_handle{ᵁ}{\__umi_superscript U}
+\__umi_special_handle{ⱽ}{\__umi_superscript V}
+\__umi_special_handle{ᵂ}{\__umi_superscript W}
+\__umi_special_handle{ᵃ}{\__umi_superscript a}
+\__umi_special_handle{ᵇ}{\__umi_superscript b}
+\__umi_special_handle{ᶜ}{\__umi_superscript c}
+\__umi_special_handle{ᵈ}{\__umi_superscript d}
+\__umi_special_handle{ᵉ}{\__umi_superscript e}
+\__umi_special_handle{ᶠ}{\__umi_superscript f}
+\__umi_special_handle{ᵍ}{\__umi_superscript g}
+\__umi_special_handle{ʰ}{\__umi_superscript h}
+\__umi_special_handle{ⁱ}{\__umi_superscript i}
+\__umi_special_handle{ʲ}{\__umi_superscript j}
+\__umi_special_handle{ᵏ}{\__umi_superscript k}
+\__umi_special_handle{ˡ}{\__umi_superscript l}
+\__umi_special_handle{ᵐ}{\__umi_superscript m}
+\__umi_special_handle{ⁿ}{\__umi_superscript n}
+\__umi_special_handle{ᵒ}{\__umi_superscript o}
+\__umi_special_handle{ᵖ}{\__umi_superscript p}
+\__umi_special_handle{ʳ}{\__umi_superscript r}
+\__umi_special_handle{ˢ}{\__umi_superscript s}
+\__umi_special_handle{ᵗ}{\__umi_superscript t}
+\__umi_special_handle{ᵘ}{\__umi_superscript u}
+\__umi_special_handle{ᵛ}{\__umi_superscript v}
+\__umi_special_handle{ʷ}{\__umi_superscript w}
+\__umi_special_handle{ˣ}{\__umi_superscript x}
+\__umi_special_handle{ʸ}{\__umi_superscript y}
+\__umi_special_handle{ᶻ}{\__umi_superscript z}
+\__umi_special_handle{ᵝ}{\__umi_superscript \beta}
+\__umi_special_handle{ᵞ}{\__umi_superscript \gamma}
+\__umi_special_handle{ᵟ}{\__umi_superscript \delta}
+\__umi_special_handle{ᵠ}{\__umi_superscript \phi}
+\__umi_special_handle{ᵡ}{\__umi_superscript \chi}
+\__umi_special_handle{ᶿ}{\__umi_superscript \theta}
+
+\__umi_special_handle{₀}{\__umi_subscript 0}
+\__umi_special_handle{₁}{\__umi_subscript 1}
+\__umi_special_handle{₂}{\__umi_subscript 2}
+\__umi_special_handle{₃}{\__umi_subscript 3}
+\__umi_special_handle{₄}{\__umi_subscript 4}
+\__umi_special_handle{₅}{\__umi_subscript 5}
+\__umi_special_handle{₆}{\__umi_subscript 6}
+\__umi_special_handle{₇}{\__umi_subscript 7}
+\__umi_special_handle{₈}{\__umi_subscript 8}
+\__umi_special_handle{₉}{\__umi_subscript 9}
+\__umi_special_handle{₊}{\__umi_subscript +}
+\__umi_special_handle{₋}{\__umi_subscript -}
+\__umi_special_handle{₌}{\__umi_subscript =}
+\__umi_special_handle{₍}{\__umi_subscript (}
+\__umi_special_handle{₎}{\__umi_subscript )}
+\__umi_special_handle{ₐ}{\__umi_subscript a}
+\__umi_special_handle{ₑ}{\__umi_subscript e}
+\__umi_special_handle{ₕ}{\__umi_subscript h}
+\__umi_special_handle{ᵢ}{\__umi_subscript i}
+\__umi_special_handle{ⱼ}{\__umi_subscript j}
+\__umi_special_handle{ₖ}{\__umi_subscript k}
+\__umi_special_handle{ₗ}{\__umi_subscript l}
+\__umi_special_handle{ₘ}{\__umi_subscript m}
+\__umi_special_handle{ₙ}{\__umi_subscript n}
+\__umi_special_handle{ₒ}{\__umi_subscript o}
+\__umi_special_handle{ₚ}{\__umi_subscript p}
+\__umi_special_handle{ᵣ}{\__umi_subscript r}
+\__umi_special_handle{ₛ}{\__umi_subscript s}
+\__umi_special_handle{ₜ}{\__umi_subscript t}
+\__umi_special_handle{ᵤ}{\__umi_subscript u}
+\__umi_special_handle{ᵥ}{\__umi_subscript v}
+\__umi_special_handle{ₓ}{\__umi_subscript x}
+\__umi_special_handle{ᵦ}{\__umi_subscript \beta}
+\__umi_special_handle{ᵧ}{\__umi_subscript \gamma}
+\__umi_special_handle{ᵨ}{\__umi_subscript \rho}
+\__umi_special_handle{ᵩ}{\__umi_subscript \phi}
+\__umi_special_handle{ᵪ}{\__umi_subscript \chi}

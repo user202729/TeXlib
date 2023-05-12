@@ -1,0 +1,46 @@
+%! TEX program = lualatex
+\documentclass{article}
+\usepackage{unicode-math}
+\usepackage{precattl}
+%\setmathfont{DejaVu Math TeX Gyre}
+%\tracinglostchars=3
+\begin{document}
+
+$a' = a′$
+
+Type with ASCII gives $a''$ and $a'''''$. $a^{\prime\prime}$ is worse than $a^{\dprime}$
+
+$a‵$ (Unicode character) is $a^{\backprime}$
+
+$a`$ is also $a^{\backprime}$ but only in unicode-math
+
+%$G'²$
+
+$\longdivision{abc}$
+
+$a√2 + ∛34$
+
+$a⏞b$
+
+%$a̅ / ̅a$
+
+$\overbar a / \Umathaccent 7 0 "305 a$
+
+$\left↑ \frac{1}{2} \right↓$
+
+$\Big↑ \frac{1}{2} \Big↓$
+
+\meaning\uparrow
+
+\meaning\langle
+
+\mathcode `⟨= "8000
+\precattlExec{\let \cA\⟨ \langle}
+\delcode `⟨=-1
+$\left⟨ 123 \right.$
+
+$\left\uparrow \frac{1}{2} \right\downarrow$
+
+\[ a = ½ + {\textstyle \frac{1}{2}} + \frac{3}{4} \]
+
+\end{document}

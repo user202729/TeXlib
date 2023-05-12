@@ -1,0 +1,149 @@
+%! TEX program = pdflatex
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{bm}
+\usepackage{hyperref}
+\usepackage{iftex}
+
+\newif\ifonehalfPredefined
+\onehalfPredefinedtrue
+\newif\iftimesPredefined
+\timesPredefinedtrue
+
+\ifTUTeX
+
+	\usepackage{fancyvrb}
+	\usepackage{fontspec}
+
+\else
+
+	\ifcsname u8:\detokenize{½}\endcsname
+	\else
+		\onehalfPredefinedfalse  % in older LaTeX versions ½ is not defined in text mode
+	\fi
+
+	\ifcsname u8:\detokenize{×}\endcsname
+	\else
+		\timesPredefinedfalse  % in older LaTeX versions ½ is not defined in text mode
+	\fi
+
+\fi
+
+\usepackage{unicode-math-input}
+
+\tracinglostchars=5
+\begin{document}
+
+
+\csname sys_if_engine_pdftex:TF\endcsname{\iftrue}{\iffalse}
+\else
+\newfontfamily{\mymono}{Liberation Mono}[NFSSFamily=LiberationMono]
+\fvset{fontfamily=LiberationMono}
+
+The $α$ and $β$ must be in mono font instead of math font below:
+\begin{Verbatim}
+1+α=β
+\end{Verbatim}
+\fi
+
+$a\overbrace{a}b$
+
+Type with ASCII gives $a''$ and $a'''''$.
+
+\ifdefined\dprime
+	$a^{\prime\prime}$ is worse than  $a^{\dprime}$
+\fi
+
+$a‵$ is $a^{\backprime}$
+
+$a`$ is not $a^{\backprime}$ without unicode-math
+
+use not:
+$\not\leftarrow, x_{\not\leftarrow}$
+$\not\exists, x_{\not\exists}$
+$\not\equiv, x_{\not\equiv}$
+$\not\cong, x_{\not\cong}$
+
+\begin{align*}
+	\alpha + \beta &= \gamma \\
+	α + β &= γ \\
+	× & ±
+\end{align*}
+
+use built-in:
+$\nleftarrow, x_{\nleftarrow}$
+$\nexists, x_{\nexists}$
+%$\nequiv, x_{\nequiv}$
+$\ncong, x_{\ncong}$
+
+use unicode characters: $∄ \quad x ≢ y \quad ⊭$
+
+$ℤ ℝ ½$
+
+\newcommand\test{123}
+\section{a \iftimesPredefined ×\fi b = \texorpdfstring{$a × b$}{a \iftimesPredefined ×\fi b} Ü \"U \test}
+
+$\left\uparrow \frac{1}{2} \right\downarrow$
+
+\expandafter\def\csname u8:↑\endcsname{\uparrow}
+\expandafter\def\csname u8:↓\endcsname{\downarrow}
+
+$\Big{↑} \frac{1}{2} \Big{↓}$
+
+\ifonehalfPredefined
+a ½ b
+\fi
+
+\[ a = ½ + {\textstyle \frac{1}{2}} + \frac{3}{4} \]
+
+$G'^{34}$
+
+\umiUnpatchPrime
+$G'^\bgroup34\egroup$
+\umiPatchPrime
+% the definition of TeX is somewhat interesting to make this correct
+% (or happens to be correct)
+
+default fraction: \[½\]
+\let\umiFrac\tfrac
+patched fraction: \[½\]
+
+%$G^2'$  % cannot work
+
+$G¹²³₄₅₆$
+
+\[\int¹²³₄₅₆ x\,dx\]
+
+\[∫¹²³₄₅₆ x\,dx\]
+
+$G²'$
+
+multiplication: \iftimesPredefined a × b\fi, $a × b$
+
+prime: $a′$, $b″$
+
+bracket: $⟨a+b⟩, \left⟨ \frac{1}{2} \right⟩ $
+
+
+\umiPatchCmdUnicodeTwoArgs \frac
+$\frac αβ$
+\umiUnpatchCmdUnicodeArg \frac
+
+Big: $\Big\langle 5 \Big\rangle$
+
+\umiUnpatchCmdUnicodeArg \Big
+
+\umiPatchCmdUnicodeArgExtraGroup \Big
+Big: $\Big\langle 5 \Big\rangle$
+
+Bigl/r: $\Bigl⟨ 5 \Bigr⟩$
+
+\umiUnpatchCmdUnicodeArg \Big
+Bigl/r: $\Bigl\langle 5 \Bigr\rangle$
+
+$√2 + √{23^{45}} + ∛{78a}$
+
+\tableofcontents
+
+\end{document}

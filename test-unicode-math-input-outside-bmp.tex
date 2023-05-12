@@ -1,0 +1,25 @@
+%! TEX program = pdflatex
+% test file for characters outside the BMP. Split into a separate file because it's difficult to test these on Overleaf.
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{bm}
+\usepackage{unicode-math-input}
+\usepackage{hyperref}
+\tracinglostchars=5
+\begin{document}
+silently break because mathbb not support: $𝟘$, $𝟙$
+
+$𝐚 𝟎$
+
+bm by default: $𝒂$
+
+\renewcommand \umiMathbf {\bm}
+bm good: $𝐚$, $𝟎$
+
+\end{document}
+
+\section{a × b = \texorpdfstring{$a × b$}{𝑎 × 𝑏} Ü \"U \test}
+
+\tableofcontents
+\end{document}

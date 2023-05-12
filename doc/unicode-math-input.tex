@@ -1,0 +1,379 @@
+%! TEX program = lualatex
+\ProvidesFile{unicode-math-input.tex} [2023/05/10 v0.0.0 ]
+\RequirePackage{fvextra}
+\documentclass{l3doc}
+\usepackage[svgnames]{xcolor}
+\EnableCrossrefs
+\CodelineIndex
+\fvset{breaklines=true,gobble=0,tabsize=4,frame=single,numbers=left,numbersep=3pt}
+\AtBeginDocument{\DeleteShortVerb\"}
+\MakeOuterQuote{"}
+\usepackage{cleveref}
+\usepackage{fontspec}
+\setmonofont{DejaVu Sans Mono}[Scale=0.8]
+\usepackage[bold-style=ISO]{unicode-math}
+\tracinglostchars=3
+\begin{document}
+\hfuzz=1pt
+\GetFileInfo{\jobname.tex}
+
+\title{\pkg{unicode-math-input} --- Allow entering Unicode symbols in math formulas\thanks{This file
+	describes version \fileversion, last revised \filedate.}
+}
+\author{user202729%
+%\thanks{E-mail: (not set)}
+}
+\date{Released \filedate}
+
+\maketitle
+
+\begin{abstract}
+Allow entering Unicode symbols in math formulas.
+\end{abstract}
+
+\section{Introduction}
+
+This package allows entering Unicode symbols in math formulas.
+
+\subsection{Existing packages}
+
+There are several existing packages, but other than |unicode-math| (which also changes the output encoding)
+they does not cover a lot of characters and/or does not handle several issues well.
+
+We compare the situation with several existing packages:
+
+\begin{itemize}
+	\item \pkg{unixode}:
+		\begin{itemize}
+			\item defines |′| to be |\prime| which is big and not usable, it should be |^{\prime}|
+				similar to |'|'s definition.
+			\item defines |–| (en dash) to be nothing, which breaks the character even in text mode.
+			\item does not define |×| or |±| (they're already valid in text mode in \LaTeX, but will be
+				silently omitted in math mode)
+			\item does not handle consecutive superscript/subscript characters.
+			\item you need to manually patch the source code a bit in order to make it work with PDF\LaTeX. And even after that it will raise lots of warnings about redefining Unicode characters.
+		\end{itemize}
+	\item \pkg{utf8x}:
+		\begin{itemize}
+			\item incompatible with lots of packages.
+			\item does not define $\bigoplus$ (|\bigoplus|)
+			\item also does not handle consecutive superscript/subscript characters.
+		\end{itemize}
+\end{itemize}
+
+See also \url{https://tex.stackexchange.com/a/628285}.
+
+\subsection{Features}
+
+\LaTeX's implementation of input encoding and font encoding is \emph{very} complicated, necessitated by the fact that non-Unicode \TeX\ engines handles each UTF-8 character as multiple tokens and enc\TeX\ extension is not enabled in \LaTeX.%
+\footnote{Refer to \url{https://tex.stackexchange.com/a/266282/250119} for a way to force-enable enc\TeX\ extension in
+\LaTeX\ if you're interested.}
+
+There's a few other issues that we don't really need to deal with, because they are in the next layer:
+
+\begin{itemize}
+	\item \href{https://tex.stackexchange.com/q/31640/250119}{What is the use of the command \texttt{\textbackslash IeC}?}
+	\item \url{https://tex.stackexchange.com/a/239575/250119}
+
+\end{itemize}
+
+We don't need to deal with |\IeC| as since \TeX\ Live 2019, the mechanism is no longer used and the Unicode character itself
+is written to auxiliary files.
+%\immediate\openout 5=a.tex
+%\makeatletter
+%\let \protect \@unexpandable@protect
+%\immediate\write 5{a á b}
+
+We need to get the following things correct:
+
+\begin{itemize}
+	\item |\left⟨|
+
+		In Lua\LaTeX\ in order to implement this we need to hard code the |\Udelcode| of the character,
+		so if |\langle| is redefined, the change will not follow.
+
+		An alternative is to overwrite the definition of |\left| built-in, but this is not used.
+
+	\item |\big⟨| (in \pkg{amsmath} package or outside)
+
+		In PDF\LaTeX\ there's an issue of argument-grabbing (|\big| etc. is a macro so they will
+		only grab the first octet of the |⟨| character), so the macro must be patched.
+
+		Furthermore, the patching is done |\AtBeginDocument| in case |amsmath| etc. is loaded after this package.
+		
+		We handle |\big \Big \bigg \Bigg| and the |\bigl|, |\bigr| variants etc.
+
+		Pass the option \hyperref[doc/function//ignore-patch-delimiter-commands]{|ignore-patch-delimiter-commands|} to disable the behavior in case of package clash.
+
+	\item in \pkg{unicode-math}, |a`| renders as |a^{\backprime}| i.e. $a^{\backprime}$.
+		We will not modify the default behavior i.e. $a\text{`}$ in this package.
+
+	\item |\section{$1 × 2$}| (for writing to auxiliary file in table of contents) -- as mentioned above,
+		since \TeX\ Live 2019 this is correct by default.
+	\item Some characters such as |×| or |½| in PDF\LaTeX\ are already
+		usable outside math mode, we try to not break the compatibility.
+	\item The symbol should work correctly when appear at the start of an alignment entry,
+		e.g., the start of an |align*| cell.
+	\item |$2³⁴$| (consecutive Unicode characters for superscript/subscript, refer to \url{https://tex.stackexchange.com/q/344160/250119}.) Also need to handle |'| similarly.
+
+	\item This packages does modify the default definition of |'| to allow |G'²| to work however.
+		Pass the option \hyperref[doc/function//ignore-patch-prime]{|ignore-patch-prime|} to disable the behavior in case of package clash.
+
+	\item The original implementation of |'| is somewhat interesting that it allows sequences such as |G'^\bgroup 123\egroup| to work,
+		we will not emulate it here.
+
+	\item Also need to handle Unicode prime symbols |′|, |″| etc.
+
+	\item To minimize errors, we make |≢| default to |\nequiv|, but fallback to |\not\equiv|
+		if the former is not available.
+
+		We should also take care of aliases -- for example, |≰| should check |\nle| and |\nleq| before fallback to |\not\le| or |\not\leq|.
+
+		Note that by default (or with \pkg{amsmath} or \pkg{amssymb}),
+		|\not| does not smartly check the following symbol,
+		however with some packages such as \pkg{unicode-math},
+		\pkg{txfonts} the |\not| does do that -- in particular, it checks for the presence of control sequences named
+		|\notXXX| and |\nXXX| where |XXX| stands for the original control sequence/character.
+
+		It would be beneficial for \pkg{amssymb}
+		to make |\not| smart, as for example |\not\exists| looks worse than |\nexists|,
+		however the package does not touch |\not|.
+
+	\item Similarly, |''| default to |^{\dprime}| if available, else fallback to |^{\prime\prime}|.
+
+	\item Whenever possible, we do not make the symbols have active catcode, only change the mathcode,
+		that way usage of the symbols in places such as |fancyvrb| environment is minimally affected. (see test files for an example)
+	\item We try to make minimum assumptions about the internal implementation details of \LaTeX\ packages; nevertheless this is not always possible.
+
+	\item Combining modifiers (such as |U+00305 COMBINING OVERLINE| in |a̅|, which corresponds to |\overbar|) are difficult to support
+		(although with whole-file scanning + \pkg{rescansync} or Lua\TeX's |process_input_buffer| callback
+		it's not impossible; an alternative is to use Lua\TeX\ callback to modify the math list
+		after it's constructed, see \url{https://github.com/wspr/unicode-math/issues/555#issuecomment-1045207378}
+		for an example),
+		plus |unicode-math| does not support them anyway,
+		so they will not be supported.
+
+		They're difficult to support because normally the modifier appear after the character that it modifies
+		but \TeX\ requires the command (e.g. |\overbar|) to appear \emph{before} the character that it modifies.
+
+		As a special case, the 4 commands |\enclosecircle| |\enclosesquare| |\enclosediamond| and |\enclosetriangle|
+		are supported (simply because the \TeX\ command can appear after the character it modifies)
+
+	\item The fraction slash |U+2044 FRACTION SLASH|, as in |1|⁄|2| rendering $\frac{1}{2}$, is also not implemented
+		because of similar difficulty as above.
+	\item Symbols such as |√| or |∛| will be equivalent to |\sqrt| command (taking an argument to draw a square root)
+		instead of |\surd| (the symbol itself), unlike \pkg{unicode-math}.
+
+		While sequences such as |⁵√{67}| may feasibly be supported without breaking too many things,
+		implementation is difficult and we don't see much use for it.
+	\item Similarly, one might expect that $⏟$ |U+23DF BOTTOM CURLY BRACKET| get mapped to |\underbrace|,
+		but the behavior of such command would be a bit unexpected (you need to
+		write $⏟$|{123}_{456}| to get $\smash{\underbrace{123}_{456}}$), so this will not be the default.
+
+	\item the Unicode character is mapped indirectly to the control sequence,
+		so that when the user/some package redefines a control sequence such as |\pi|, the
+		corresponding Unicode character (|π|) will also change. This will incur a small loss in efficiency however.
+
+		(modulo the issue with |\Udelcode| mentioned above)
+\end{itemize}
+
+There are some issues however:
+\begin{itemize}
+	\item \textsf{\rlap{0}\kern 1.2pt\relax 0} |U+1D7D8 MATHEMATICAL DOUBLE-STRUCK DIGIT ZERO|
+gets translated to |\mathbb{0}|, but this is incorrect by default
+unless the blackboard bold font happens to have such a character.
+
+(nevertheless, it's difficult to change math font in the middle of the document anyway.
+Refer to \url{https://tex.stackexchange.com/q/30049/250119}.)
+
+\item In the \pkg{unicode-math} source code there's this remark:
+
+	\begin{quote}
+	The catcode setting is to work around (strange?) behaviour in Lua\TeX\ in
+which catcode 11 characters don't have italic correction for maths. We don't adjust
+ascii chars, however, because certain punctuation should not have their catcodes
+changed.
+\end{quote}
+
+This feature is currently unimplemented.
+\end{itemize}
+
+
+
+
+\section{Usage}
+
+Simply include the package.
+
+\begin{verbatim}
+\usepackage{unicode-math-input}
+\end{verbatim}
+
+Because by default the \pkg{unicode-math} package will already allow entering Unicode symbols in math formulas, this package will raise an error if the other package is already loaded.
+
+\section{Advanced commands and options}
+
+\begin{function}{
+		\umiMathbf,\umiMathit,\umiMathbfit,\umiMathscr,\umiMathbfscr,\umiMathfrak,\umiMathbb,\umiMathbbit,\umiMathbffrak,\umiMathsf,\umiMathsfbf,\umiMathsfit,\umiMathsfbfit,\umiMathtt
+	}
+	\begin{syntax}
+		|\umiMathbf {...}|
+		|\umiMathit {...}|
+	\end{syntax}
+	These functions are not to be used directly. But you can redefine them to customized behavior of bold/italic/etc. Unicode characters.
+
+	For example you can |\renewcommand\umiMathbf[1]{\mathbf{#1}}| which is the default behavior.
+
+	More usefully, you may want to |\renewcommand\umiMathbf{\bm}| to make entered characters such as
+	$𝐚$ appear bold italic in the output (which is |unicode-math| behavior
+	with |[bold-style=ISO]| package option).
+\end{function}
+
+\begin{function}{\umiFrac}
+	\begin{syntax}
+		|\umiFrac {1} {2}|
+	\end{syntax}
+	Not to be used directly, but you can redefine it such as |\renewcommand\umiFrac[2]{\tfrac{#1}{#2}}|
+	(or shorter, |\let\umiFrac\tfrac|)
+	to customize the appearance of Unicode characters like |½|.
+\end{function}
+
+\begin{function}{\umiDefineMathChar}
+	\begin{syntax}
+		|\umiDefineMathChar {α} {\alpha}|
+	\end{syntax}
+	Does what it says.
+
+	Note that the Unicode character must be braced.
+
+	This might or might not destroy the existing text-mode definition. For now,
+	one way to preserve it is |\umiDefineMathChar {²} {\TextOrMath{\texttwosuperior}{^2}}|.
+\end{function}
+
+\begin{function}{\umiDefineMathDelimiter}
+	\begin{syntax}
+		|\umiDefineMathDelimiter {⟨} \langle|
+	\end{syntax}
+	You must use this in order to use the Unicode character with |\left|, |\big|, |\bigl| etc.
+	(because of the internal detail being that in Xe\LaTeX\ and Lua\LaTeX,
+	as this package does not change the character catcode to be active,
+	it's necessary to set the |delcode| as mentioned before)
+
+	In that case the second argument must be a single token.
+
+	Unfortunately, the command does not always work.
+\end{function}
+
+\begin{function}{\umiRefreshDelimiterList}
+	\begin{syntax}
+	    |\umiRefreshDelimiterList|
+	\end{syntax}
+	You should normally not need this command.
+
+	As mentioned before, in Lua\LaTeX\ once a command is redefined, the Unicode character does not automatically update.
+
+	This command will check all the normal delimiter Unicode characters. In PDF\LaTeX\ this command does nothing.
+\end{function}
+
+\begin{variable}{ignore-refresh-delimiter-list}
+	Package option.
+
+	The command above will be run |\AtBeginDocument|. Pass this to disable it running.
+	Only needed if there's some package clash.
+\end{variable}
+
+\begin{function}{\umiPatchCmdUnicodeArg,\umiUnpatchCmdUnicodeArg}
+	\begin{syntax}
+		|\umiPatchCmdUnicodeArg \sqrt|
+		|\umiUnpatchCmdUnicodeArg \sqrt|
+	\end{syntax}
+	After executing this command, the command specified in the argument (|\sqrt| in this example)
+	can be called with one argument being an Unicode character without needing a brace.
+
+	(i.e. you can write |\sqrt α| instead of |\sqrt{α}|.)
+
+	Because of implementation detail,
+	\begin{itemize}
+		\item |\sqrtα| (without the space between |\sqrt| and |α|) works in PDF\LaTeX\ but not Lua\LaTeX. (so this form is not recommended.)
+		\item |\sqrt α| works in Lua\LaTeX\ without needing the patch. In other words, the patch does nothing in Unicode engines.
+	\end{itemize}
+
+	The command being patched must take at least one mandatory argument as the first argument, and it only affect that first argument.
+	In other words, |\sqrt[3]α| cannot be patched this way unless you do e.g. |\newcommand\cbrt[1]{\sqrt[3]{#1}}| then |\umiPatchCmdUnicodeArg\cbrt|,
+	then |\cbrt α| works (but |\sqrt[3]α| still doesn't).
+\end{function}
+
+\begin{function}{\umiPatchCmdUnicodeTwoArgs}
+	\begin{syntax}
+		|\umiPatchCmdUnicodeTwoArgs \frac|
+		|\umiUnpatchCmdUnicodeArg \frac|
+	\end{syntax}
+	Similar to above, but for commands with (at least) two mandatory arguments.
+
+	Only affects these 2 mandatory arguments.
+\end{function}
+
+\begin{function}{\umiPatchCmdUnicodeArgExtraGroup}
+	\begin{syntax}
+		|\umiPatchCmdUnicodeArgExtraGroup \Big|
+	\end{syntax}
+	Don't use this command unless you know exactly what you're doing.
+
+	Similar to |\umiPatchCmdUnicodeArg|, but open an implicit group before executing anything and close the group after.
+
+	The command being patched must take exactly one argument.
+
+	This is useful because some \TeX\ primitives such as |^| or |\mathopen|
+	requires either a single "character" or a group braced with |{...}| / |\bgroup...\egroup|.
+\end{function}
+
+\begin{variable}{ignore-patch-delimiter-commands}
+	Package option. Pass this to avoid patching |\Big| etc. with the command above (only needed if there's some package clash).
+\end{variable}
+
+\begin{function}{\umiBraceNext}
+	\begin{syntax}
+		|\umiBraceNext {abc...} αxyz...|
+	\end{syntax}
+	In the example above, after some steps of execution of \TeX, the state will be
+	|abc... {α}xyz...|.
+
+	Formally: if the character following the first argument to |\umiBraceNext| is not representable in a single byte
+	and the engine is not Unicode, the character will be braced, otherwise nothing happens. Then the argument
+	is put back in the input stream.
+
+	This is an internal command mainly useful for defining the command above, for example after
+\begin{verbatim}
+\let\oldbig\big
+\def\big{\umiBraceNext{\oldbig}}
+\end{verbatim}
+then |\big⟨| will eventually execute |\oldbig{⟨}| which is the desired behavior (that |\oldbig| expects one braced argument).
+\end{function}
+
+\begin{variable}{ignore-patch-prime}
+	Do not patch the default definition of |'| in math mode.
+
+	By default it's patched to allow |G'²| and |G²'| to work. Only use this when there's some package clash.
+\end{variable}
+
+\begin{function}{\umiPatchPrime,\umiUnpatchPrime}
+	\begin{syntax}
+		|\umiPatchPrime|
+		|\umiUnpatchPrime|
+	\end{syntax}
+	As mentioned above, by default |\umiPatchPrime| is run |\AtBeginDocument|. But it can be patched
+	and unpatched manually.
+
+	Note that it's undefined behavior if some package modifies the definition of active |'|
+	while it's patched. To resolve conflict, unpatch |'|, load the package, then patch again.
+\end{function}
+
+\section{Compatibility}
+
+This package should have tested with various \TeX\ distribution versions on Overleaf.
+
+\PrintChanges
+\PrintIndex
+\Finale
+
+\end{document}
