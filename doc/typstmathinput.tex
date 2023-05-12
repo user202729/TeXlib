@@ -80,6 +80,23 @@ and \href{https://github.com/typst/typst/issues/516}{\#516} for details.
 
 When these feature requests are implemented, this package should be amended to remove the patches.
 
+Some options are possible:
+
+\begin{variable}{cache-location=}
+    Specify the location of the cache.
+    If not passed or empty, defaults to some location in the temporary directory.
+\end{variable}
+
+\begin{variable}{watch-template-change=}
+    If |true|, compare if the template has changed since the last run.
+
+    This option is for the package developer only.
+    Here the template refers to the \file{typstmathinput-template.typ} file
+    that should be included in the package, which the user should not modify.
+\end{variable}
+
+
+
 \section{Limitations}
 
 Note that this only handle math mode, that is, you cannot use |*text*| for bold, etc.
@@ -133,6 +150,18 @@ Normal behavior: $"hello world"$
 \renewcommand\typstmathinputtext[1]{\textcolor{red}{\text{#1}}}
 Redefined: $"hello world"$
 \end{demo}
+
+\DescribeMacro{\typstmathinputextrapreamble}
+A string consist of Typst code if the user want to define custom things.
+
+The \pkg{saveenv} package may be useful for this. Example usage:
+\begin{verbatim}
+\begin{saveenv}{\typstmathinputextrapreamble}
+#let abc = 1
+\end{saveenv}
+\end{verbatim}
+
+Note that explicit double-hash here may be converted to single-hash, which can be a bit confusing.
 
 
 %\DescribeMacro{typstmathinput.parse()}

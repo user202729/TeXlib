@@ -209,11 +209,15 @@ assert(repr(space)=="space")
       }
     }
     let content={
-      if wrap_in_text { "\\typstmathinputtext{" }
-      x.text
-        .replace("{", "\\{")
-        .replace("}", "\\}")
-      if wrap_in_text { "}" }
+      if x.text.starts-with("!!"){
+        x.text.slice(2)
+      }else{
+        if wrap_in_text { "\\typstmathinputtext{" }
+        x.text
+          .replace("{", "\\{")
+          .replace("}", "\\}")
+        if wrap_in_text { "}" }
+      }
     }
     if style==displaystyle and (content=="∑" or content=="∏" or content=="∫"){
       content=setheight(cat(style, content), 1.4)
