@@ -291,7 +291,9 @@ math_alphabet_redundant_greek = {
 
 extra_synonyms = {v: u for u in 
 				  [
-					  ["adots", "iddots"]
+					  ["adots", "iddots"],
+					  #["llbracket", "lBrack"],
+					  #["rrbracket", "rBrack"],
 					  ]
 				  for v in u}
 
@@ -374,7 +376,7 @@ for unicode_char, csnames_ in unicode_math_table.items():
 		for csname in [*csnames]:
 			if csname in extra_synonyms:
 				csnames+=extra_synonyms[csname]
-		csnames=[*set(csnames)]
+		csnames=[*{csname: None for csname in csnames}]
 
 		items1=[]
 		for csname in csnames:
