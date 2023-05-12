@@ -129,12 +129,12 @@
 \int_const:Nn \__umi_active_mathcode_input {"8000}  % equal to \__umi_active_mathcode unless on lualatex where the former is "1000000
 
 \cs_gset_protected:Npn \__umi_gtmp #1 {
-	\cs_new_protected:Npn \__umi_define_char_single ##1 ##2{  % this function is \__umi_define_char if simply redefining the character and setting the mathcode to "8000 suffices
+	\cs_new_protected:Npn \__umi_define_char_single ##1 {  % this function is \__umi_define_char if simply redefining the character and setting the mathcode to "8000 suffices
+		% the implicit trailing {##2} is omitted
 		\__umi_check_before_define_char_single{##1}
 		\global\mathcode `##1=\__umi_active_mathcode_input
-		\begingroup \lccode 0=`##1 \lowercase{\endgroup \cs_gset_protected:Npn #1} {  % #1 = ⟨active character with code 0⟩
-			##2
-		}  % the code above executes '\cs_gset_protected:Npn ⟨active character with charcode ##1⟩ {##2}'
+		\begingroup \lccode 0=`##1 \lowercase{\endgroup \tl_gset:Nn #1}  % #1 = ⟨active character with code 0⟩
+		% the code above executes '\cs_gset_protected:Npn ⟨active character with charcode ##1⟩ {##2}'
 	}
 }
 \expandafter \expandafter \expandafter \__umi_gtmp \char_generate:nn {0} {13}
@@ -258,7 +258,7 @@
 				\__umi_define_char_math_only {#2}
 			\else
 				% the character is not defined, just define it
-				\cs_gset_protected:cpn {\l_tmpa_str} {\__umi_require_math #2}
+				\tl_gset:cn {\l_tmpa_str} {\__umi_require_math #2}
 			\fi
 		\fi
 	}
@@ -269,7 +269,7 @@
 		\ifnum \str_count:n{#1}=1
 			\__umi_define_char_single #1 {#2}
 		\else
-			\cs_gset_protected:cpn {u8:\detokenize{#1}} {\__umi_require_math #2}
+			\tl_gset:cn {u8:\detokenize{#1}} {\__umi_require_math #2}
 		\fi
 	}
 	\cs_new_eq:NN \umiDefineMathDelimiter \umiDefineMathChar

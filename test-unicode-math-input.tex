@@ -146,6 +146,11 @@ Bigl/r: $\Bigl\langle 5 \Bigr\rangle$
 
 $√2 + √{23^{45}} + ∛{78a}$
 
+Test umiDefineMathChar (with \# token):
+\umiDefineMathChar {'} {\def\test#1{ab#1ef}\test{cd}}%
+\umiDefineMathChar {↑} {\def\test#1{ab#1ef}\test{cd}}%
+$'=↑$
+
 \tableofcontents
 
 
