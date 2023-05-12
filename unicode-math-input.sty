@@ -128,6 +128,8 @@
 	\cs_new_eq:NN \__umi_if_engine_unicode \use_ii:nn
 \fi
 
+\cs_generate_variant:Nn \str_if_eq:nnTF {x}
+
 \__umi_if_engine_unicode {
 	\cs_new_eq:NN \__umi_define_char \__umi_define_char_single
 
@@ -144,7 +146,6 @@
 		The~Unicode~character~#1~is~mapped~to~#2,~but~the~latter~is~not~determined~to~be~a~delimiter.
 	}
 
-	\cs_generate_variant:Nn \str_if_eq:nnTF {x}
 	\cs_generate_variant:Nn \str_range:nnn {V}
 	\cs_generate_variant:Nn \cs_replacement_spec:N {c}
 
@@ -198,41 +199,48 @@
 } {
 	\cs_new:Npn \__umi_take_IeC \IeC #1 \__umi_delimiter { \unexpanded{#1} }
 
+	% internal procedure
+	% e.g.
+	%   \str_set:Nn \l_tmpa_str {u8:×} \__umi_define_char_math_only {\times}
+	% the character #1 is already defined in LaTeX, check if it's LaTeX default definition (\IeC{\texttimes})
+	% if it is then change it to do a switch-case on text/math mode, otherwise raise an error
+	\cs_new_protected:Npn \__umi_define_char_math_only #1 {
+		\begingroup
+		\escapechar=`\/~
+		\str_gset:Nx \g_tmpb_str { \expandafter\meaning\csname \l_tmpa_str\endcsname }
+		\endgroup
+		\str_if_eq:xnTF { \str_range:Nnn \g_tmpb_str {1} {13} } {macro:->/IeC~} {
+			% it probably is, tack on the math definition
+			\cs_gset_protected:cpx {\l_tmpa_str} {
+				\noexpand\mode_if_math:TF {
+					\unexpanded{#1}
+				} {
+					\expandafter\expandafter\expandafter \__umi_take_IeC  \csname \l_tmpa_str\endcsname \__umi_delimiter
+				}
+			}  % this is already protected, no need protected@empty
+
+			% in summary if the existing definition is 
+			%   \u8:×:
+			%   macro:->\IeC {\texttimes }
+			% then the new definition is
+			%   \protected macro:->\mode_if_math:TF {\times} {\texttimes}
+			% as expected.
+			% we use \mode_if_math:TF just in case the thing inside peeks ahead.
+		} {
+			% ... cannot redefine...?
+			\__umi_internal_error
+		}
+	}
+
 	\cs_new_protected:Npn \__umi_define_char #1 #2{
 		\ifnum \str_count:n{#1}=1
 			\__umi_define_char_single #1 {#2}
 		\else
-			\str_set:Nx \l_tmpa_str{u8:\detokenize{#1}}
+			\str_set:Nn \l_tmpa_str{u8:#1}
 			\ifcsname \l_tmpa_str\endcsname
-				% the character is already defined, check if it's LaTeX default definition
-				\begingroup
-				\escapechar=-1~
-				\str_gset:Nx \g_tmpb_str { \expandafter\meaning\csname \l_tmpa_str\endcsname }
-				\str_gset:Nx \g_tmpb_str { \str_range:Nnn \g_tmpb_str {1} {12} }
-				\endgroup
-				\str_if_eq:VnTF \g_tmpb_str {macro:->IeC~} {
-					% it probably is, tack on the math definition
-					\cs_gset_protected:cpx {\l_tmpa_str} {
-						\noexpand\mode_if_math:TF {
-							\unexpanded{#2}
-						} {
-							\expandafter\expandafter\expandafter \__umi_take_IeC  \csname \l_tmpa_str\endcsname \__umi_delimiter
-						}
-					}  % this is already protected, no need protected@empty
-
-					% in summary if the existing definition is 
-					%   \u8:×:
-					%   macro:->\IeC {\texttimes }
-					% then the new definition is
-					%   \protected macro:->\mode_if_math:TF {\times} {\texttimes}
-					% as expected.
-					% we use \mode_if_math:TF just in case the thing inside peeks ahead.
-				} {
-					% ... cannot redefine...?
-					\__umi_internal_error
-				}
+				\__umi_define_char_math_only {#2}
 			\else
-				% the character is not defined, just redefine it
+				% the character is not defined, just define it
 				\cs_gset_protected:cpn {\l_tmpa_str} {\__umi_require_math #2}
 			\fi
 		\fi
