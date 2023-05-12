@@ -40,7 +40,7 @@ cp doc/$a.tex $target 2> /dev/null
 
 # special cases (if file not exist ignore)
 #for file in $a.lua ${a}_template.html; do
-for file in ${a}_script_*.py $a.lua ${a}_helper.lua ${a}_template.html ${a}-decode-8bit.py ${a}-test.tex; do
+for file in ${a}_script*.py $a.lua ${a}_helper.lua ${a}_template.html ${a}-decode-8bit.py ${a}-test.tex  ${a}-table.tex; do
 	if cp $file $target 2> /dev/null; then
 		allfiles="$allfiles, $file";
 	fi
@@ -65,7 +65,7 @@ fi
 # generate README
 
 printf "%s -- " $a > $target/README
-head -n1 $a.sty |sed -e 's/.*{//' -e 's/}//' >> $target/README
+grep Provide $a.sty | head -n1 |sed -e 's/.*{//' -e 's/}//' >> $target/README
 
 sed -n '/begin{abstract}/,/end{abstract}/p' doc/$a.tex |head -n-1 |tail -n+2 >> $target/README
 
