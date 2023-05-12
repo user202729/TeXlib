@@ -103,24 +103,41 @@
 
 % ======== \__umi_define_char
 
-\cs_new_protected:Npn \__umi_define_char_single #1 #2{  % this function is \__umi_define_char if simply redefining the character and setting the mathcode to "8000 suffices
-	\ifnum \str_count:n{#1}=1
-	\else
-		\__umi_internal_error
-	\fi
-	\int_case:nnF{\catcode `#1}{
-		{11}{}  % letter
-		{12}{}  % other
-		{13}{}  % active
-	}{
-		\__umi_internal_error  % otherwise the character won't be active in math mode...
-	}
+\msg_new:nnn {unicode-math-input} {not-single-character} {
+	Argument~must~be~a~single~character.
+}
 
-	\global\mathcode `#1="8000~
-	\expandafter \expandafter \expandafter \cs_gset_protected:Npn \char_generate:nn {`#1}{13} {
-		#2
+\msg_new:nnn {unicode-math-input} {not-correct-catcode} {
+	Redefining~this~special~character~in~math~mode~is~not~supported.
+}
+
+\cs_new_protected:Npn \__umi_check_before_define_char_single #1 {
+	\ifnum \str_count:n{#1}=\c_one_int
+		\int_case:nnF{\catcode `#1}{
+			{11}{}  % letter
+			{12}{}  % other
+			{13}{}  % active
+		}{
+			% otherwise the character won't be active in math mode...
+			\msg_error:nn {unicode-math-input} {not-correct-catcode}
+		}
+	\else
+		\msg_error:nn {unicode-math-input} {not-single-character}
+	\fi
+}
+
+\int_const:Nn \__umi_active_mathcode_input {"8000}  % equal to \__umi_active_mathcode unless on lualatex where the former is "1000000
+
+\cs_gset_protected:Npn \__umi_gtmp #1 {
+	\cs_new_protected:Npn \__umi_define_char_single ##1 ##2{  % this function is \__umi_define_char if simply redefining the character and setting the mathcode to "8000 suffices
+		\__umi_check_before_define_char_single{##1}
+		\global\mathcode `##1=\__umi_active_mathcode_input
+		\begingroup \lccode 0=`##1 \lowercase{\endgroup \cs_gset_protected:Npn #1} {  % #1 = ⟨active character with code 0⟩
+			##2
+		}  % the code above executes '\cs_gset_protected:Npn ⟨active character with charcode ##1⟩ {##2}'
 	}
 }
+\expandafter \expandafter \expandafter \__umi_gtmp \char_generate:nn {0} {13}
 
 \ifTUTeX
 	\cs_new_eq:NN \__umi_if_engine_unicode \use_i:nn
@@ -261,7 +278,11 @@
 \__umi_if_engine_unicode {
 	\tl_build_begin:N \__umi_delimiter_list
 } {}
+% we temporarily turn off the check for extra performance.
+\cs_gset_eq:NN \__umi_check_before_define_char_single_backup \__umi_check_before_define_char_single
+\cs_gset_eq:NN \__umi_check_before_define_char_single \use_none:n
 \input unicode-math-input-table.tex
+\cs_gset_eq:NN \__umi_check_before_define_char_single \__umi_check_before_define_char_single_backup
 \__umi_if_engine_unicode {
 	\tl_build_end:N \__umi_delimiter_list
 	\cs_new_protected:Npn \umiRefreshDelimiterList{
@@ -545,10 +566,10 @@
 % ======== definitions.
 
 \msg_new:nnn {unicode-math-input} {prime-already-patched} {
-	The~'~symbol~is~already~patched,~call~umiUnpatchPrime~first?
+	The~'~symbol~is~already~patched,~call~umiUnpatchPrime~first.
 }
 \msg_new:nnn {unicode-math-input} {prime-not-patched} {
-	The~'~symbol~is~not~patched,~call~umiPatchPrime~first?
+	The~'~symbol~is~not~patched,~call~umiPatchPrime~first.
 }
 
 \cs_new_protected:Npn \umiPatchPrime {
