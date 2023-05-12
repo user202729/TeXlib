@@ -45,6 +45,15 @@ they does not cover a lot of characters and/or does not handle several issues we
 We compare the situation with several existing packages:
 
 \begin{itemize}
+	\item \pkg{commonunicode}:
+		\begin{itemize}
+			\item defines all characters to be active, which means it breaks usage of |α| in \pkg{fancyvrb}'s |Verbatim| environment for example.
+			\item changes the behavior of e.g. |½| in text mode in PDF\LaTeX.
+			\item does not always select best option, for example |∄| always get mapped to |\not\exists| even though the outcome is worse than |\nexists|.
+			\item fakes several symbols such as |≝| even when there's better option e.g. |\eqdef|,
+			\item uses |\ensuremath| extensively, which means no error message when it's used in text mode,
+			\item not as good symbol coverage.
+		\end{itemize}
 	\item \pkg{unixode}:
 		\begin{itemize}
 			\item defines |′| to be |\prime| which is big and not usable, it should be |^{\prime}|
