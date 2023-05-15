@@ -199,8 +199,8 @@
 	}
 
 
-	\cs_new_eq:NN \umiDefineMathChar \__umi_define_char_single
-	\cs_new_protected:Npn \umiDefineMathDelimiter #1 #2 {
+	\cs_new_eq:NN \umiDeclareMathChar \__umi_define_char_single
+	\cs_new_protected:Npn \umiDeclareMathDelimiter #1 #2 {
 		\cs_new_protected:Npn \__umi_check_delimiter_defined_not_delimiter ##1 ##2 {
 			\msg_error:nnnn {unicode-math-input} {not-delimiter} {##1} {##2}
 		}
@@ -264,15 +264,18 @@
 
 	\cs_new_eq:NN \__umi_define_char_maybe_delimiter \__umi_define_char
 
-	\cs_new_protected:Npn \umiDefineMathChar #1 #2{
+	\cs_new_protected:Npn \umiDeclareMathChar #1 #2{
 		\ifnum \str_count:n{#1}=1
 			\__umi_define_char_single #1 {#2}
 		\else
 			\cs_gset_protected:cpx {u8:\detokenize{#1}} {\unexpanded{\__umi_require_math #2}}
 		\fi
 	}
-	\cs_new_eq:NN \umiDefineMathDelimiter \umiDefineMathChar
+	\cs_new_eq:NN \umiDeclareMathDelimiter \umiDeclareMathChar
 }
+
+\cs_new_protected:Npn \umiDeclareMathCharCopy { \__umi_internal_error }
+\cs_new_protected:Npn \umiDeclareMathDelimiterCopy { \__umi_internal_error }
 
 \__umi_if_engine_unicode {
 	\tl_build_begin:N \__umi_delimiter_list

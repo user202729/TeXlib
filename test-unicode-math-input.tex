@@ -146,9 +146,9 @@ Bigl/r: $\Bigl\langle 5 \Bigr\rangle$
 
 $√2 + √{23^{45}} + ∛{78a}$
 
-Test umiDefineMathChar (with \# token):
-\umiDefineMathChar {'} {\def\test#1{ab#1ef}\test{cd}}%
-\umiDefineMathChar {↑} {\def\test#1{ab#1ef}\test{cd}}%
+Test umiDeclareMathChar (with \# token):
+\umiDeclareMathChar {'} {\def\test#1{ab#1ef}\test{cd}}%
+\umiDeclareMathChar {↑} {\def\test#1{ab#1ef}\test{cd}}%
 $'=↑$
 
 \tableofcontents
@@ -157,8 +157,8 @@ $'=↑$
 {\setbox0\vbox{
 \nonstopmode
 \errorcontextlines=10
-\umiDefineMathChar {12} {34}  % if is Unicode engine this will raise error, otherwise it's not checked
-\umiDefineMathChar {&} {34}   % will raise an error
+\umiDeclareMathChar {12} {34}  % if is Unicode engine this will raise error, otherwise it's not checked
+\umiDeclareMathChar {&} {34}   % will raise an error
 \umiPatchPrime    % error: already patched
 \umiUnpatchPrime  % success
 \umiUnpatchPrime  % error: not patched

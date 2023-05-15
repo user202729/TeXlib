@@ -1,5 +1,6 @@
 %! TEX program = lualatex
 \ProvidesFile{unicode-math-input.tex} [2023/05/12 v0.0.0 ]
+\PassOptionsToPackage{hyphens}{url}
 \RequirePackage{fvextra}
 \documentclass{l3doc}
 \usepackage[svgnames]{xcolor}
@@ -249,27 +250,27 @@ Because by default the \pkg{unicode-math} package will already allow entering Un
 	|\let\umiFrac\tfrac| (or more clearly, |\renewcommand\umiFrac[2]{\tfrac{#1}{#2}}|)
 	to customize the appearance of Unicode characters like |½|.
 
-	If you want to customize the appearance of individual symbols, consider using \csref{umiDefineMathChar}.
+	If you want to customize the appearance of individual symbols, consider using \csref{umiDeclareMathChar}.
 \end{function}
 
-\begin{function}{\umiDefineMathChar}
+\begin{function}{\umiDeclareMathChar}
 	\begin{syntax}
-		|\umiDefineMathChar {α} {\alpha}|
+		|\umiDeclareMathChar {α} {\alpha}|
 	\end{syntax}
-	Does what it says.
+	Does what it says. Will override existing definitions, if any.
 
 	Note that the Unicode character must be braced.
 
-	(You may choose to call \csref{umiPatchCmdUnicodeArg}| \umiDefineMathChar|
+	(You may choose to call \csref{umiPatchCmdUnicodeArg}| \umiDeclareMathChar|
 	beforehand so bracing is not necessary, but this is not really recommended)
 
 	This might or might not destroy the existing text-mode definition. For now,
-	one way to preserve it is |\umiDefineMathChar {²} {\TextOrMath{\texttwosuperior}{^2}}|.
+	one way to preserve it is |\umiDeclareMathChar {²} {\TextOrMath{\texttwosuperior}{^2}}|.
 \end{function}
 
-\begin{function}{\umiDefineMathDelimiter}
+\begin{function}{\umiDeclareMathDelimiter}
 	\begin{syntax}
-		|\umiDefineMathDelimiter {⟨} \langle|
+		|\umiDeclareMathDelimiter {⟨} \langle|
 	\end{syntax}
 	You must use this in order to use the Unicode character with |\left|, |\big|, |\bigl| etc.
 	(because of the internal detail being that in Xe\LaTeX\ and Lua\LaTeX,
@@ -281,6 +282,10 @@ Because by default the \pkg{unicode-math} package will already allow entering Un
 	Unfortunately, the command does not always work.
 \end{function}
 
+\emph{Note}: There's no need to provide |\umiDeclareMathAlphabet|, |\umiDeclareMathAccent| or |\umiDeclareMathRadical|, for |\umiDeclareMathChar| suffices.
+It's not supported to define \emph{control sequences}, for that the typical |\RenewDocumentCommand|
+or |\RenewCommandCopy| suffices.
+
 \begin{function}{\umiRefreshDelimiterList}
 	\begin{syntax}
 	    |\umiRefreshDelimiterList|
@@ -291,7 +296,7 @@ Because by default the \pkg{unicode-math} package will already allow entering Un
 
 	This command will check all the normal delimiter Unicode characters. In PDF\LaTeX\ this command does nothing.
 
-	Another way is to use \csref{umiDefineMathDelimiter} to manually refresh individual Unicode characters,
+	Another way is to use \csref{umiDeclareMathDelimiter} to manually refresh individual Unicode characters,
 	this is also useful if you define an Unicode character that is not "normally" a delimiter.
 \end{function}
 
@@ -392,6 +397,50 @@ then |\big⟨| will eventually execute |\oldbig{⟨}| which is the desired behav
 \section{Compatibility}
 
 This package should have tested with various \TeX\ distribution versions on Overleaf.
+
+\section{Advanced remarks}
+
+As mentioned before, by design this package defines the Unicode character in math mode to do whatever the corresponding
+\LaTeX\ command does \emph{at the time of use}, so if you redefine the meaning of |\alpha|, then the Unicode character |α|
+will change as well.
+
+The other "standard" way to define commands in \LaTeX\ is to assign the mathcode to the character/control sequence directly,
+using |\DeclareMathSymbol| etc. which is used to define almost all the standard control sequences.
+For efficiency reasons or other reasons, you may want to \emph{copy} the definition of an existing control sequence
+(this way the definition of the Unicode character is not changed when the control sequence changes),
+you can do that by:
+
+\begin{function}{\umiDeclareMathCharCopy}
+	\begin{syntax}
+		|\umiDeclareMathCharCopy {±} \pm|
+	\end{syntax}
+	Does what it says.
+
+	The second argument must be a single control sequence.
+\end{function}
+
+\begin{function}{\umiDeclareMathDelimiterCopy}
+	\begin{syntax}
+		|\umiDeclareMathDelimiterCopy {‖} \Vert|
+	\end{syntax}
+	Does what it says. Refer to \csref{umiDeclareMathDelimiter} for difference between this command and \csref{umiDeclareMathCharCopy}.
+\end{function}
+
+In case you want to explicitly specify a font/slot pair for an Unicode character, you can use |\DeclareMathSymbol| etc.
+directly, then use one of the commands above to copy it to the Unicode character.
+
+Useful resources:
+
+\begin{sloppypar}
+	\hbadness=10000
+\begin{itemize}
+	\item \url{https://tex.stackexchange.com/questions/98781/create-a-font-table-for-all-available-characters-for-a-particular-font}
+	\item \url{https://tex.stackexchange.com/questions/380775/font-table-for-opentype-truetype-fonts}
+	\item \url{https://ctan.org/pkg/fonttable} (need double quotes if font name has spaces: \url{https://tex.stackexchange.com/a/506246/250119})
+	\item Although there's always |texdoc encguide| for the default (non-Unicode) encodings.
+\end{itemize}
+\end{sloppypar}
+
 
 \PrintChanges
 \PrintIndex
