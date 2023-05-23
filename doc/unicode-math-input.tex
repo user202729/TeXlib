@@ -16,7 +16,12 @@
 \tracinglostchars=3
 \newcommand\csref[1]{\texttt{\hyperref[doc/function//#1]{\textbackslash #1}}}
 \newcommand\varref[1]{\texttt{\hyperref[doc/function//#1]{#1}}}
+\usepackage{precattl}
 \begin{document}
+\precattlExec{
+\NewDocumentEnvironment{option}{v}{\begin{variable}{#1\cO\}\iffalse}\fi Package option.\par}{\end{variable}}
+}
+
 \hfuzz=1pt
 \GetFileInfo{\jobname.tex}
 
@@ -279,7 +284,8 @@ Because by default the \pkg{unicode-math} package will already allow entering Un
 
 	In that case the second argument must be a single token.
 
-	Unfortunately, the command does not always work.
+	Unfortunately, the command does not always work -- it must detect the second argument to be a delimiter, but
+	if the detection fails it may not work.
 \end{function}
 
 \emph{Note}: There's no need to provide |\umiDeclareMathAlphabet|, |\umiDeclareMathAccent| or |\umiDeclareMathRadical|, for |\umiDeclareMathChar| suffices.
@@ -300,13 +306,11 @@ or |\RenewCommandCopy| suffices.
 	this is also useful if you define an Unicode character that is not "normally" a delimiter.
 \end{function}
 
-\begin{variable}{ignore-refresh-delimiter-list}
-	Package option.
-
+\begin{option}{ignore-refresh-delimiter-list}
 	\csref{umiRefreshDelimiterList} will be run |\AtBeginDocument|. Pass this to disable it running.
 
 	Only needed if there's some package clash or if there's spurious warning on "not determined to be a delimiter" etc.
-\end{variable}
+\end{option}
 
 \begin{function}{\umiPatchCmdUnicodeArg,\umiUnpatchCmdUnicodeArg}
 	\begin{syntax}
@@ -350,12 +354,14 @@ or |\RenewCommandCopy| suffices.
 	The command being patched must take exactly one argument.
 
 	This is useful because some \TeX\ primitives such as |^| or |\mathopen|
-	requires either a single "character" or a group braced with |{...}| / |\bgroup...\egroup|.
+	requires either a single "character" or a group braced with |{...}| / |\bgroup...\egroup| --
+	in particular, |\Big|'s original definition is such that |\Bigl| being defined
+	as |\mathopen \Big| can work, and we must ensure it still work after the patch.
 \end{function}
 
-\begin{variable}{ignore-patch-delimiter-commands}
-	Package option. Pass this to avoid patching |\Big| etc. with the command above (only needed if there's some package clash).
-\end{variable}
+\begin{option}{ignore-patch-delimiter-commands}
+	Pass this to avoid patching |\Big| etc. with the command above (only needed if there's some package clash).
+\end{option}
 
 \begin{function}{\umiBraceNext}
 	\begin{syntax}
@@ -376,11 +382,11 @@ or |\RenewCommandCopy| suffices.
 then |\big⟨| will eventually execute |\oldbig{⟨}| which is the desired behavior (that |\oldbig| expects one braced argument).
 \end{function}
 
-\begin{variable}{ignore-patch-prime}
+\begin{option}{ignore-patch-prime}
 	Do not patch the default definition of |'| in math mode.
 
 	By default it's patched to allow |G'²| and |G²'| to work. Only use this when there's some package clash.
-\end{variable}
+\end{option}
 
 \begin{function}{\umiPatchPrime,\umiUnpatchPrime}
 	\begin{syntax}

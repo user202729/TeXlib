@@ -274,6 +274,10 @@
 	\cs_new_eq:NN \umiDeclareMathDelimiter \umiDeclareMathChar
 }
 
+
+\cs_new_eq:NN \umiDefineMathChar \umiDeclareMathChar
+\cs_new_eq:NN \umiDefineMathDelimiter \umiDeclareMathDelimiter  % backwards compatibility
+
 \cs_new_protected:Npn \umiDeclareMathCharCopy { \__umi_internal_error }
 \cs_new_protected:Npn \umiDeclareMathDelimiterCopy { \__umi_internal_error }
 
