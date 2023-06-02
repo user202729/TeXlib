@@ -292,6 +292,8 @@ math_alphabet_redundant_greek = {
 extra_synonyms = {v: u for u in 
 				  [
 					  ["adots", "iddots"],
+					  ["unicodecdots", "cdots"], # https://github.com/wspr/unicode-math/issues/571
+					  ["unicodeellipsis", "ldots"],
 					  #["llbracket", "lBrack"],
 					  #["rrbracket", "rBrack"],
 					  ]

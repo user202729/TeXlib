@@ -192,6 +192,13 @@ We need to get the following things correct:
 		corresponding Unicode character (|π|) will also change. This will incur a small loss in efficiency however.
 
 		(modulo the issue with |\Udelcode| mentioned above)
+
+	\item The character |⋯| is mapped to |\cdots| and |…| is mapped to |\ldots|. Note that |\dots| behaves
+		the same as |\ldots| without \pkg{amsmath} package loaded, but with it it smartly detect which variant to use
+		depends on the following character, for example |$\dots +$| prints $\dots +$ but |$\dots ,$| prints $\dots ,$.
+
+		There's another discrepancy with the spacing around these 2 characters,
+		see \url{https://github.com/wspr/unicode-math/issues/571}.
 \end{itemize}
 
 There are some issues however:
