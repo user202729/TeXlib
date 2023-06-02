@@ -444,8 +444,9 @@
 		\expandafter \__umi_continue_script_aux \exp:w\exp_end_continue_f:w
 		\char_generate:nn {\expandafter \__umi_gobble_the_character \meaning #1} {13}
 	} {
-		\cs_gset_eq:NN \__umi_script \__umi_put_script_normal
-		^{\l_tmpa_tl} #1
+		% is not the case, finished (put back the #1)
+		\__umi_script_collect_done
+		\__umi_script_cat{\l_tmpa_tl} #1
 	}
 }
 
@@ -485,12 +486,13 @@
 	}
 
 	\def \__umi_brace_error             {\__umi_internal_error \l_tmpa_tl}
+	\def \__umi_brace_nobrace           {\l_tmpa_tl}
 	\def \__umi_brace_two   #1 #2       {\l_tmpa_tl {#1 #2}}
 	\def \__umi_brace_three #1 #2 #3    {\l_tmpa_tl {#1 #2 #3}}
 	\def \__umi_brace_four  #1 #2 #3 #4 {\l_tmpa_tl {#1 #2 #3 #4}}
 
 	\int_step_inline:nnn {"00} {"7F} {
-		\expandafter\let\csname __umi_brace_handle_ \char_generate:nn {#1} {12} \endcsname \relax
+		\expandafter\let\csname __umi_brace_handle_ \char_generate:nn {#1} {12} \endcsname \__umi_brace_nobrace
 	}
 	\int_step_inline:nnn {"80} {"BF} {
 		\expandafter\let\csname __umi_brace_handle_ \char_generate:nn {#1} {12} \endcsname \__umi_brace_error
