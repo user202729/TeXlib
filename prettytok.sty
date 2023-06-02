@@ -313,24 +313,28 @@
 	}
 
 	\cs_new:Npn \prettye:w {
-		\directlua{prettyprintw()} {} {}
+		\group_align_safe_begin: \directlua{prettyprintw()} {\group_align_safe_end:} {}
 	}
 	\cs_new:Npn \prettye:nw #1 {
-		\directlua{prettyprintw()} {#1} {}
+		\group_align_safe_begin: \directlua{prettyprintw()} {\group_align_safe_end: #1} {}
 	}
 	\cs_new:Npn \prettye:nnw #1 #2 {
-		\directlua{prettyprintw()} {#1} {#2}
+		\group_align_safe_begin: \directlua{prettyprintw()} {\group_align_safe_end: #1} {#2}
 	}
 }
 
 % ======== w variant.
 
-\cs_new_protected:Npn \pretty:w { \pretty_aux:w \empty }
-\cs_new_protected:Npn \pretty_aux:w #1 \prettystop {
-	\pretty:o { #1 }  % use o-expansion to remove the \empty
-	#1 \prettystop
+\cs_new_protected:Npn \pretty:nnw #1 #2 { \group_align_safe_begin: \pretty_aux:nnw {#1} {#2} \empty }
+\cs_new_protected:Npn \pretty_aux:nnw #1 #2 #3 \prettystop {  % #1 is callback, #2 is extra token list
+	\group_align_safe_end:
+	\pretty:no {#2} {#3}  % use o-expansion to remove the \empty
+	#1 #3 \prettystop
 }
 \cs_new:Npn \prettystop {}
+
+\cs_new_protected:Npn \pretty:nw #1 {\pretty:nnw {#1} {}}
+\cs_new_protected:Npn \pretty:w {\pretty:nnw {} {}}
 
 % ======== other variants.
 \cs_generate_variant:Nn \pretty:n {x, o, V}
@@ -383,6 +387,8 @@
 		}
 	}
 \endgroup
+
+\cs_generate_variant:Nn \pretty:nn {no}
 
 % ======== normal-catcode alias
 \let\prettyN\pretty:n

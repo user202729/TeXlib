@@ -242,6 +242,9 @@ The purpose of this function is that
 it can be inserted "anywhere" in order to \emph{inspect the input stream}
 without affecting how the function works.
 
+The function is \emph{alignment-safe} -- see documentation of |\group_align_safe_begin:| and |\group_align_safe_end:|
+for details, or \href{https://gist.github.com/user202729/9792ed6410e74a5c351af8f764c8deff#third-brace-hack-iffalsefi--iffalsefi}{the package author's GitHub Gist}.
+
 Note that the input stream will be tokenized and has catcode frozen.
 
 For example
@@ -254,6 +257,18 @@ will print out |78923456|.
 
 For now, it must be brace-balanced.  Use \cs{prettye:w} instead if this is a problem.
 \end{function}
+
+\begin{function}{\pretty:nw,\pretty:nnw}
+	\begin{syntax}
+		\cs{pretty:nw} \Arg{callback} \meta{tokens} \cs{prettystop}
+		\cs{pretty:nnw} \Arg{callback} \Arg{token list} \meta{tokens} \cs{prettystop}
+	\end{syntax}
+
+	See documentation of |\prettye:nw|.
+
+	These functions still do not support brace-unbalanced token lists.
+\end{function}
+
 
 \begin{function}[EXP]{\prettystop}
 	\begin{syntax}
