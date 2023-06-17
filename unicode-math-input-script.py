@@ -299,6 +299,11 @@ extra_synonyms = {v: u for u in
 					  ]
 				  for v in u}
 
+ASCII_symbol_synonym = {
+		"minus": "-",
+		"mid": "|",
+		}
+
 ##
 
 remaining_chars = changed_chars - {*unicode_math_table} - specially_handled - not_handled
@@ -388,6 +393,7 @@ for unicode_char, csnames_ in unicode_math_table.items():
 
 			for prefix, replacement in math_alphabet_translate.items():
 				if csname.startswith(prefix):
+					assert csname not in ASCII_symbol_synonym
 					cs = math_alphabet_csname_translation[csname.removeprefix(prefix)]
 					def wrap_in_alphabet_selector(cs: str)->str:
 						if replacement is None: return cs
@@ -402,6 +408,7 @@ for unicode_char, csnames_ in unicode_math_table.items():
 					break
 			else:
 				items1.append("\\" + csname)
+				if csname in ASCII_symbol_synonym: items1+=ASCII_symbol_synonym[csname]
 
 		if len(items1)==1:
 			a = items1[0]
@@ -424,7 +431,7 @@ for unicode_char, csnames_ in unicode_math_table.items():
 			assert not is_delimiter, (unicode_char, delimiter)
 			assert len(items1)==2, items1
 			assert re.fullmatch(r'\\[a-zA-Z]+', items1[0]), items1
-			assert re.fullmatch(r'\\[a-zA-Z]+', items1[1]), items1
+			assert re.fullmatch(r'\\[a-zA-Z]+|[^a-zA-Z]', items1[1]), items1
 			print(f"\\__umi_define_char{{{optional_space}{unicode_char}}}{{\\__umi_alternatives{items1[0]}{items1[1]}}}")
 
 ##
