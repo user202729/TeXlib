@@ -14,6 +14,8 @@ import atexit
 from functools import lru_cache
 import traceback
 
+P=ControlSequenceTokenMaker("_typstmathinput_")
+
 debug_=lambda *args, **kwargs: None
 
 execute(r"""
@@ -27,14 +29,17 @@ execute(r"""
 	},
 	cache-format.initial:n = { shelve },
 
+	rewrite-at-begin.tl_set:N=\_typstmathinput_rewrite_at_begin,
+	rewrite-at-begin.initial:n={},
+
 	watch-template-change.bool_set:N=\_typstmathinput_watch_template_change,
 }
 \ProcessKeysOptions{typstmathinput}
 """)
-cache_location=T._typstmathinput_cache_location.val().expand_estr()
-cache_format=T._typstmathinput_cache_format.val().expand_estr()
-watch_template_change=T._typstmathinput_watch_template_change.e3bool()
-
+cache_location=P.cache_location.val().expand_estr()
+cache_format=P.cache_format.val().expand_estr()
+watch_template_change=P.watch_template_change.e3bool()
+rewrite_at_begin=P.rewrite_at_begin.val().expand_estr()
 
 @lru_cache(maxsize=1)
 def initialize_tmpdir()->Path:
@@ -179,6 +184,8 @@ def typst_formulas_to_tex_tolerant_cached(l: list[str], extra_preamble: str)->bo
 def process_pending_formulas()->None:
 	# group pending_formulas by preamble
 	key=lambda f: f.extra_preamble
+	if pending_formulas:
+		print("Typstmathinput has pending formulas. Rerun.")  # log reader will miss this unfortunately
 	for k, g_ in itertools.groupby(sorted(pending_formulas, key=key), key=key):
 		g=list(g_)
 		debug_(f":: process {len(g)}")
@@ -196,12 +203,7 @@ def handle_formula(engine: "Engine")->None:
 		# although this can be fixed by escaping the braces with minimal harm)
 		catcode[" "]=catcode["\\"]=catcode["{"]=catcode["}"]=catcode["&"]=catcode["^"]=Catcode.other
 		delimiter: BalancedTokenList=BalancedTokenList.get_next()
-		s: str="".join(
-				(' ' if t==T.par else
-	 t.chr if isinstance(t, CharacterToken) else "\\"+t.csname+' ' if isinstance(t, ControlSequenceToken) else "??"
-	 )
-				for t in BalancedTokenList.get_until(delimiter, remove_braces=False)
-				).encode("latin1").decode('u8')
+		s: str=BalancedTokenList.get_until(delimiter, remove_braces=False).detokenize()
 		# really bad hack here ><
 
 	# preprocess it before passing to Typst
@@ -254,14 +256,16 @@ BalancedTokenList(r"""
 
 enabled: set[str]=set()
 
-def check_valid_delimiter(s: str)->None:
+def check_valid_delimiter(s: str)->str:
+	if len(s)==2 and s[0]=="\\": s=s[1]
 	if not (len(s)==1 and (s=="$" or ord(s)>=0x80)):
 		raise RuntimeError(f"'{s}' is not supported!")
+	return s
 
 @newcommand
 def typstmathinputenable()->None:
 	s: str=get_arg_str()
-	check_valid_delimiter(s)
+	s=check_valid_delimiter(s)
 	if s in enabled:
 		raise RuntimeError(f"'{s}' is already enabled!")
 	enabled.add(s)
@@ -283,7 +287,7 @@ def typstmathinputenable()->None:
 @newcommand
 def typstmathinputdisable()->None:
 	s: str=get_arg_str()
-	check_valid_delimiter(s)
+	s=check_valid_delimiter(s)
 	if s not in enabled:
 		raise RuntimeError(f"'{s}' is already disabled!")
 	enabled.remove(s)
@@ -316,4 +320,22 @@ r"""
 Alias ``\text{...}`` → ``\typstmathinputtext{...}``. User can redefine this function to customize the behavior.
 """
 
-execute(r'\AtBeginDocument{\typstmathinputenable{◇}}')
+if rewrite_at_begin:
+	execute(r'''
+	\AddToHook{begindocument/before} [typstmathinput] {
+		\AddToHook{begindocument/end} [typstmathinput] {
+			\_typstmathinput_rewrite_at_begin
+		}
+	}
+	''')
+	@newcommand
+	def _typstmathinput_rewrite_at_begin()->None:
+		T.inputlineno.int()
+		text=Path(T.currfileabspath.val_str()).read_text()
+		parts=text.split('\n\\begin{document}\n', maxsplit=1)
+		assert len(parts)==2
+		execute("\n"*(parts[0].count('\n')+2) +
+		  rewrite_body(parts[1]))
+
+else:
+	execute(r'\AtBeginDocument{\typstmathinputenable{◇}}')
