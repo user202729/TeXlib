@@ -7,6 +7,7 @@ import hashlib
 import re
 import typing
 from typing import Dict, Union, Optional, MutableMapping
+import pythonimmediate
 from pythonimmediate import*
 from pythonimmediate import simple
 from pythonimmediate.engine import default_engine
@@ -29,17 +30,19 @@ execute(r"""
 	},
 	cache-format.initial:n = { shelve },
 
-	rewrite-at-begin.tl_set:N=\_typstmathinput_rewrite_at_begin,
-	rewrite-at-begin.initial:n={},
 
 	watch-template-change.bool_set:N=\_typstmathinput_watch_template_change,
 }
 \ProcessKeysOptions{typstmathinput}
 """)
-cache_location=P.cache_location.val().expand_estr()
-cache_format=P.cache_format.val().expand_estr()
-watch_template_change=P.watch_template_change.e3bool()
-rewrite_at_begin=P.rewrite_at_begin.val().expand_estr()
+cache_location=P.cache_location.tl().expand_estr()
+cache_format=P.cache_format.tl().expand_estr()
+watch_template_change=P.watch_template_change.bool()
+
+
+#	rewrite-at-begin.tl_set:N=\_typstmathinput_rewrite_at_begin,
+#	rewrite-at-begin.initial:n={},
+#rewrite_at_begin=P.rewrite_at_begin.tl().expand_estr()
 
 @lru_cache(maxsize=1)
 def initialize_tmpdir()->Path:
@@ -76,11 +79,11 @@ def initialize_cache()->MutableMapping[str, str]:
 				self.load()
 			def load(self)->None:
 				# TODO handle the case of corrupted cache
-				try: self.data=json.loads(Path(cache_location).read_text())
+				try: self.data=json.loads(Path(cache_location).read_text(encoding='u8'))
 				except FileNotFoundError: pass
 			def save(self)->None:
 				self.data={k: self.data[k] for k in sorted(self.data.keys())}
-				Path(cache_location).write_text(json.dumps(self.data, indent=0))
+				Path(cache_location).write_text(json.dumps(self.data, indent=0), encoding='u8')
 			def __setitem__(self, key: str, value: str)->None:
 				super().__setitem__(key, value)
 				self.save()
@@ -105,8 +108,22 @@ class Input:
 	def hash(self)->str:
 		return hashlib.sha256((str(len(self.s)) + "|" + self.s + self.extra_preamble).encode('u8')).hexdigest()
 
+def fix_line_count(a: str, b: int)->str:
+	"""
+	Rewrite TeX code a such that it has exactly b newline characters.
+	"""
+	missing=b-a.count('\n')
+	assert missing>=0
+	return a+'%\n'*missing
+
 def typst_formulas_to_tex(l: list[str], extra_preamble: str)->list[str]:
-	# no caching, preamble must be the same
+	"""
+	Pass multiple formulas to Typst to process.
+
+	No caching is done.
+
+	The preamble of those formulas must be the same.
+	"""
 	initialize_template()
 	tmpdir=initialize_tmpdir()
 	delimiter = "XXXtypstmathinput-delimiterXXX"
@@ -145,7 +162,7 @@ r"""
 	try: subprocess.run(["pdftotext", n.with_suffix(".pdf")], cwd=tmpdir, check=True)
 	finally: n.with_suffix(".pdf").unlink(missing_ok=True)
 
-	try: result=n.with_suffix(".txt").read_text().replace("\n", "").replace("\x0c", "")
+	try: result=n.with_suffix(".txt").read_text(encoding='u8').replace("\n", "").replace("\x0c", "")
 	finally: n.with_suffix(".txt").unlink(missing_ok=True)
 
 	result_=result.split(delimiter)
@@ -159,7 +176,13 @@ pending_formulas: list[Input]=[]
 pending_formulas_set: set[Input]=set()
 
 def typst_formulas_to_tex_tolerant_cached(l: list[str], extra_preamble: str)->bool:  # return whether it's successful
-	debug_(f"+ process {len(l)} [{pending_formulas.index(Input(l[0], extra_preamble))} - {pending_formulas.index(Input(l[-1], extra_preamble))}]")
+	"""
+	No caching is done. Saves result to cache.
+	"""
+	def pending_formulas_index(i: Input)->int:
+		try: return pending_formulas.index(i)
+		except ValueError: return -1
+	debug_(f"+ process {len(l)} [{pending_formulas_index(Input(l[0], extra_preamble))} - {pending_formulas_index(Input(l[-1], extra_preamble))}]")
 	result: Optional[List[str]]=None
 	try:
 		result=typst_formulas_to_tex(l, extra_preamble)
@@ -174,18 +197,31 @@ def typst_formulas_to_tex_tolerant_cached(l: list[str], extra_preamble: str)->bo
 		if not typst_formulas_to_tex_tolerant_cached(l[:len(l)//2], extra_preamble): return False
 		return typst_formulas_to_tex_tolerant_cached(l[len(l)//2:], extra_preamble)
 
-	cache=initialize_cache()
 	assert len(l)==len(result)
+	cache=initialize_cache()
 	for f, r in zip(l, result):
 		cache[Input(f, extra_preamble).hash()]=r
 	debug_(" ↑ success")
 	return True
 
+def typst_formulas_to_tex_tolerant_use_cache(l: list[str], extra_preamble: str)->Optional[list[str]]:
+	cache=initialize_cache()
+	inputs=[Input(x, extra_preamble) for x in l]
+	remaining=[*{i: None for i in inputs if i.hash() not in cache}]
+	if remaining:
+		if not typst_formulas_to_tex_tolerant_cached([i.s for i in inputs], extra_preamble):
+			return []
+	return [cache[i.hash()] for i in inputs]
+
+def fix_line_count_multiple(a: list[str], b: list[str])->list[str]:
+	assert len(a)==len(b)
+	return [fix_line_count(a, b.count('\n')) for a, b in zip(a, b)]
+
 def process_pending_formulas()->None:
 	# group pending_formulas by preamble
 	key=lambda f: f.extra_preamble
 	if pending_formulas:
-		print("Typstmathinput has pending formulas. Rerun.")  # log reader will miss this unfortunately
+		typeout("Typstmathinput has pending formulas. Rerun.")
 	for k, g_ in itertools.groupby(sorted(pending_formulas, key=key), key=key):
 		g=list(g_)
 		debug_(f":: process {len(g)}")
@@ -193,7 +229,19 @@ def process_pending_formulas()->None:
 
 atexit.register(process_pending_formulas)
 
-def handle_formula(engine: "Engine")->None:
+def preprocess_formula(s: str)->str:
+	"""
+	Preprocess a formula before passing to Typst.
+	"""
+	superscript: Dict[str, Union[str, int, None]] = dict(zip("⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼", "0123456789+-="))
+	subscript: Dict[str, Union[str, int, None]] = dict(zip("₀₁₂₃₄₅₆₇₈₉₊₋₌", "0123456789+-="))
+	s = re.sub('[' + "".join(superscript) + ']+', lambda x: "^(" + x[0].translate(str.maketrans(superscript)) + ")" , s)
+	s = re.sub('[' + "".join(subscript) + ']+', lambda x: "_(" + x[0].translate(str.maketrans(subscript)) + ")" , s)
+	s = re.sub(r'√\s*\(', ' sqrt(', s)
+	s = re.sub(r'√\s*(\d+|\w+)', r' sqrt(\1)', s)
+	return s
+
+def handle_formula()->None:
 	global total_formula_counter
 	total_formula_counter += 1
 
@@ -204,15 +252,8 @@ def handle_formula(engine: "Engine")->None:
 		catcode[" "]=catcode["\\"]=catcode["{"]=catcode["}"]=catcode["&"]=catcode["^"]=Catcode.other
 		delimiter: BalancedTokenList=BalancedTokenList.get_next()
 		s: str=BalancedTokenList.get_until(delimiter, remove_braces=False).detokenize()
-		# really bad hack here ><
 
-	# preprocess it before passing to Typst
-	superscript: Dict[str, Union[str, int, None]] = dict(zip("⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼", "0123456789+-="))
-	subscript: Dict[str, Union[str, int, None]] = dict(zip("₀₁₂₃₄₅₆₇₈₉₊₋₌", "0123456789+-="))
-	s = re.sub('[' + "".join(superscript) + ']+', lambda x: "^(" + x[0].translate(str.maketrans(superscript)) + ")" , s)
-	s = re.sub('[' + "".join(subscript) + ']+', lambda x: "_(" + x[0].translate(str.maketrans(subscript)) + ")" , s)
-	s = re.sub(r'√\s*\(', ' sqrt(', s)
-	s = re.sub(r'√\s*(\d+|\w+)', r' sqrt(\1)', s)
+	s=preprocess_formula(s)
 
 	input_=Input(s, extra_preamble)
 	input_hash=input_.hash()
@@ -240,9 +281,9 @@ def handle_formula(engine: "Engine")->None:
 handle_formula_identifier = add_handler(handle_formula)
 
 extra_preamble: str=""
-def set_extra_preamble(engine: "Engine")->None:
+def set_extra_preamble()->None:
 	global extra_preamble
-	extra_preamble=T.typstmathinputextrapreamble.val_str()
+	extra_preamble=T.typstmathinputextrapreamble.str()
 
 
 set_extra_preamble_identifier = add_handler(set_extra_preamble)
@@ -320,22 +361,44 @@ r"""
 Alias ``\text{...}`` → ``\typstmathinputtext{...}``. User can redefine this function to customize the behavior.
 """
 
-if rewrite_at_begin:
-	execute(r'''
-	\AddToHook{begindocument/before} [typstmathinput] {
-		\AddToHook{begindocument/end} [typstmathinput] {
-			\_typstmathinput_rewrite_at_begin
-		}
-	}
-	''')
-	@newcommand
-	def _typstmathinput_rewrite_at_begin()->None:
-		T.inputlineno.int()
-		text=Path(T.currfileabspath.val_str()).read_text()
-		parts=text.split('\n\\begin{document}\n', maxsplit=1)
-		assert len(parts)==2
-		execute("\n"*(parts[0].count('\n')+2) +
-		  rewrite_body(parts[1]))
+def rewrite_body(body: str, delimiter: str)->str:
+	parts=body.split(delimiter)
+	assert len(parts)%2!=0
+	formulas=[preprocess_formula(x) for x in parts[1::2]]
+	formulas=typst_formulas_to_tex_tolerant_use_cache(formulas, extra_preamble)
+	if formulas is None:
+		return r"\textbf{??}"
+	cache=initialize_cache()
+	parts[1::2] = fix_line_count_multiple(formulas, parts[1::2])
+	result="".join(parts)
+	return result
 
-else:
-	execute(r'\AtBeginDocument{\typstmathinputenable{◇}}')
+@newcommand
+def typstmathinputrewrite()->str:
+	s: str=get_arg_str()
+	s=check_valid_delimiter(s)
+	assert s not in enabled
+	#execute(r'''
+	#\AddToHook{begindocument/before} [typstmathinput] {
+	#	\AddToHook{begindocument/end} [typstmathinput] {
+	#		\_typstmathinput_rewrite_at_begin
+	#	}
+	#}
+	#''')
+	#@newcommand
+	#def _typstmathinput_rewrite_at_begin()->None:
+	lineno: int=T.inputlineno.int()
+	path: str=T.currfileabspath.str()
+	assert path
+	text=Path(path).read_text(encoding='u8')
+	a=text.splitlines()
+	assert r'\typstmathinputrewrite' in a[lineno-1]
+	result=(
+			"\n"*(lineno) +
+			rewrite_body('\n'.join(a[lineno:]), s)
+			+ r'\end{document}'  # just in case
+	  )
+	Path("/tmp/c.tex").write_text(f"{result}")
+	return result
+
+#execute(r'\AtBeginDocument{\typstmathinputenable{◇}}')
