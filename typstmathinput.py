@@ -443,7 +443,20 @@ def typstmathinputrewrite()->str:
 			rewrite_body('\n'.join(a[lineno:]), s)
 			+ r'\end{document}'  # just in case
 	  )
-	Path("/tmp/c.tex").write_text(f"{result}")
+	#Path("/tmp/c.tex").write_text(f"{result}")
 	return result
+
+@newcommand
+def typstmathinputprepare()->None:
+	s: str=get_arg_str()
+	s=check_valid_delimiter(s)
+	assert s in enabled
+	lineno: int=T.inputlineno.int()
+	path: str=T.currfileabspath.str()
+	assert path
+	text=Path(path).read_text(encoding='u8')
+	a=text.splitlines()
+	assert r'\typstmathinputprepare' in a[lineno-1]
+	rewrite_body('\n'.join(a[lineno:]), s)  # just populate the cache, discard the result
 
 #execute(r'\AtBeginDocument{\typstmathinputenable{◇}}')
