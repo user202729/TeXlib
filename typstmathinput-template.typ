@@ -183,12 +183,12 @@ assert(repr(space)=="space")
     }),)
   }else if x.func()==math.op{
     ({
-      if x.limits{
+      if x.has("limits") and x.limits{
         "\\operatorname*{"
       }else{
         "\\operatorname{"
       }
-      x.text
+      x.text.replace(" ", "\\,")
       "}"
     },)
   }else if x.func()==space{
@@ -347,6 +347,7 @@ asserte( equation_body_to_latex($mat(1, 2/3; 3, 4; 5, 6)$.body, displaystyle).he
 //#import "/home/user202729/TeX/typstmathinput-template.typ": equation_to_latex
 
 #let a =($ 
+op("lim sup")_3
 binom(1, 2)
     vec(1, 2, delim: "[")
     mat(1, 2; 3, 4; delim: "[")
@@ -362,6 +363,7 @@ vec(1, 2, 3) mat(1, 2; 3, 4) (sum (0) x)+111+2^3/4+max_(i=1)^10(i^2)+max(x^2)+ro
 [τ_i+1<μ ≤ τ_i] = cases(1 "if" τ_i+1<μ ≤ τ_i \ 0 "otherwise").
 $)
 
+//'
 
 #a
 
