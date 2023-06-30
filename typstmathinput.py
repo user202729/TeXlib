@@ -1,3 +1,5 @@
+# to run tests: pytest --doctest-modules typstmathinput.py
+
 import tempfile
 from pathlib import Path
 import itertools
@@ -14,6 +16,14 @@ from pythonimmediate.engine import default_engine
 import atexit
 from functools import lru_cache
 import traceback
+import sys
+
+# debug:
+if __name__=="__main__" or "pytest" in sys.modules:
+	assert default_engine.engine is None
+	from pythonimmediate.engine import ChildProcessEngine
+	default_engine.set_engine(ChildProcessEngine("pdftex"))
+	execute(r"""\ExplSyntaxOn""")
 
 P=ControlSequenceTokenMaker("_typstmathinput_")
 
@@ -38,7 +48,6 @@ execute(r"""
 cache_location=P.cache_location.tl().expand_estr()
 cache_format=P.cache_format.tl().expand_estr()
 watch_template_change=P.watch_template_change.bool()
-
 
 #	rewrite-at-begin.tl_set:N=\_typstmathinput_rewrite_at_begin,
 #	rewrite-at-begin.initial:n={},
@@ -175,9 +184,12 @@ total_formula_counter: int=0
 pending_formulas: list[Input]=[]
 pending_formulas_set: set[Input]=set()
 
-def typst_formulas_to_tex_tolerant_cached(l: list[str], extra_preamble: str)->bool:  # return whether it's successful
+def typst_formulas_to_tex_tolerant_cached(l: list[str], extra_preamble: str, *, print_only_if_error: bool=True)->bool:  # return whether it's successful
 	"""
 	No caching is done. Saves result to cache.
+
+	:param extra_preamble: Obvious.
+	:param print_only_if_error: Default to True. If this is False then on error it will raise an error.
 	"""
 	def pending_formulas_index(i: Input)->int:
 		try: return pending_formulas.index(i)
@@ -189,13 +201,15 @@ def typst_formulas_to_tex_tolerant_cached(l: list[str], extra_preamble: str)->bo
 	except:
 		# "binary search" for the first error location
 		if len(l)==1:
-			debug_(" ↑ fail ×")
-			traceback.print_exc()
-			return False
+			if print_only_if_error:
+				debug_(" ↑ fail ×")
+				traceback.print_exc()
+				return False
+			else: raise
 
 	if result is None:  # we don't do this in except block to avoid making the traceback long
-		if not typst_formulas_to_tex_tolerant_cached(l[:len(l)//2], extra_preamble): return False
-		return typst_formulas_to_tex_tolerant_cached(l[len(l)//2:], extra_preamble)
+		if not typst_formulas_to_tex_tolerant_cached(l[:len(l)//2], extra_preamble, print_only_if_error=print_only_if_error): return False
+		return typst_formulas_to_tex_tolerant_cached(l[len(l)//2:], extra_preamble, print_only_if_error=print_only_if_error)
 
 	assert len(l)==len(result)
 	cache=initialize_cache()
@@ -205,19 +219,36 @@ def typst_formulas_to_tex_tolerant_cached(l: list[str], extra_preamble: str)->bo
 	return True
 
 def typst_formulas_to_tex_tolerant_use_cache(l: list[str], extra_preamble: str)->Optional[list[str]]:
+	r"""
+	Given a list of Typst formulas with a preamble, return a list of converted TeX formulas.
+
+	Do the most sensible thing: read from the cache, if it's not available then run Typst then store the result to cache.
+
+	If an error happens, then raise the error.
+
+	>>> typst_formulas_to_tex_tolerant_use_cache(["1", "2"], "")
+	['\\(\\typstmathinputnormcat 1\\)', '\\(\\typstmathinputnormcat 2\\)']
+	>>> typst_formulas_to_tex_tolerant_use_cache(["1", "#?"], "")
+	Traceback (most recent call last):
+		...
+	RuntimeError: Formula $#?$ is invalid: ...
+	"""
 	cache=initialize_cache()
 	inputs=[Input(x, extra_preamble) for x in l]
 	remaining=[*{i: None for i in inputs if i.hash() not in cache}]
 	if remaining:
-		if not typst_formulas_to_tex_tolerant_cached([i.s for i in inputs], extra_preamble):
-			return []
+		if not typst_formulas_to_tex_tolerant_cached([i.s for i in inputs], extra_preamble, print_only_if_error=False):
+			return None
 	return [cache[i.hash()] for i in inputs]
 
 def fix_line_count_multiple(a: list[str], b: list[str])->list[str]:
-	assert len(a)==len(b)
+	assert len(a)==len(b), (a, b)
 	return [fix_line_count(a, b.count('\n')) for a, b in zip(a, b)]
 
 def process_pending_formulas()->None:
+	"""
+	Process ``pending_formulas`` and store it to the cache to be used in the next run.
+	"""
 	# group pending_formulas by preamble
 	key=lambda f: f.extra_preamble
 	if pending_formulas:
@@ -242,6 +273,9 @@ def preprocess_formula(s: str)->str:
 	return s
 
 def handle_formula()->None:
+	"""
+	Function called when a formula is seen (not in rewrite mode).
+	"""
 	global total_formula_counter
 	total_formula_counter += 1
 
@@ -298,6 +332,17 @@ BalancedTokenList(r"""
 enabled: set[str]=set()
 
 def check_valid_delimiter(s: str)->str:
+	r"""
+	Check ``s`` is a valid value to be passed in ``\typstmathinputenable`` etc.
+	and return the processed delimiter.
+
+	>>> check_valid_delimiter("??")
+	Traceback (most recent call last):
+		...
+	RuntimeError: '??' is not supported!
+	>>> check_valid_delimiter(r"\$")
+	'$'
+	"""
 	if len(s)==2 and s[0]=="\\": s=s[1]
 	if not (len(s)==1 and (s=="$" or ord(s)>=0x80)):
 		raise RuntimeError(f"'{s}' is not supported!")
