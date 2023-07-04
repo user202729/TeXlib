@@ -1,4 +1,5 @@
-# to run tests: pytest --doctest-modules typstmathinput.py
+# to run tests: 
+# pytest --doctest-modules typstmathinput.py
 
 import tempfile
 from pathlib import Path
@@ -406,15 +407,28 @@ r"""
 Alias ``\text{...}`` → ``\typstmathinputtext{...}``. User can redefine this function to customize the behavior.
 """
 
-def rewrite_body(body: str, delimiter: str)->str:
+def get_formulas_in_body_before_preprocess(body: str, delimiter: str)->list[str]:
+	"""
+	>>> get_formulas_in_body_before_preprocess('a $1+2$ b $3+4²$', '$')
+	['1+2', '3+4²']
+	>>> get_formulas_in_body_before_preprocess('$', '$')
+	Traceback (most recent call last):
+		...
+	RuntimeError: Stray or commented-out $ in document!
+	"""
 	parts=body.split(delimiter)
-	assert len(parts)%2!=0
-	formulas=[preprocess_formula(x) for x in parts[1::2]]
-	formulas=typst_formulas_to_tex_tolerant_use_cache(formulas, extra_preamble)
-	if formulas is None:
+	if len(parts)%2==0: raise RuntimeError(f"Stray or commented-out {delimiter} in document!")
+	return parts[1::2]
+
+def rewrite_body(body: str, delimiter: str)->str:
+	formulas=get_formulas_in_body_before_preprocess(body, delimiter)
+	formulas=[preprocess_formula(x) for x in formulas]
+	formulas_converted=typst_formulas_to_tex_tolerant_use_cache(formulas, extra_preamble)
+	if formulas_converted is None:
 		return r"\textbf{??}"
 	cache=initialize_cache()
-	parts[1::2] = fix_line_count_multiple(formulas, parts[1::2])
+	parts=body.split(delimiter)
+	parts[1::2] = fix_line_count_multiple(formulas_converted, parts[1::2])
 	result="".join(parts)
 	return result
 
@@ -447,16 +461,66 @@ def typstmathinputrewrite()->str:
 	return result
 
 @newcommand
-def typstmathinputprepare()->None:
-	s: str=get_arg_str()
-	s=check_valid_delimiter(s)
-	assert s in enabled
+def typstmathinputprepare()->Optional[str]:
+	"""
+	Use starred version to still use old Python-side $...$ handling, use non-starred version to use TeX version (faster)
+	"""
+	starred: bool=peek_next_char()=="*"
+	delimiter: str=get_arg_str()
+	delimiter=check_valid_delimiter(delimiter)
+	assert delimiter in enabled
 	lineno: int=T.inputlineno.int()
 	path: str=T.currfileabspath.str()
 	assert path
 	text=Path(path).read_text(encoding='u8')
 	a=text.splitlines()
 	assert r'\typstmathinputprepare' in a[lineno-1]
-	rewrite_body('\n'.join(a[lineno:]), s)  # just populate the cache, discard the result
+	body='\n'.join(a[lineno:])
+	if starred:
+		rewrite_body(body, delimiter)  # just populate the cache, discard the result
+	else:
+		formulas=get_formulas_in_body_before_preprocess(body, delimiter)
+		formulas_preprocessed=[preprocess_formula(x) for x in formulas]
+		formulas_converted=typst_formulas_to_tex_tolerant_use_cache(formulas_preprocessed, extra_preamble)
+		if formulas_converted is None:
+			return r"\textbf{??}"
+
+		# redefine $...$ to use TeX
+		if delimiter=="$" or default_engine.is_unicode:
+			delimiter_set_command=r'\xdef' + delimiter
+		else:
+			delimiter_set_command=r'\expandafter\xdef\csname u8:\detokenize{' + delimiter + r'}\endcsname'
+		delimiter_set_command+=r'{\csname _typstmathinput_handle_formula\endcsname}'
+		execute(
+			delimiter_set_command +
+			r'\csname _typstmathinput_set_handle_formula_delimiter\endcsname{' + delimiter + '}' +
+			r'\begingroup\def\\#1{\expandafter\gdef\csname _typstmathinput_prepared)\detokenize{#1}\endcsname}' + '\n' +
+			"".join(
+				r'\\{' + f + '}{' + fc + '}\n' for f, fc in zip(formulas, formulas_converted)
+				)
+			+ r'\endgroup'
+			)
+
+	return None
+
+execute((#TeX
+r"""
+\errorcontextlines=5
+{
+\ExplSyntaxOn
+\protected\gdef \__handle_formula {
+	\__handle_formula_a \empty
+}
+\protected\gdef \__set_handle_formula_delimiter #1 {
+	\protected\gdef \__handle_formula_a ##1 #1 {
+		\begingroup\expandafter\endgroup\csname __prepared)\detokenize\expandafter{##1}\endcsname
+	}
+}
+}
+""").replace('__', '_typstmathinput_'))
+
+# handle_formula is first called to insert the \empty token
+# handle_formula_a is called after it to grab the argument
+# use \begingroup\expandafter\endgroup to raise an error if the formula is unexpected
 
 #execute(r'\AtBeginDocument{\typstmathinputenable{◇}}')
