@@ -223,7 +223,9 @@ assert(repr(space)=="space")
       content=setheight(cat(style, content), 1.4)
     }
 
-    if content=="|" and spacebefore and spaceafter { ("\\mid ",) }
+    if content=="|" {
+      if spacebefore and spaceafter { ("\\mid ",) } else { ("\\vert ",) }
+    }
     else if content=="‖" and spacebefore and spaceafter { ("\\parallel ",) }
     else {
       // currently Typst code such as `x "is natural"` will make the TeX code omit the space before the quote.
@@ -312,12 +314,12 @@ assert(repr(space)=="space")
   if x.block {
     let body=equation_body_to_latex(x.body, displaystyle)
     if body.align or body.linebreak{
-      "\\begin{align*}\\typstmathinputnormcat " + body.body + "\\end{align*}"
+      "\\begin{align*}" + body.body + "\\end{align*}"
     } else {
-      "\\[\\typstmathinputnormcat " + body.body + "\\]"
+      "\\[" + body.body + "\\]"
     }
   } else {
-    "\\(\\typstmathinputnormcat " + equation_body_to_latex(x.body, textstyle).body + "\\)" // for usage from TeX don't use active `$` which recursively call the original function
+    "\\(" + equation_body_to_latex(x.body, textstyle).body + "\\)" // for usage from TeX don't use active `$` which recursively call the original function
   }
 }
 

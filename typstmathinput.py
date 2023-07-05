@@ -228,7 +228,7 @@ def typst_formulas_to_tex_tolerant_use_cache(l: list[str], extra_preamble: str)-
 	If an error happens, then raise the error.
 
 	>>> typst_formulas_to_tex_tolerant_use_cache(["1", "2"], "")
-	['\\(\\typstmathinputnormcat 1\\)', '\\(\\typstmathinputnormcat 2\\)']
+	['\\(1\\)', '\\(2\\)']
 	>>> typst_formulas_to_tex_tolerant_use_cache(["1", "#?"], "")
 	Traceback (most recent call last):
 		...
@@ -387,20 +387,6 @@ def typstmathinputdisable()->None:
 	else:
 		T[("u8:"+s).encode('u8')].set_eq(T[("_typstmathinput_backup_"+s).encode('u8')])
 
-
-BalancedTokenList(r"""
-				  \def\typstmathinputnormcat{\catcode `\| 12 \catcode `" 12 \relax}
-""").execute()
-
-#@newcommand
-def typstmathinputnormcat()->None:
-	"""
-	Internal function.
-
-	To be used inside a math environment. Avoid fancyvrb or csquotes causing trouble with active characters.
-	"""
-	#catcode["|"]=catcode['"']=Catcode.other
-	pass
 
 T.typstmathinputtext.set_eq(T.text)
 r"""
