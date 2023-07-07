@@ -1,10 +1,11 @@
 %! TEX program = pdflatex
 \documentclass{article}
 \usepackage{amsmath}
-\usepackage{amssymb}
+%\usepackage{amssymb}
 \usepackage{bm}
 \usepackage{hyperref}
 \usepackage{iftex}
+\usepackage{newtxmath}
 
 \newif\ifonehalfPredefined
 \onehalfPredefinedtrue
@@ -82,7 +83,7 @@ $\ncong, x_{\ncong}$
 
 use unicode characters: $∄ \quad x ≢ y \quad ⊭$
 
-$ℤ ℝ ½$
+circ: $\circ$ / $ℤ ℝ ½ ∘ ↚ □$
 
 \newcommand\test{123}
 \section{a \iftimesPredefined ×\fi b = \texorpdfstring{$a × b$}{a \iftimesPredefined ×\fi b} Ü \"U \test}

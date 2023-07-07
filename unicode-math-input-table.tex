@@ -99,7 +99,7 @@
 \__umi_define_char{¬}{\__umi_alternatives\neg\lnot}
 \__umi_define_char{±}{\pm}
 \__umi_define_char{¶}{\mathparagraph}
-\__umi_define_char{·}{\cdotp}
+\__umi_define_char{·}{\__umi_alternatives\cdotp\centerdot}
 \__umi_define_char{×}{\times}
 \__umi_define_char{ð}{\__umi_alternatives\matheth\eth}
 \__umi_define_char{÷}{\div}
@@ -169,7 +169,7 @@
 \__umi_define_char{‗}{\twolowline}
 \__umi_define_char{†}{\dagger}
 \__umi_define_char{‡}{\ddagger}
-\__umi_define_char{•}{\__umi_alternatives\smblkcircle\bullet}
+\__umi_define_char{•}{\__umi_alternatives_m{\smblkcircle\bullet\vysmblkcircle}}
 \__umi_define_char{‥}{\enleadertwodots}
 \__umi_define_char{…}{\__umi_alternatives\unicodeellipsis\ldots}
 \__umi_define_char{‸}{\caretinsert}
@@ -246,7 +246,7 @@
 \__umi_define_char{↗}{\nearrow}
 \__umi_define_char{↘}{\searrow}
 \__umi_define_char{↙}{\swarrow}
-\__umi_define_char{↚}{\__umi_alternatives_not\nleftarrow\leftarrow}
+\__umi_define_char{↚}{\__umi_alternatives_not_two\nleftarrow\ngets\leftarrow\gets}
 \__umi_define_char{↛}{\__umi_alternatives_not\nrightarrow\rightarrow}
 \__umi_define_char{↜}{\leftwavearrow}
 \__umi_define_char{↝}{\rightwavearrow}
@@ -363,8 +363,8 @@
 \__umi_define_char_maybe_delimiter{∕}{\divslash}
 \__umi_define_char{∖}{\smallsetminus}
 \__umi_define_char{∗}{\ast}
-\__umi_define_char{∘}{\__umi_alternatives\vysmwhtcircle\circ}
-\__umi_define_char{∙}{\vysmblkcircle}
+\__umi_define_char{∘}{\__umi_alternatives_m{\vysmwhtcircle\circ\smwhtcircle}}
+\__umi_define_char{∙}{\__umi_alternatives_m{\vysmblkcircle\bullet\smblkcircle}}
 \__umi_define_char{∝}{\propto}
 \__umi_define_char{∞}{\infty}
 \__umi_define_char{∟}{\rightangle}
@@ -404,7 +404,7 @@
 \__umi_define_char{≁}{\__umi_alternatives_not\nsim\sim}
 \__umi_define_char{≂}{\eqsim}
 \__umi_define_char{≃}{\__umi_alternatives\simeq\sime}
-\__umi_define_char{≄}{\__umi_alternatives\nsime\nsimeq}
+\__umi_define_char{≄}{\__umi_alternatives_not_two\nsime\nsimeq\sime\simeq}
 \__umi_define_char{≅}{\cong}
 \__umi_define_char{≆}{\simneqq}
 \__umi_define_char{≇}{\__umi_alternatives_not\ncong\cong}
@@ -448,8 +448,8 @@
 \__umi_define_char{≭}{\__umi_alternatives_not\nasymp\asymp}
 \__umi_define_char{≮}{\__umi_alternatives_not\nless\less}
 \__umi_define_char{≯}{\ngtr}
-\__umi_define_char{≰}{\__umi_alternatives_not\nleq\leq}
-\__umi_define_char{≱}{\__umi_alternatives_not\ngeq\geq}
+\__umi_define_char{≰}{\__umi_alternatives_not_two\nleq\nle\leq\le}
+\__umi_define_char{≱}{\__umi_alternatives_not_two\ngeq\nge\geq\ge}
 \__umi_define_char{≲}{\lesssim}
 \__umi_define_char{≳}{\gtrsim}
 \__umi_define_char{≴}{\__umi_alternatives_not\nlesssim\lesssim}
@@ -673,8 +673,8 @@
 \__umi_define_char{░}{\blockqtrshaded}
 \__umi_define_char{▒}{\blockhalfshaded}
 \__umi_define_char{▓}{\blockthreeqtrshaded}
-\__umi_define_char{■}{\mdlgblksquare}
-\__umi_define_char{□}{\mdlgwhtsquare}
+\__umi_define_char{■}{\__umi_alternatives\mdlgblksquare\blacksquare}
+\__umi_define_char{□}{\__umi_alternatives_m{\mdlgwhtsquare\Box\square}}
 \__umi_define_char{▢}{\squoval}
 \__umi_define_char{▣}{\blackinwhitesquare}
 \__umi_define_char{▤}{\squarehfill}
@@ -692,7 +692,7 @@
 \__umi_define_char{▰}{\parallelogramblack}
 \__umi_define_char{▱}{\parallelogram}
 \__umi_define_char{▲}{\bigblacktriangleup}
-\__umi_define_char{△}{\__umi_alternatives\bigtriangleup\varbigtriangleup}
+\__umi_define_char{△}{\__umi_alternatives_m{\bigtriangleup\triangle\varbigtriangleup}}
 \__umi_define_char{▴}{\blacktriangle}
 \__umi_define_char{▵}{\vartriangle}
 \__umi_define_char{▶}{\blacktriangleright}
@@ -715,7 +715,7 @@
 \__umi_define_char{◇}{\mdlgwhtdiamond}
 \__umi_define_char{◈}{\blackinwhitediamond}
 \__umi_define_char{◉}{\fisheye}
-\__umi_define_char{◊}{\mdlgwhtlozenge}
+\__umi_define_char{◊}{\__umi_alternatives_m{\mdlgwhtlozenge\Diamond\lozenge}}
 \__umi_define_char{○}{\__umi_alternatives\mdlgwhtcircle\bigcirc}
 \__umi_define_char{◌}{\dottedcircle}
 \__umi_define_char{◍}{\circlevertfill}
@@ -743,7 +743,7 @@
 \__umi_define_char{◣}{\llblacktriangle}
 \__umi_define_char{◤}{\ulblacktriangle}
 \__umi_define_char{◥}{\urblacktriangle}
-\__umi_define_char{◦}{\smwhtcircle}
+\__umi_define_char{◦}{\__umi_alternatives_m{\smwhtcircle\circ\vysmwhtcircle}}
 \__umi_define_char{◧}{\squareleftblack}
 \__umi_define_char{◨}{\squarerightblack}
 \__umi_define_char{◩}{\squareulblack}
@@ -889,8 +889,8 @@
 \__umi_define_char{⤋}{\Ddownarrow}
 \__umi_define_char{⤌}{\leftbkarrow}
 \__umi_define_char{⤍}{\rightbkarrow}
-\__umi_define_char{⤎}{\leftdbkarrow}
-\__umi_define_char{⤏}{\__umi_alternatives\dbkarrow\dbkarow}
+\__umi_define_char{⤎}{\__umi_alternatives\leftdbkarrow\dashleftarrow}
+\__umi_define_char{⤏}{\__umi_alternatives_m{\dbkarrow\dasharrow\dashrightarrow\dbkarow}}
 \__umi_define_char{⤐}{\__umi_alternatives\drbkarrow\drbkarow}
 \__umi_define_char{⤑}{\rightdotarrow}
 \__umi_define_char{⤒}{\baruparrow}
@@ -1351,7 +1351,7 @@
 \__umi_define_char{⫙}{\forkv}
 \__umi_define_char{⫚}{\topfork}
 \__umi_define_char{⫛}{\mlcp}
-\__umi_define_char{⫝̸}{\forks}
+\__umi_define_char{⫝̸}{\__umi_alternatives\forks\nforksnot}
 \__umi_define_char{⫝}{\forksnot}
 \__umi_define_char{⫞}{\shortlefttack}
 \__umi_define_char{⫟}{\shortdowntack}

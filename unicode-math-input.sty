@@ -65,10 +65,22 @@
 		\ifdefined #2
 			#2
 		\else
-			\msg_error:nnn {unicode-math-input} {undefined-cs} {#1#2}
+			\__umi_raise_error {#1#2}
 		\fi
 	\fi
 }
+
+\cs_new_protected:Npn \__umi_alternatives_m #1 {
+	\tl_map_inline:nn {#1} {
+		\ifdefined ##1
+			##1
+			\tl_map_break:n {\use_none:nn}
+		\fi
+	}
+	\__umi_raise_error {#1}
+}
+
+\cs_new_protected:Npn \__umi_raise_error { \msg_error:nnn {unicode-math-input} {undefined-cs} }
 
 % #1 is control sequence, #2 is anything (must not peek ahead!)
 \cs_new_protected:Npn \__umi_alternatives_iisafe #1 #2 {
@@ -92,6 +104,16 @@
 		\fi
 	\fi
 }
+
+\cs_new_protected:Npn \__umi_alternatives_not_two #1 #2 #3 #4{
+	\ifdefined #1   #1       \else
+	\ifdefined #2   #2       \else
+	\ifdefined #3   \not#3   \else
+	\ifdefined #4   \not#4   \else
+		\msg_error:nnn {unicode-math-input} {undefined-cs} {#1#2#3#4}
+	\fi \fi \fi \fi
+}
+
 
 % ======== \__umi_require_math
 \msg_new:nnn {unicode-math-input} {not-math-mode} {

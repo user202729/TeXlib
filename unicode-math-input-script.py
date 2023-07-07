@@ -2,7 +2,7 @@
 """
 This file is not used while TeX is running. It's for generating unicode-math-input-table.tex file only.
 This requires pythonimmediate (not sure which version is compatible but
-commit facff3e1d50485a6588a0612159ca0c7997cb9aa on Python 3.10.10 is)
+commit 020068db8a966c138b5b0b93695c0fefdef03d0a on Python 3.11.3 is)
 
 To generate: run::
 	python3 unicode-math-input-script.py > unicode-math-input-table.tex
@@ -183,33 +183,50 @@ def same_meaning_control_sequences(meaning: dict[str, str])->list[list[str]]:
 
 extra_synonyms_list += same_meaning_control_sequences(m)
 
-# ======== extract amsmath synonyms
+# ======== extract amsmath&stix synonyms
 
 
-with ChildProcessEngine("luatex", env={**os.environ, "hash_extra": "0"}) as e, default_engine.set_engine(e):
-	execute(r"""
-	\documentclass{article}
-	\usepackage{amsmath}
-	\usepackage{amssymb}
-	\usepackage{amsfonts}
-	\usepackage{mathrsfs}
-	\begin{document}
-	""")
-	c=control_sequences()
-	m={x: T[x].meaning_str() for x in c}
-	extra_synonyms_list += same_meaning_control_sequences(m)
-
+m_values=[]
+for preamble in [
+r"""
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsfonts}
+\begin{document}
+""",
+r"""
+\documentclass{article}
+\usepackage{stix}
+\begin{document}
+"""
+]:
+	with ChildProcessEngine("luatex", env={**os.environ, "hash_extra": "0"}) as e, default_engine.set_engine(e):
+		execute(preamble)
+		c=control_sequences()
+		m={x: T[x].meaning_str() for x in c}
+		extra_synonyms_list += same_meaning_control_sequences(m)
+		m_values.append(m)
+[amsmath_meaning, stix_meaning]=m_values
 # ======== build extra_synonyms table
 
-# I'm somewhat lazy to do a graph traversal to union the components
+while True:
+	tmp=Counter([x for l in extra_synonyms_list for x in l])
+	[(item, frequency)]=tmp.most_common(1)
+	if frequency==1: break
+	assert frequency>1
+	extra_synonyms_list=[
+			# the group that contain item
+			[*{x for l in extra_synonyms_list if item in l for x in l}]
+			] + [
+					# remaining groups
+					l for l in extra_synonyms_list if item not in l]
+	
 
-extra_synonyms_list=[sorted(l) for l in {frozenset(
+extra_synonyms_list=sorted([sorted(l) for l in {frozenset(
 	item for item in l
 	if item not in ("dotsc", "dotsm", "dotsb", "dots")  # some simple filtering -- we will just use \cdots and \ldots
-	) for l in extra_synonyms_list} if len(l)>1] # deduplicate
-
-extra_synonyms_list=[l for l in extra_synonyms_list if not {*l}&{"usepackage", "endenumerate", "encodingdefault"}]
-# filter out some non-math entries
+	) for l in extra_synonyms_list} if len(l)>1]) # deduplicate
 
 tmp=Counter(sum(extra_synonyms_list, []))
 assert tmp.most_common()[0][1]==1, tmp
@@ -425,7 +442,7 @@ for i in range(ord("!"), ord("~")+1):
 	if fullch in remaining_chars: remaining_chars.remove(fullch)
 	print(r'\__umi_define_char{' + fullch + r'}{\char'+str(i)+' }')
 
-defined_csnames = {x for l in unicode_math_table.values() for x in l}
+defined_csnames = {x for l in unicode_math_table.values() for x in l} | {*stix_meaning} | {*amsmath_meaning}
 
 
 pdf_engine=ChildProcessEngine("pdftex")
@@ -437,6 +454,15 @@ with default_engine.set_engine(pdf_engine): execute(r"""
 \usepackage{mathrsfs}
 \begin{document}
 """)
+
+def remove_not(a: str)->Optional[str]:
+	global defined_csnames
+	if a in (r"\ni", r"\nu"): return None
+	if a.startswith(r"\not") and a.removeprefix(r"\not") in defined_csnames:
+		return '\\' + a.removeprefix(r"\not")
+	elif a.startswith(r"\n") and a.removeprefix(r"\n") in defined_csnames:
+		return '\\' + a.removeprefix(r"\n")
+	else: return None
 
 for unicode_char, csnames_ in unicode_math_table.items():
 	csnames = [*csnames_]
@@ -528,26 +554,30 @@ for unicode_char, csnames_ in unicode_math_table.items():
 
 		if len(items1)==1:
 			a = items1[0]
-			if a.startswith(r"\not") and a.removeprefix(r"\not") in defined_csnames:
+			b = remove_not(a)
+			if b is not None:
 				assert not is_delimiter
-				b='\\' + a.removeprefix(r"\not")
 				print(f"\\__umi_define_char{{{optional_space}{unicode_char}}}{{\__umi_alternatives_not{a}{b}}}")
-				a.removeprefix(r"\not")
-			elif a.startswith(r"\n") and a.removeprefix(r"\n") in defined_csnames:
-				assert not is_delimiter
-				b='\\' + a.removeprefix(r"\n")
-				print(f"\\__umi_define_char{{{optional_space}{unicode_char}}}{{\__umi_alternatives_not{a}{b}}}")
-				a.removeprefix(r"\n")
 			else:
 				if is_delimiter:
 					print(f"\\__umi_define_char_maybe_delimiter{{{optional_space}{unicode_char}}}{{{a}}}")
 				else:
 					print(f"\\__umi_define_char{{{optional_space}{unicode_char}}}{{{a}}}")
-		else:
-			assert len(items1)==2, items1
+		elif len(items1)==2:
 			assert re.fullmatch(r'\\[a-zA-Z]+', items1[0]), items1
 			assert re.fullmatch(r'\\[a-zA-Z]+|[^a-zA-Z]', items1[1]), items1
-			print(f"\\__umi_define_char{{{optional_space}{unicode_char}}}{{\\__umi_alternatives{items1[0]}{items1[1]}}}")
+			b=remove_not(items1[0])
+			if b is not None:
+				d=remove_not(items1[1])
+				assert d is not None, items1
+				print(f"\\__umi_define_char{{{optional_space}{unicode_char}}}{{\\__umi_alternatives_not_two{items1[0]}{items1[1]}{b}{d}}}")
+			else:
+				print(f"\\__umi_define_char{{{optional_space}{unicode_char}}}{{\\__umi_alternatives{items1[0]}{items1[1]}}}")
+		else:
+			assert len(items1)>=3, items1
+			assert all(remove_not(x) is None for x in items1), items1
+			assert all(re.fullmatch(r'\\[a-zA-Z]+', c) for c in items1), items1
+			print(f"\\__umi_define_char{{{optional_space}{unicode_char}}}{{\\__umi_alternatives_m{{{''.join(items1)}}}}}")
 
 ##
 
