@@ -250,6 +250,7 @@ assert(repr(space)=="space")
     ("}",)
   }else if x.func()==math.attach{
     (equation_body_to_latex(x.base, style),)
+    // old version, use top: and bottom:
     if x.has("top"){
       ("^{",
       equation_body_to_latex(x.top, nextscriptstyle(style)),
@@ -258,6 +259,17 @@ assert(repr(space)=="space")
     if x.has("bottom"){
       ("_{",
       equation_body_to_latex(x.bottom, nextscriptstyle(style)),
+      "}")
+    }
+    // new version, use t: and b:
+    if x.has("t"){
+      ("^{",
+      equation_body_to_latex(x.t, nextscriptstyle(style)),
+      "}")
+    }
+    if x.has("b"){
+      ("_{",
+      equation_body_to_latex(x.b, nextscriptstyle(style)),
       "}")
     }
   }else if x.func()==math.frac{
