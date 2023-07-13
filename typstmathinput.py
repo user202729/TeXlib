@@ -93,7 +93,7 @@ def initialize_cache()->MutableMapping[str, str]:
 				except FileNotFoundError: pass
 			def save(self)->None:
 				self.data={k: self.data[k] for k in sorted(self.data.keys())}
-				Path(cache_location).write_text(json.dumps(self.data, indent=0), encoding='u8')
+				Path(cache_location).write_text(json.dumps(self.data, indent=0, ensure_ascii=False), encoding='u8')
 			def __setitem__(self, key: str, value: str)->None:
 				super().__setitem__(key, value)
 				self.save()
