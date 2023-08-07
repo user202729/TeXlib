@@ -418,8 +418,14 @@ def rewrite_body(body: str, delimiter: str)->str:
 	result="".join(parts)
 	return result
 
+
+def in_preamble()->bool:
+	# https://tex.stackexchange.com/questions/16295/how-does-one-detect-whether-one-is-in-the-preamble-or-not
+	return not T["@onlypreamble"].meaning_eq(T["@notprerr"])
+
 @newcommand
 def typstmathinputrewrite()->str:
+	assert not in_preamble(), "Should not rewrite in preamble, will conflict with fastrecompile"
 	s: str=get_arg_str()
 	s=check_valid_delimiter(s)
 	assert s not in enabled
@@ -451,6 +457,7 @@ def typstmathinputprepare()->Optional[str]:
 	"""
 	Use starred version to still use old Python-side $...$ handling, use non-starred version to use TeX version (faster)
 	"""
+	assert not in_preamble(), "Should not prepare in preamble, will conflict with fastrecompile"
 	starred: bool=peek_next_char()=="*"
 	delimiter: str=get_arg_str()
 	delimiter=check_valid_delimiter(delimiter)
