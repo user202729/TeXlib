@@ -143,6 +143,7 @@ def typst_formulas_to_tex(l: list[str], extra_preamble: str)->list[str]:
 #import "typstmathinput-template.typ": equation_to_latex
 """ + extra_preamble + r"""
 #set page(width: 100cm)
+#raw("<start>""" + delimiter + r"""\n")
 """ +
 
 (r'#raw("\n' + delimiter + r'\n")').join(
@@ -176,7 +177,11 @@ r"""
 	finally: n.with_suffix(".txt").unlink(missing_ok=True)
 
 	result_=result.split(delimiter)
-	assert len(result_)==len(l)
+	assert result_, "Internal error, output PDF is empty?"
+	if result_[0]!="<start>":
+		raise RuntimeError(f"Preamble contain {result_[0].removesuffix('<start>')!r}, should be empty")
+	del result_[0]
+	assert len(result_)==len(l), "Internal error"
 	return result_
 
 
@@ -233,6 +238,10 @@ def typst_formulas_to_tex_tolerant_use_cache(l: list[str], extra_preamble: str)-
 	Traceback (most recent call last):
 		...
 	RuntimeError: Formula $#?$ is invalid: ...
+	>>> typst_formulas_to_tex_tolerant_use_cache(["1"], "x")
+	Traceback (most recent call last):
+		...
+	RuntimeError: Preamble contain 'x', should be empty
 	"""
 	cache=initialize_cache()
 	inputs=[Input(x, extra_preamble) for x in l]
