@@ -5,6 +5,8 @@
 #set page(width: 100cm)
 // we do the above to avoid pdftotext removing spaces when they coincide with newlines
 
+#let asserte(x, y) = assert(x==y, message: repr(x)+" ≠ "+repr(y))
+
 #{
 assert(repr(alignpoint)=="alignpoint")
 assert(repr(mathstyle)=="mathstyle")
@@ -35,7 +37,7 @@ assert(repr(space)=="space")
 }
 #let defaultstyleheight(x) = {if x>=scriptstyle{0.55} else {1}}
 
-// type struct TEX = {body: str, height: float, align: bool, linebreak: bool}
+// type struct TEX = (body: str, height: float, align: bool, linebreak: bool)
 
 #let cat(style, ..a) = { // style, ⟨str|tex⟩... -> tex
   let result=(
@@ -91,10 +93,16 @@ assert(repr(space)=="space")
   x.height=height
   x
 }
-#let adddelimsize(x, delimsize) = { // tex, str[Literal["\\big", ...]] -> tex
+#let adddelimsize(x, delimsize, type) = { // tex, str[Literal["\\big", ...]], str[Literal["l", "r"]]] -> tex
   if x.body=="" { x.body="." }
-  x.body=delimsize+x.body
+  x.body=delimsize+{if delimsize=="" {} else {type}}+x.body
   x
+}
+#{
+asserte(adddelimsize((body: "\\{") , "\\big", "l" ), (body: "\\bigl\\{"))
+asserte(adddelimsize((body: ")") , "\\Big", "r" )  , (body: "\\Bigr)"))
+asserte(adddelimsize((body: "{") , "", "l" )       , (body: "{"))
+asserte(adddelimsize((body: "") , "", "l" )        , (body: "."))
 }
 
 #let delimtomatenv(x) = { // content → (str, str)
@@ -136,16 +144,16 @@ assert(repr(space)=="space")
           }
         }
       })
-      let bracketstyle={
+      let delimsize={
         if tmp.height<=1.3 {""}
         else if tmp.height<=1.4 {"\\big"}
         else if tmp.height<=1.7 {"\\Big"}
         else if tmp.height<=2.1 {"\\bigg"}
         else {"\\Bigg"}
       }
-      (adddelimsize(equation_body_to_latex(x.body.children.at(0), style), bracketstyle),
+      (adddelimsize(equation_body_to_latex(x.body.children.at(0), style), delimsize, "l"),
       tmp,
-      adddelimsize(equation_body_to_latex(x.body.children.at(-1), style), bracketstyle))
+      adddelimsize(equation_body_to_latex(x.body.children.at(-1), style), delimsize, "r"))
     }
   }else if x.func()==math.vec{
     let (startenv, stopenv)=delimtomatenv(x)
@@ -219,8 +227,12 @@ assert(repr(space)=="space")
         if wrap_in_text { "}" }
       }
     }
-    if style==displaystyle and (content=="∑" or content=="∏" or content=="∫"){
-      content=setheight(cat(style, content), 1.4)
+    if style==displaystyle{
+      if content=="∑" or content=="∏"{
+        content=setheight(cat(style, content), 1.4)
+      }else if content=="∫"{
+        content=setheight(cat(style, content), 1.7)
+      }
     }
 
     if content=="|" {
@@ -341,7 +353,6 @@ assert(repr(space)=="space")
 
 
 #{
-let asserte(x, y) = assert(x==y, message: repr(x)+" ≠ "+repr(y))
 asserte( equation_body_to_latex($a$.body, textstyle).height, 1 )
 asserte( equation_body_to_latex($sqrt(a)$.body, textstyle).height, 1.3 )
 asserte( equation_body_to_latex($sqrt(sqrt(a))$.body, textstyle).height, 1.6 )
