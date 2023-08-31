@@ -348,7 +348,34 @@ def run_standalone_mode()->None:
 	>>> subprocess.run(["python", "typstmathinput.py"], input="123 $4^56+7⁸⁹$", stdout=subprocess.PIPE, text=True, encoding='u8').stdout
 	'123 \\(4^{56}+7^{89}\\)'
 	"""
-	sys.stdout.write(rewrite_body(sys.stdin.read(), "$"))
+	content=sys.stdin.read()
+	delimiter="$"
+
+	if "%%% original source code %%%" in content:
+		"""
+		This is a little feature, where if the input has the format
+
+			\csname @gobble\endcsname{  %%% original source code %%%
+
+			<some code...>
+
+			%%% end original source code, start generated code %%%
+			}
+
+			<some more code...>
+
+		then only the code inside <some code...> will be processed.
+		"""
+		content=content.split("%%% end original source code, start generated code %%%", maxsplit=1
+				)[0].split("%%% original source code %%%", maxsplit=1)[1].strip()
+		sys.stdout.write(
+				r"\csname @gobble\endcsname{  %%% original source code %%%" + '\n' +
+				content + '\n' +
+				r"%%% end original source code, start generated code %%%" + '\n' +
+				r"}" + '\n' +
+				rewrite_body(content, delimiter))
+	else:
+		sys.stdout.write(rewrite_body(content, delimiter))
 	sys.exit()
 
 if standalone_mode:
