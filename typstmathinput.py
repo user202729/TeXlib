@@ -10,45 +10,59 @@ import hashlib
 import re
 import typing
 from typing import Dict, Union, Optional, MutableMapping
-import pythonimmediate
-from pythonimmediate import*
-from pythonimmediate import simple
-from pythonimmediate.engine import default_engine
 import atexit
 from functools import lru_cache
 import traceback
 import sys
+from dataclasses import dataclass
 
-# debug:
-if __name__=="__main__" or "pytest" in sys.modules:
+
+standalone_mode=False
+
+if "pytest" in sys.modules:
+	from pythonimmediate.engine import default_engine
 	assert default_engine.engine is None
 	from pythonimmediate.engine import ChildProcessEngine
 	default_engine.set_engine(ChildProcessEngine("pdftex"))
+	from pythonimmediate import execute
 	execute(r"""\ExplSyntaxOn""")
+elif __name__=="__main__":
+	standalone_mode=True
 
-P=ControlSequenceTokenMaker("_typstmathinput_")
+if not standalone_mode:
+	import pythonimmediate
+	from pythonimmediate import*
+	from pythonimmediate import simple
+	from pythonimmediate.engine import default_engine
+
 
 debug_=lambda *args, **kwargs: None
 
-execute(r"""
-\RequirePackage{l3keys2e}
-\keys_define:nn{typstmathinput}{
-	cache-location.tl_set:N=\_typstmathinput_cache_location,
-	cache-location.initial:n={},
+if standalone_mode:
+	cache_location=""
+	cache_format="shelve"
+	watch_template_change=False
+else:
+	execute(r"""
+	\RequirePackage{l3keys2e}
+	\keys_define:nn{typstmathinput}{
+		cache-location.tl_set:N=\_typstmathinput_cache_location,
+		cache-location.initial:n={},
 
-	cache-format.choices:nn={ shelve,json }{
-		\str_set:Nx \_typstmathinput_cache_format {\l_keys_choice_tl}
-	},
-	cache-format.initial:n = { shelve },
+		cache-format.choices:nn={ shelve,json }{
+			\str_set:Nx \_typstmathinput_cache_format {\l_keys_choice_tl}
+		},
+		cache-format.initial:n = { shelve },
 
 
-	watch-template-change.bool_set:N=\_typstmathinput_watch_template_change,
-}
-\ProcessKeysOptions{typstmathinput}
-""")
-cache_location=P.cache_location.tl().expand_estr()
-cache_format=P.cache_format.tl().expand_estr()
-watch_template_change=P.watch_template_change.bool()
+		watch-template-change.bool_set:N=\_typstmathinput_watch_template_change,
+	}
+	\ProcessKeysOptions{typstmathinput}
+	""")
+	P=ControlSequenceTokenMaker("_typstmathinput_")
+	cache_location=P.cache_location.tl().expand_estr()
+	cache_format=P.cache_format.tl().expand_estr()
+	watch_template_change=P.watch_template_change.bool()
 
 #	rewrite-at-begin.tl_set:N=\_typstmathinput_rewrite_at_begin,
 #	rewrite-at-begin.initial:n={},
@@ -282,6 +296,66 @@ def preprocess_formula(s: str)->str:
 	s = re.sub(r'√\s*(\d+|\w+)', r' sqrt(\1)', s)
 	return s
 
+enabled: set[str]=set()
+
+def check_valid_delimiter(s: str)->str:
+	r"""
+	Check ``s`` is a valid value to be passed in ``\typstmathinputenable`` etc.
+	and return the processed delimiter.
+
+	>>> check_valid_delimiter("??")
+	Traceback (most recent call last):
+		...
+	RuntimeError: '??' is not supported!
+	>>> check_valid_delimiter(r"\$")
+	'$'
+	"""
+	if len(s)==2 and s[0]=="\\": s=s[1]
+	if not (len(s)==1 and (s=="$" or ord(s)>=0x80)):
+		raise RuntimeError(f"'{s}' is not supported!")
+	return s
+
+def get_formulas_in_body_before_preprocess(body: str, delimiter: str)->list[str]:
+	"""
+	>>> get_formulas_in_body_before_preprocess('a $1+2$ b $3+4²$', '$')
+	['1+2', '3+4²']
+	>>> get_formulas_in_body_before_preprocess('$', '$')
+	Traceback (most recent call last):
+		...
+	RuntimeError: Stray or commented-out $ in document!
+	"""
+	parts=body.split(delimiter)
+	if len(parts)%2==0: raise RuntimeError(f"Stray or commented-out {delimiter} in document!")
+	return parts[1::2]
+
+def rewrite_body(body: str, delimiter: str)->str:
+	formulas=get_formulas_in_body_before_preprocess(body, delimiter)
+	formulas=[preprocess_formula(x) for x in formulas]
+	formulas_converted=typst_formulas_to_tex_tolerant_use_cache(formulas, extra_preamble)
+	if formulas_converted is None:
+		return r"\textbf{??}"
+	cache=initialize_cache()
+	parts=body.split(delimiter)
+	parts[1::2] = fix_line_count_multiple(formulas_converted, parts[1::2])
+	result="".join(parts)
+	return result
+
+extra_preamble: str=""
+
+def run_standalone_mode()->None:
+	r"""
+	>>> import subprocess
+	>>> subprocess.run(["python", "typstmathinput.py"], input="123 $4^56+7⁸⁹$", stdout=subprocess.PIPE, text=True, encoding='u8').stdout
+	'123 \\(4^{56}+7^{89}\\)'
+	"""
+	sys.stdout.write(rewrite_body(sys.stdin.read(), "$"))
+	sys.exit()
+
+if standalone_mode:
+	run_standalone_mode()
+
+
+
 def handle_formula()->None:
 	"""
 	Function called when a formula is seen (not in rewrite mode).
@@ -324,7 +398,7 @@ def handle_formula()->None:
 			put_next_tokenized(tmp_+"%")
 handle_formula_identifier = add_handler(handle_formula)
 
-extra_preamble: str=""
+
 def set_extra_preamble()->None:
 	global extra_preamble
 	extra_preamble=T.typstmathinputextrapreamble.str()
@@ -338,25 +412,6 @@ BalancedTokenList(r"""
 	\endsaveenv\pythonimmediatecallhandler{""" + set_extra_preamble_identifier + r"""}
 }
 """).execute()
-
-enabled: set[str]=set()
-
-def check_valid_delimiter(s: str)->str:
-	r"""
-	Check ``s`` is a valid value to be passed in ``\typstmathinputenable`` etc.
-	and return the processed delimiter.
-
-	>>> check_valid_delimiter("??")
-	Traceback (most recent call last):
-		...
-	RuntimeError: '??' is not supported!
-	>>> check_valid_delimiter(r"\$")
-	'$'
-	"""
-	if len(s)==2 and s[0]=="\\": s=s[1]
-	if not (len(s)==1 and (s=="$" or ord(s)>=0x80)):
-		raise RuntimeError(f"'{s}' is not supported!")
-	return s
 
 @newcommand
 def typstmathinputenable()->None:
@@ -402,30 +457,6 @@ r"""
 Alias ``\text{...}`` → ``\typstmathinputtext{...}``. User can redefine this function to customize the behavior.
 """
 
-def get_formulas_in_body_before_preprocess(body: str, delimiter: str)->list[str]:
-	"""
-	>>> get_formulas_in_body_before_preprocess('a $1+2$ b $3+4²$', '$')
-	['1+2', '3+4²']
-	>>> get_formulas_in_body_before_preprocess('$', '$')
-	Traceback (most recent call last):
-		...
-	RuntimeError: Stray or commented-out $ in document!
-	"""
-	parts=body.split(delimiter)
-	if len(parts)%2==0: raise RuntimeError(f"Stray or commented-out {delimiter} in document!")
-	return parts[1::2]
-
-def rewrite_body(body: str, delimiter: str)->str:
-	formulas=get_formulas_in_body_before_preprocess(body, delimiter)
-	formulas=[preprocess_formula(x) for x in formulas]
-	formulas_converted=typst_formulas_to_tex_tolerant_use_cache(formulas, extra_preamble)
-	if formulas_converted is None:
-		return r"\textbf{??}"
-	cache=initialize_cache()
-	parts=body.split(delimiter)
-	parts[1::2] = fix_line_count_multiple(formulas_converted, parts[1::2])
-	result="".join(parts)
-	return result
 
 
 def in_preamble()->bool:
