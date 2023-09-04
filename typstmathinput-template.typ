@@ -224,6 +224,7 @@ asserte(adddelimsize((body: "") , "", "l" )        , (body: "."))
         x.text
           .replace("{", "\\{")
           .replace("}", "\\}")
+          .replace("#", "\\#")
         if wrap_in_text { "}" }
       }
     }

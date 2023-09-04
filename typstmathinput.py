@@ -246,8 +246,8 @@ def typst_formulas_to_tex_tolerant_use_cache(l: list[str], extra_preamble: str)-
 
 	If an error happens, then raise the error.
 
-	>>> typst_formulas_to_tex_tolerant_use_cache(["1", "2"], "")
-	['\\(1\\)', '\\(2\\)']
+	>>> typst_formulas_to_tex_tolerant_use_cache(["1", r"2\#", r'#`!!\def\abc#1{#1}`.text'], "")
+	['\\(1\\)', '\\(2\\#\\)', '\(\\def\\abc#1{#1}\)']
 	>>> typst_formulas_to_tex_tolerant_use_cache(["1", "#?"], "")
 	Traceback (most recent call last):
 		...
@@ -345,8 +345,8 @@ extra_preamble: str=""
 def run_standalone_mode()->None:
 	r"""
 	>>> import subprocess
-	>>> subprocess.run(["python", "typstmathinput.py"], input="123 $4^56+7⁸⁹$", stdout=subprocess.PIPE, text=True, encoding='u8').stdout
-	'123 \\(4^{56}+7^{89}\\)'
+	>>> subprocess.run(["python", "typstmathinput.py"], input=r"123 $4^56+7⁸⁹+f^\#$", stdout=subprocess.PIPE, text=True, encoding='u8').stdout
+	'123 \\(4^{56}+7^{89}+f^{\\#}\\)'
 	"""
 	content=sys.stdin.read()
 	delimiter="$"
@@ -373,7 +373,8 @@ def run_standalone_mode()->None:
 				content + '\n' +
 				r"%%% end original source code, start generated code %%%" + '\n' +
 				r"}" + '\n' +
-				rewrite_body(content, delimiter))
+				rewrite_body(content, delimiter) + '\n' +
+				r"%%% end generated code %%%" + '\n')
 	else:
 		sys.stdout.write(rewrite_body(content, delimiter))
 	sys.exit()
