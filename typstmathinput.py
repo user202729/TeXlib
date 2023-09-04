@@ -247,7 +247,7 @@ def typst_formulas_to_tex_tolerant_use_cache(l: list[str], extra_preamble: str)-
 	If an error happens, then raise the error.
 
 	>>> typst_formulas_to_tex_tolerant_use_cache(["1", r"2\#", r'#`!!\def\abc#1{#1}`.text'], "")
-	['\\(1\\)', '\\(2\\#\\)', '\(\\def\\abc#1{#1}\)']
+	['\\(1\\)', '\\(2\\#\\)', '\\(\\def\\abc#1{#1}\\)']
 	>>> typst_formulas_to_tex_tolerant_use_cache(["1", "#?"], "")
 	Traceback (most recent call last):
 		...
@@ -352,7 +352,7 @@ def run_standalone_mode()->None:
 	delimiter="$"
 
 	if "%%% original source code %%%" in content:
-		"""
+		r"""
 		This is a little feature, where if the input has the format
 
 			\csname @gobble\endcsname{  %%% original source code %%%
