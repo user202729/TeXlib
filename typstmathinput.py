@@ -1,5 +1,5 @@
-# to run tests: 
-# pytest --doctest-modules typstmathinput.py
+# to run tests:
+# pytest --doctest-modules -n3 typstmathinput.py
 
 import tempfile
 from pathlib import Path
@@ -13,6 +13,7 @@ from typing import Dict, Union, Optional, MutableMapping
 import atexit
 from functools import lru_cache
 import traceback
+import textwrap
 import sys
 from dataclasses import dataclass
 
@@ -133,8 +134,11 @@ class Input:
 		return hashlib.sha256((str(len(self.s)) + "|" + self.s + self.extra_preamble).encode('u8')).hexdigest()
 
 def fix_line_count(a: str, b: int)->str:
-	"""
-	Rewrite TeX code a such that it has exactly b newline characters.
+	r"""
+	Rewrite TeX code ``a`` such that it has exactly ``b`` newline characters.
+
+	>>> fix_line_count("a", 3)
+	'a%\n%\n%\n'
 	"""
 	missing=b-a.count('\n')
 	assert missing>=0
@@ -147,6 +151,8 @@ def typst_formulas_to_tex(l: list[str], extra_preamble: str)->list[str]:
 	No caching is done.
 
 	The preamble of those formulas must be the same.
+
+	..seealso:: :func:`typst_formulas_to_tex_tolerant_cached`, :func:`typst_formulas_to_tex_tolerant_use_cache`.
 	"""
 	initialize_template()
 	tmpdir=initialize_tmpdir()
@@ -266,6 +272,17 @@ def typst_formulas_to_tex_tolerant_use_cache(l: list[str], extra_preamble: str)-
 	return [cache[i.hash()] for i in inputs]
 
 def fix_line_count_multiple(a: list[str], b: list[str])->list[str]:
+	r"""
+	See :func:`fix_line_count`.
+
+		>>> fix_line_count_multiple(["a", "b"], ["a\n\n", "b\n\n\n"])
+		['a%\n%\n', 'b%\n%\n%\n']
+
+	:param a: List of code that should have line count fixed.
+	:param b: List of code with correct line count.
+		Note that unlike :func:`fix_line_count`, ``b`` is a list of code itself, not line-count integer values.
+	:return: TeX code that is functionally the same as ``a``, but with line counts fixed.
+	"""
 	assert len(a)==len(b), (a, b)
 	return [fix_line_count(a, b.count('\n')) for a, b in zip(a, b)]
 
@@ -287,6 +304,9 @@ atexit.register(process_pending_formulas)
 def preprocess_formula(s: str)->str:
 	"""
 	Preprocess a formula before passing to Typst.
+
+	>>> preprocess_formula("ab + c²³ + √d")
+	'ab + c^(23) +  sqrt(d)'
 	"""
 	superscript: Dict[str, Union[str, int, None]] = dict(zip("⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼", "0123456789+-="))
 	subscript: Dict[str, Union[str, int, None]] = dict(zip("₀₁₂₃₄₅₆₇₈₉₊₋₌", "0123456789+-="))
@@ -316,17 +336,39 @@ def check_valid_delimiter(s: str)->str:
 	return s
 
 def get_formulas_in_body_before_preprocess(body: str, delimiter: str)->list[str]:
-	"""
+	r"""
 	>>> get_formulas_in_body_before_preprocess('a $1+2$ b $3+4²$', '$')
 	['1+2', '3+4²']
+	>>> get_formulas_in_body_before_preprocess(
+	... r'''
+	... $1$
+	...	  \typstmathinputdisable{\$}
+	... $2$
+	...  \typstmathinputenable{\$}
+	... $3$
+	...	\typstmathinputdisable\$
+	... $4$
+	... \typstmathinputenable\$
+	... ''', '$')
+	['1', '3']
 	>>> get_formulas_in_body_before_preprocess('$', '$')
 	Traceback (most recent call last):
 		...
 	RuntimeError: Stray or commented-out $ in document!
 	"""
-	parts=body.split(delimiter)
-	if len(parts)%2==0: raise RuntimeError(f"Stray or commented-out {delimiter} in document!")
-	return parts[1::2]
+	parts=re.split(r"\\typstmathinput(disable|enable)(\{?\\?.\}?)", body)
+	assert len(parts)%3==1
+	# parts should have the form ['<some text where delimiter is enabled>', 'disable', '\$',
+	#    '<some text where delimiter is enabled>', 'enable', '\$', '<text...>]
+	for i in range(1, len(parts), 6): assert parts[i]=="disable", (i, parts[i])
+	for i in range(4, len(parts), 6): assert parts[i]=="enable", (i, parts[i])
+	for i in range(2, len(parts), 3): assert check_valid_delimiter(strip_optional_braces(parts[i]))==delimiter, (i, parts[i])
+	result=[]
+	for i in range(0, len(parts), 6):
+		parts2=parts[i].split(delimiter)
+		if len(parts2)%2==0: raise RuntimeError(f"Stray or commented-out {delimiter} in document!")
+		result+=parts2[1::2]
+	return result
 
 def rewrite_body(body: str, delimiter: str)->str:
 	formulas=get_formulas_in_body_before_preprocess(body, delimiter)
@@ -344,6 +386,8 @@ extra_preamble: str=""
 
 def run_standalone_mode()->None:
 	r"""
+	The script can be run as a standalone Python script in order to preprocess some TeX code.
+
 	>>> import subprocess
 	>>> subprocess.run(["python", "typstmathinput.py"], input=r"123 $4^56+7⁸⁹+f^\#$", stdout=subprocess.PIPE, text=True, encoding='u8').stdout
 	'123 \\(4^{56}+7^{89}+f^{\\#}\\)'
@@ -382,11 +426,46 @@ def run_standalone_mode()->None:
 if standalone_mode:
 	run_standalone_mode()
 
+def _end_to_end_test_raw(code: str)->str:
+	r"""
+	Helper function to launch a TeX process. Only used for testing purposes.
 
+		>>> _end_to_end_test_raw(r"\documentclass{article}\begin{document}\pagenumbering{gobble}hello\end{document}")
+		'hello'
+	"""
+	with tempfile.TemporaryDirectory(prefix="typstmathinput-test-") as tmpdir:
+		with tempfile.NamedTemporaryFile(dir=tmpdir, suffix=".tex", mode="w", encoding='u8', delete=False) as tmpfile:
+			tmpfile.write(code)
+			tmpfile.close()
+			process=subprocess.Popen(["lualatex", "--recorder", "--shell-escape", "--jobname=output", tmpfile.name], stdin=subprocess.DEVNULL,
+				  stdout=subprocess.PIPE, cwd=tmpdir)
+			if process.wait(timeout=10)!=0:
+				assert process.stdout
+				raise RuntimeError("Error:\n"+process.stdout.read().decode('u8'))
+			subprocess.run(["pdftotext", "output.pdf"], cwd=tmpdir, check=True)
+			return (Path(tmpdir)/"output.txt").read_text(encoding='u8').replace("\x0c", "").strip()
+
+def _end_to_end_test(body: str)->str:
+	r"""
+	>>> _end_to_end_test(r"hello world")
+	'hello world'
+	"""
+	with tempfile.TemporaryDirectory(prefix="typstmathinput-test-") as tmpdir:
+		return _end_to_end_test_raw(textwrap.dedent(r"""
+				\documentclass{article}
+				\usepackage{unicode-math}
+				\usepackage[cache-location="""+str(Path(tmpdir)/"cache.json")+r""", cache-format=json]{typstmathinput}
+				\begin{document}
+				\pagenumbering{gobble}
+				""") + body + '\n' + r"\end{document}")
+	# we use unicode-math so the output symbols will be correct (maybe there's a better way, TODO)
 
 def handle_formula()->None:
-	"""
+	r"""
 	Function called when a formula is seen (not in rewrite mode).
+
+	>>> _end_to_end_test(r'\typstmathinputenable{\$}${integral x² dif x\{}$')
+	'{∫ 𝑥2 d𝑥{}'
 	"""
 	global total_formula_counter
 	total_formula_counter += 1
@@ -397,7 +476,10 @@ def handle_formula()->None:
 		# although this can be fixed by escaping the braces with minimal harm)
 		catcode[" "]=catcode["\\"]=catcode["{"]=catcode["}"]=catcode["&"]=catcode["^"]=Catcode.other
 		delimiter: BalancedTokenList=BalancedTokenList.get_next()
-		s: str=BalancedTokenList.get_until(delimiter, remove_braces=False).detokenize()
+		s: str=BalancedTokenList([
+			(Catcode.other(t.chr) if isinstance(t, CharacterToken) and t.catcode==Catcode.param else t)
+				for t in BalancedTokenList.get_until(delimiter, remove_braces=False)
+			]).detokenize()
 
 	s=preprocess_formula(s)
 
@@ -465,6 +547,10 @@ def typstmathinputenable()->None:
 
 @newcommand
 def typstmathinputdisable()->None:
+	r"""
+	>>> _end_to_end_test(r'\typstmathinputenable{\$}${integral x² dif x #1 \#}$\typstmathinputdisable{\$}$integral x² dif x$')
+	'{∫ 𝑥2 d𝑥1#}𝑖𝑛𝑡𝑒𝑔𝑟𝑎𝑙𝑥2 𝑑𝑖𝑓𝑥'
+	"""
 	s: str=get_arg_str()
 	s=check_valid_delimiter(s)
 	if s not in enabled:
@@ -493,6 +579,17 @@ def in_preamble()->bool:
 
 @newcommand
 def typstmathinputrewrite()->str:
+	r"""
+	Will gobble the whole body, rewrite it, then scan the result.
+
+	This is obviously faster than using raw ``\typstmathinputenable``.
+
+	Not recommended because it will likely lose line number information and SyncTeX capacity.
+	Consider using :func:`typstmathinputprepare` instead.
+
+		>>> _end_to_end_test(r'\typstmathinputrewrite{\$}' + '\n' + r'${integral x² dif x #1 \#}$')
+		'{∫ 𝑥2 d𝑥1#}'
+	"""
 	assert not in_preamble(), "Should not rewrite in preamble, will conflict with fastrecompile"
 	s: str=get_arg_str()
 	s=check_valid_delimiter(s)
@@ -508,7 +605,7 @@ def typstmathinputrewrite()->str:
 	#def _typstmathinput_rewrite_at_begin()->None:
 	lineno: int=T.inputlineno.int()
 	path: str=T.currfileabspath.str()
-	assert path
+	assert path, "Currently you must have --recorder flag and [abspath]currfile package"
 	text=Path(path).read_text(encoding='u8')
 	a=text.splitlines()
 	assert r'\typstmathinputrewrite' in a[lineno-1]
@@ -522,11 +619,44 @@ def typstmathinputrewrite()->str:
 
 @newcommand
 def typstmathinputprepare()->Optional[str]:
-	"""
-	Use starred version to still use old Python-side $...$ handling, use non-starred version to use TeX version (faster)
+	r"""
+	Will gobble the whole body, extract the formulas, then on actual formulas look up the prepared result.
+
+	Should be on a separate line.
+
+	Use starred version to still use old Python-side ``$...$`` handling, use non-starred version to use TeX version (faster)
+
+	>>> _end_to_end_test(r'''
+	... \typstmathinputenable{\$}
+	... \typstmathinputprepare{\$}
+	... ${integral x² dif x #1 \#}$
+	... ''')
+	'{∫ 𝑥2 d𝑥1#}'
+	>>> _end_to_end_test(r'''
+	... \typstmathinputenable{\$}
+	... \typstmathinputprepare{\$}
+	... \iffalse $error$ \fi
+	... ''')
+	Traceback (most recent call last):
+		...
+	RuntimeError: ...
+
+	>>> _end_to_end_test(r'''
+	... \typstmathinputenable{\$}
+	... \typstmathinputprepare{\$}
+	... \typstmathinputdisable{\$}
+	... $error$
+	... \typstmathinputenable{\$}
+	... $integral x dif x$
+	... ''')
+	'𝑒𝑟𝑟𝑜𝑟 ∫ 𝑥 d𝑥'
+
+	There's an optional argument, which can be used to write the TeX commands to define the formulas to a file.
+	Put it after the ``*`` (if any) and before the mandatory argument (delimiter).
 	"""
 	assert not in_preamble(), "Should not prepare in preamble, will conflict with fastrecompile"
 	starred: bool=peek_next_char()=="*"
+	output_file: Optional[str]=get_optional_arg_estr()
 	delimiter: str=get_arg_str()
 	delimiter=check_valid_delimiter(delimiter)
 	assert delimiter in enabled
@@ -540,7 +670,7 @@ def typstmathinputprepare()->Optional[str]:
 	if starred:
 		rewrite_body(body, delimiter)  # just populate the cache, discard the result
 	else:
-		formulas=get_formulas_in_body_before_preprocess(body, delimiter)
+		formulas=sorted(set(get_formulas_in_body_before_preprocess(body, delimiter)))
 		formulas_preprocessed=[preprocess_formula(x) for x in formulas]
 		formulas_converted=typst_formulas_to_tex_tolerant_use_cache(formulas_preprocessed, extra_preamble)
 		if formulas_converted is None:
@@ -548,12 +678,33 @@ def typstmathinputprepare()->Optional[str]:
 
 		# redefine $...$ to use TeX
 		if delimiter=="$" or default_engine.is_unicode:
-			delimiter_set_command=r'\xdef' + delimiter
+			delimiter_set_command=r'\catcode`' + '\\' + delimiter + r'\active\xdef' + delimiter
 		else:
 			delimiter_set_command=r'\expandafter\xdef\csname u8:\detokenize{' + delimiter + r'}\endcsname'
 		delimiter_set_command+=r'{\csname _typstmathinput_handle_formula\endcsname}'
-		execute(
+		content=(
 			delimiter_set_command +
+			textwrap.dedent((#TeX
+			r"""
+			\ExplSyntaxOn
+			\providecommand\typstmathinputenable[1] {
+				\catcode `#1 \active
+			}
+			\providecommand\typstmathinputdisable[1] {
+				\catcode `#1 = """) + str((Catcode.math_toggle if delimiter=="$" else Catcode.other).value) +
+					(#TeX
+					r""" \relax
+			}
+			\protected\gdef \__handle_formula {
+				\__handle_formula_a \empty
+			}
+			\protected\gdef \__set_handle_formula_delimiter #1 {
+				\protected\gdef \__handle_formula_a ##1 #1 {
+					\begingroup\expandafter\endgroup\csname __prepared)\detokenize\expandafter{##1}\endcsname
+				}
+			}
+			\ExplSyntaxOff
+			""").replace('__', '_typstmathinput_')) +
 			r'\csname _typstmathinput_set_handle_formula_delimiter\endcsname{' + delimiter + '}' +
 			r'\begingroup\def\\#1{\expandafter\gdef\csname _typstmathinput_prepared)\detokenize{#1}\endcsname}' + '\n' +
 			"".join(
@@ -562,23 +713,13 @@ def typstmathinputprepare()->Optional[str]:
 			+ r'\endgroup'
 			)
 
+		if output_file:
+			Path(output_file).write_text(content, encoding='u8')
+
+		execute(content)
+
 	return None
 
-execute((#TeX
-r"""
-\errorcontextlines=5
-{
-\ExplSyntaxOn
-\protected\gdef \__handle_formula {
-	\__handle_formula_a \empty
-}
-\protected\gdef \__set_handle_formula_delimiter #1 {
-	\protected\gdef \__handle_formula_a ##1 #1 {
-		\begingroup\expandafter\endgroup\csname __prepared)\detokenize\expandafter{##1}\endcsname
-	}
-}
-}
-""").replace('__', '_typstmathinput_'))
 
 # handle_formula is first called to insert the \empty token
 # handle_formula_a is called after it to grab the argument
