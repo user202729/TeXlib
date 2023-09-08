@@ -687,7 +687,8 @@ def typstmathinputprepare()->Optional[str]:
 			textwrap.dedent((#TeX
 			r"""
 			\ExplSyntaxOn
-			\providecommand\typstmathinputenable[1] {
+			\providecommand\typstmathinputtext{\text}
+			\providecommand\typstmathinputenable[1]{
 				\catcode `#1 \active
 			}
 			\providecommand\typstmathinputdisable[1] {
