@@ -477,7 +477,8 @@ def handle_formula()->None:
 		catcode[" "]=catcode["\\"]=catcode["{"]=catcode["}"]=catcode["&"]=catcode["^"]=Catcode.other
 		delimiter: BalancedTokenList=BalancedTokenList.get_next()
 		s: str=BalancedTokenList([
-			(Catcode.other(t.chr) if isinstance(t, CharacterToken) and t.catcode==Catcode.param else t)
+			(Catcode.other(t.chr) if isinstance(t, CharacterToken) and t.catcode==Catcode.param else
+				Catcode.other("\n") if t==T.par else t)
 				for t in BalancedTokenList.get_until(delimiter, remove_braces=False)
 			]).detokenize()
 
@@ -629,7 +630,17 @@ def typstmathinputprepare()->Optional[str]:
 	>>> _end_to_end_test(r'''
 	... \typstmathinputenable{\$}
 	... \typstmathinputprepare{\$}
-	... ${integral x² dif x #1 \#}$
+	... ${integral x² dif x #1 \#
+	...
+	... }$
+	... ''')
+	'{∫ 𝑥2 d𝑥1#}'
+	>>> _end_to_end_test(r'''
+	... \typstmathinputenable{\$}
+	... \typstmathinputprepare*{\$}
+	... ${integral x² dif x #1 \#
+	...
+	... }$
 	... ''')
 	'{∫ 𝑥2 d𝑥1#}'
 	>>> _end_to_end_test(r'''
@@ -656,6 +667,7 @@ def typstmathinputprepare()->Optional[str]:
 	"""
 	assert not in_preamble(), "Should not prepare in preamble, will conflict with fastrecompile"
 	starred: bool=peek_next_char()=="*"
+	if starred: get_next_char()
 	output_file: Optional[str]=get_optional_arg_estr()
 	delimiter: str=get_arg_str()
 	delimiter=check_valid_delimiter(delimiter)
@@ -700,14 +712,14 @@ def typstmathinputprepare()->Optional[str]:
 				\__handle_formula_a \empty
 			}
 			\protected\gdef \__set_handle_formula_delimiter #1 {
-				\protected\gdef \__handle_formula_a ##1 #1 {
+				\protected\long\gdef \__handle_formula_a ##1 #1 {
 					\begingroup\expandafter\endgroup\csname __prepared)\detokenize\expandafter{##1}\endcsname
 				}
 			}
 			\ExplSyntaxOff
 			""").replace('__', '_typstmathinput_')) +
 			r'\csname _typstmathinput_set_handle_formula_delimiter\endcsname{' + delimiter + '}' +
-			r'\begingroup\def\\#1{\expandafter\gdef\csname _typstmathinput_prepared)\detokenize{#1}\endcsname}' + '\n' +
+			r'\begingroup\long\def\\#1{\expandafter\gdef\csname _typstmathinput_prepared)\detokenize{#1}\endcsname}' + '\n' +
 			"".join(
 				r'\\{' + f + '}{' + fc + '}\n' for f, fc in zip(formulas, formulas_converted)
 				)
