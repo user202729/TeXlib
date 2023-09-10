@@ -162,9 +162,9 @@ def typst_formulas_to_tex(l: list[str], extra_preamble: str)->list[str]:
 		f.write(r"""
 #import "typstmathinput-template.typ": equation_to_latex
 """ + extra_preamble + r"""
-#set page(width: 100cm)
+#set page(width: 10000cm)
 #raw("<start>""" + delimiter + r"""\n")
-""" +
+""" + # we do the above to avoid pdftotext removing spaces when they coincide with newlines
 
 (r'#raw("\n' + delimiter + r'\n")').join(
 r"""

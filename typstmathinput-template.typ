@@ -2,8 +2,6 @@
 #let alignpoint=$&$.body.func()
 #let mathstyle=$upright(A)$.body.func()
 #let space=$a b$.body.children.at(1).func()
-#set page(width: 100cm)
-// we do the above to avoid pdftotext removing spaces when they coincide with newlines
 
 #let asserte(x, y) = assert(x==y, message: repr(x)+" ≠ "+repr(y))
 
