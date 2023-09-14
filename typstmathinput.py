@@ -202,7 +202,7 @@ r"""
 		raise RuntimeError(f"Preamble contain {result_[0].removesuffix('<start>')!r}, should be empty")
 	del result_[0]
 	assert len(result_)==len(l), "Internal error"
-	return result_
+	return [s.strip() for s in result_]
 
 
 formula_counter: int=0
