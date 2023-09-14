@@ -3,6 +3,14 @@
 #let mathstyle=$upright(A)$.body.func()
 #let space=$a b$.body.children.at(1).func()
 
+#let primes={
+  if $x''$.body.func()==math.attach{
+    $x''$.body.t.func()
+  }else{
+    none
+  }
+}
+
 #let asserte(x, y) = assert(x==y, message: repr(x)+" ≠ "+repr(y))
 
 #{
@@ -10,6 +18,7 @@ assert(repr(alignpoint)=="alignpoint")
 assert(repr(mathstyle)=="mathstyle")
 assert(repr(sequence)=="sequence")
 assert(repr(space)=="space")
+assert(repr(primes)=="primes" or primes==none)
 }
 
 #let variant_to_latex_lookup=(
@@ -330,6 +339,8 @@ asserte(adddelimsize((body: "") , "", "l" )        , (body: "."))
     ("\\overline{", equation_body_to_latex(x.body, style), "}")
   }else if x.func()==math.underline{
     ("\\underline{", equation_body_to_latex(x.body, style), "}")
+  }else if x.func()==primes{
+    ("\\prime"*x.count+" ",)
   }else{
     ("\\text{(unknown func " + repr(x.func()) + ")}",)
   }
