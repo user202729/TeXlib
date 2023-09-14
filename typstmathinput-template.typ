@@ -326,6 +326,10 @@ asserte(adddelimsize((body: "") , "", "l" )        , (body: "."))
     let tmp=cat(style, "\\\\")
     tmp.linebreak=true
     (tmp,)
+  }else if x.func()==math.overline{
+    ("\\overline{", equation_body_to_latex(x.body, style), "}")
+  }else if x.func()==math.underline{
+    ("\\underline{", equation_body_to_latex(x.body, style), "}")
   }else{
     ("\\text{(unknown func " + repr(x.func()) + ")}",)
   }
