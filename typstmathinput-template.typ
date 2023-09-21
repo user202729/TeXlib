@@ -270,27 +270,32 @@ asserte(adddelimsize((body: "") , "", "l" )        , (body: "."))
     ("}",)
   }else if x.func()==math.attach{
     (equation_body_to_latex(x.base, style),)
-    // old version, use top: and bottom:
-    if x.has("top"){
-      ("^{",
-      equation_body_to_latex(x.top, nextscriptstyle(style)),
-      "}")
-    }
-    if x.has("bottom"){
-      ("_{",
-      equation_body_to_latex(x.bottom, nextscriptstyle(style)),
-      "}")
-    }
-    // new version, use t: and b:
-    if x.has("t"){
-      ("^{",
-      equation_body_to_latex(x.t, nextscriptstyle(style)),
-      "}")
-    }
-    if x.has("b"){
-      ("_{",
-      equation_body_to_latex(x.b, nextscriptstyle(style)),
-      "}")
+    if x.has("t") and not x.has("b") and not x.has("top") and not x.has("bottom") and x.t.func()==primes{
+      // special handler for primes -- we need to do this to translate M'^2 to M'^{2} instead of M^{\prime }^{2}
+      ("'"*x.t.count,)
+    }else{
+      // old version, use top: and bottom:
+      if x.has("top"){
+        ("^{",
+        equation_body_to_latex(x.top, nextscriptstyle(style)),
+        "}")
+      }
+      if x.has("bottom"){
+        ("_{",
+        equation_body_to_latex(x.bottom, nextscriptstyle(style)),
+        "}")
+      }
+      // new version, use t: and b:
+      if x.has("t"){
+        ("^{",
+        equation_body_to_latex(x.t, nextscriptstyle(style)),
+        "}")
+      }
+      if x.has("b"){
+        ("_{",
+        equation_body_to_latex(x.b, nextscriptstyle(style)),
+        "}")
+      }
     }
   }else if x.func()==math.frac{
     let tmp=equation_body_to_latex(x.num, nextstyle(style))

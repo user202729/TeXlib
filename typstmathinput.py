@@ -252,8 +252,10 @@ def typst_formulas_to_tex_tolerant_use_cache(l: list[str], extra_preamble: str)-
 
 	If an error happens, then raise the error.
 
-	>>> typst_formulas_to_tex_tolerant_use_cache(["1", r"2\#", r'#`!!\def\abc#1{#1}`.text'], "")
-	['\\(1\\)', '\\(2\\#\\)', '\\(\\def\\abc#1{#1}\\)']
+	Uses :func:`preprocess_formula` under the hood.
+
+	>>> typst_formulas_to_tex_tolerant_use_cache(["1²", "b'²", "abc", r"2\#", r'#`!!\def\abc#1{#1}`.text'], "#let abc=$a b$")
+	['\\(1^{2}\\)', "\\(b'^{2}\\)", '\\(ab\\)', '\\(2\\#\\)', '\\(\\def\\abc#1{#1}\\)']
 	>>> typst_formulas_to_tex_tolerant_use_cache(["1", "#?"], "")
 	Traceback (most recent call last):
 		...
@@ -264,7 +266,7 @@ def typst_formulas_to_tex_tolerant_use_cache(l: list[str], extra_preamble: str)-
 	RuntimeError: Preamble contain 'x', should be empty
 	"""
 	cache=initialize_cache()
-	inputs=[Input(x, extra_preamble) for x in l]
+	inputs=[Input(preprocess_formula(x), extra_preamble) for x in l]
 	remaining=[*{i: None for i in inputs if i.hash() not in cache}]
 	if remaining:
 		if not typst_formulas_to_tex_tolerant_cached([i.s for i in inputs], extra_preamble, print_only_if_error=False):
@@ -372,7 +374,6 @@ def get_formulas_in_body_before_preprocess(body: str, delimiter: str)->list[str]
 
 def rewrite_body(body: str, delimiter: str)->str:
 	formulas=get_formulas_in_body_before_preprocess(body, delimiter)
-	formulas=[preprocess_formula(x) for x in formulas]
 	formulas_converted=typst_formulas_to_tex_tolerant_use_cache(formulas, extra_preamble)
 	if formulas_converted is None:
 		return r"\textbf{??}"
@@ -683,8 +684,7 @@ def typstmathinputprepare()->Optional[str]:
 		rewrite_body(body, delimiter)  # just populate the cache, discard the result
 	else:
 		formulas=sorted(set(get_formulas_in_body_before_preprocess(body, delimiter)))
-		formulas_preprocessed=[preprocess_formula(x) for x in formulas]
-		formulas_converted=typst_formulas_to_tex_tolerant_use_cache(formulas_preprocessed, extra_preamble)
+		formulas_converted=typst_formulas_to_tex_tolerant_use_cache(formulas, extra_preamble)
 		if formulas_converted is None:
 			return r"\textbf{??}"
 
