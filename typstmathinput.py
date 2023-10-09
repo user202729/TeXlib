@@ -1,5 +1,5 @@
 # to run tests:
-# pytest --doctest-modules -n3 typstmathinput.py
+# pytest --doctest-modules typstmathinput.py
 
 import tempfile
 from pathlib import Path
@@ -15,6 +15,7 @@ from functools import lru_cache
 import traceback
 import textwrap
 import sys
+import unicodedata
 from dataclasses import dataclass
 
 
@@ -195,6 +196,8 @@ r"""
 
 	try: result=n.with_suffix(".txt").read_text(encoding='u8').replace("\n", "").replace("\x0c", "")
 	finally: n.with_suffix(".txt").unlink(missing_ok=True)
+	
+	result=unicodedata.normalize("NFC", result)
 
 	result_=result.split(delimiter)
 	assert result_, "Internal error, output PDF is empty?"
@@ -254,8 +257,8 @@ def typst_formulas_to_tex_tolerant_use_cache(l: list[str], extra_preamble: str)-
 
 	Uses :func:`preprocess_formula` under the hood.
 
-	>>> typst_formulas_to_tex_tolerant_use_cache(["1²", "b'²", "abc", r"2\#", r'#`!!\def\abc#1{#1}`.text'], "#let abc=$a b$")
-	['\\(1^{2}\\)', "\\(b'^{2}\\)", '\\(ab\\)', '\\(2\\#\\)', '\\(\\def\\abc#1{#1}\\)']
+	>>> typst_formulas_to_tex_tolerant_use_cache(["1²", "b'²", "abc", r"∤∤2\#", r'#`!!\def\abc#1{#1}`.text'], "#let abc=$a b$")
+	['\\(1^{2}\\)', "\\(b'^{2}\\)", '\\(ab\\)', '\\(∤∤2\\#\\)', '\\(\\def\\abc#1{#1}\\)']
 	>>> typst_formulas_to_tex_tolerant_use_cache(["1", "#?"], "")
 	Traceback (most recent call last):
 		...
