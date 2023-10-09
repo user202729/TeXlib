@@ -515,13 +515,22 @@ def set_extra_preamble()->None:
 	global extra_preamble
 	extra_preamble=T.typstmathinputextrapreamble.str()
 
+def add_extra_preamble()->None:
+	global extra_preamble
+	extra_preamble+=T.typstmathinputextrapreamble.str()
 
 set_extra_preamble_identifier = add_handler(set_extra_preamble)
+add_extra_preamble_identifier = add_handler(add_extra_preamble)
 BalancedTokenList(r"""
 \NewDocumentEnvironment{typstmathinputsetextrapreamble}{}{
 	\saveenv\typstmathinputextrapreamble
 }{
 	\endsaveenv\pythonimmediatecallhandler{""" + set_extra_preamble_identifier + r"""}
+}
+\NewDocumentEnvironment{typstmathinputaddextrapreamble}{}{
+	\saveenv\typstmathinputextrapreamble
+}{
+	\endsaveenv\pythonimmediatecallhandler{""" + add_extra_preamble_identifier + r"""}
 }
 """).execute()
 
