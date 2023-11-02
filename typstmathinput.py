@@ -310,11 +310,11 @@ def preprocess_formula(s: str)->str:
 	"""
 	Preprocess a formula before passing to Typst.
 
-	>>> preprocess_formula("ab + c²³ + √d")
-	'ab + c^(23) +  sqrt(d)'
+	>>> preprocess_formula("ab + c²³ⁿⁿ + √d")
+	'ab + c^(2 3 n n ) +  sqrt(d)'
 	"""
-	superscript: Dict[str, Union[str, int, None]] = dict(zip("⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼", "0123456789+-="))
-	subscript: Dict[str, Union[str, int, None]] = dict(zip("₀₁₂₃₄₅₆₇₈₉₊₋₌", "0123456789+-="))
+	superscript: Dict[str, Union[str, int, None]] = {a: b+' ' for a, b in zip('ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻᴬᴮᴰᴱᴳᴴᴵᴶᴷᴸᴹᴺᴼᴾᴿᵀᵁⱽᵂ⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻', 'abcdefghijklmnoprstuvwxyzABDEGHIJKLMNOPRTUVW0123456789+-')}
+	subscript: Dict[str, Union[str, int, None]] = {a: b+' ' for a, b in zip('ₐₑₕᵢⱼₖₗₘₙₒₚᵣₛₜᵤᵥₓ₀₁₂₃₄₅₆₇₈₉₊₋', 'aehijklmnoprstuvx0123456789+-')}
 	s = re.sub('[' + "".join(superscript) + ']+', lambda x: "^(" + x[0].translate(str.maketrans(superscript)) + ")" , s)
 	s = re.sub('[' + "".join(subscript) + ']+', lambda x: "_(" + x[0].translate(str.maketrans(subscript)) + ")" , s)
 	s = re.sub(r'√\s*\(', ' sqrt(', s)
