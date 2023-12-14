@@ -167,6 +167,10 @@ asserte(adddelimsize((body: "") , "", "l" )        , (body: "."))
       tmp,
       adddelimsize(equation_body_to_latex(x.body.children.at(-1), style), delimsize, "r"))
     }
+  }else if x.func()==math.scripts{
+    (equation_body_to_latex(x.body, style), "\\nolimits ")
+  }else if x.func()==math.limits{
+    (equation_body_to_latex(x.body, style), "\\limits ")
   }else if x.func()==math.vec{
     let (startenv, stopenv)=delimtomatenv(x)
     (vcat(..{
@@ -206,7 +210,7 @@ asserte(adddelimsize((body: "") , "", "l" )        , (body: "."))
       if x.has("limits") and x.limits{
         "\\operatorname*{"
       }else{
-        "\\operatorname{"
+        "\\operatorname{"  // not that this always inhibit limits even with explicit limits(⋅) which may be undesirable
       }
       let y=x.text
       if type(y)==content{
@@ -413,6 +417,8 @@ asserte( equation_body_to_latex($mat(1, 2/3; 3, 4; 5, 6)$.body, displaystyle).he
 //#import "/home/user202729/TeX/typstmathinput-template.typ": equation_to_latex
 
 #let a =($ 
+limits(lim)_← +
+scripts(lim)_← +
 op("lim sup")_3
 binom(1, 2)
 binom(1, 2, 3)  // in new enough version
