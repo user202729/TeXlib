@@ -12,13 +12,15 @@
 }
 
 #let asserte(x, y) = assert(x==y, message: repr(x)+" ≠ "+repr(y))
+#let assert_in(x, y) = assert(y.contains(x), message: repr(x)+" ∉ "+repr(y))
 
 #{
-assert(repr(alignpoint)=="alignpoint")
-assert(repr(mathstyle)=="mathstyle")
-assert(repr(sequence)=="sequence")
-assert(repr(space)=="space")
+assert_in(repr(alignpoint), ("alignpoint", "align-point"))
+assert_in(repr(mathstyle), ("mathstyle", "math-style"))
+asserte(repr(sequence), "sequence")
+asserte(repr(space), "space")
 assert(repr(primes)=="primes" or primes==none)
+asserte(repr(none), "none")
 }
 
 #let variant_to_latex_lookup=(
@@ -124,6 +126,9 @@ asserte(adddelimsize((body: "") , "", "l" )        , (body: "."))
   else { ("\\text{unknown delim " + repr(delim) + "}\\begin{matrix}", "\\end{matrix}") }
 }
 
+#repr($binom(1, 2, 3)$)
+
+
 // content, style → tex
 #let equation_body_to_latex(x, style, spacebefore: false, spaceafter: false) = {cat(style, ..{
   if x.func()==sequence{
@@ -203,7 +208,11 @@ asserte(adddelimsize((body: "") , "", "l" )        , (body: "."))
       }else{
         "\\operatorname{"
       }
-      x.text.replace(" ", "\\,")
+      let y=x.text
+      if type(y)==content{
+        y=repr(y).replace(regex("^\\[|\\]$"), "")
+      }
+      y.replace(" ", "\\,")
       "}"
     },)
   }else if x.func()==space{
@@ -304,7 +313,20 @@ asserte(adddelimsize((body: "") , "", "l" )        , (body: "."))
     (setheight(tmp3, tmp.height+tmp2.height),)
   }else if x.func()==math.binom{
     let tmp=equation_body_to_latex(x.upper, nextstyle(style))
-    let tmp2=equation_body_to_latex(x.lower, nextstyle(style))
+    let tmp2=(
+    if type(x.lower)==array{ // new version
+      cat(nextstyle(style), ..{
+        for (i, y) in x.lower.enumerate(){
+          if i>0{(",",)}
+          (equation_body_to_latex(y, nextstyle(style)),)
+        }
+      })
+      /*
+      equation_body_to_latex(x.lower.at(0), nextstyle(style))
+      */
+    }else{
+      equation_body_to_latex(x.lower, nextstyle(style))
+    })
     let tmp3=cat(style, "\\binom{", tmp, "}{", tmp2, "}")
     (setheight(tmp3, tmp.height+tmp2.height),)
   }else if x.func()==mathstyle{
@@ -393,6 +415,7 @@ asserte( equation_body_to_latex($mat(1, 2/3; 3, 4; 5, 6)$.body, displaystyle).he
 #let a =($ 
 op("lim sup")_3
 binom(1, 2)
+binom(1, 2, 3)  // in new enough version
     vec(1, 2, delim: "[")
     mat(1, 2; 3, 4; delim: "[")
     vec(1, 2, delim: "|")
