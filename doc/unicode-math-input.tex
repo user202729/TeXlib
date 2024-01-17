@@ -1,5 +1,5 @@
 %! TEX program = lualatex
-\ProvidesFile{unicode-math-input.tex} [2023/05/12 v0.0.0 ]
+\ProvidesFile{unicode-math-input.tex} [2024/01/18 v0.1.0 ]
 \PassOptionsToPackage{hyphens}{url}
 \RequirePackage{fvextra}
 \documentclass{l3doc}
@@ -248,6 +248,8 @@ Because by default the \pkg{unicode-math} package will already allow entering Un
 	These functions are not to be used directly. But you can redefine them to customized behavior of bold/italic/etc. Unicode characters.
 
 	For example you can |\renewcommand\umiMathbf[1]{\mathbf{#1}}| which is the default behavior.
+
+	Or you can execute, for example, |\renewcommand\umiMathscr[1]{\mathcal{#1}}| to use the calligraphic instead of the script alphabet for script characters.
 
 	More usefully, you may want to |\renewcommand\umiMathbf{\bm}| to make entered characters such as
 	$𝐚$ appear bold italic in the output, remember to load package \pkg{bm} if you want to do so (which is |unicode-math| behavior
