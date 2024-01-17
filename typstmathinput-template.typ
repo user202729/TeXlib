@@ -370,6 +370,10 @@ asserte(adddelimsize((body: "") , "", "l" )        , (body: "."))
     ("\\overline{", equation_body_to_latex(x.body, style), "}")
   }else if x.func()==math.underline{
     ("\\underline{", equation_body_to_latex(x.body, style), "}")
+  }else if x.func()==math.overbrace{
+    ("\\overbrace{", equation_body_to_latex(x.body, style), "}")
+  }else if x.func()==math.underbrace{
+    ("\\underbrace{", equation_body_to_latex(x.body, style), "}")
   }else if x.func()==primes{
     ("\\prime"*x.count+" ",)
   }else{
