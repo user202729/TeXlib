@@ -343,36 +343,34 @@
 \cs_new_eq:NN \umiFrac \frac
 
 % ======== after the superscript collection, \umiPrime\umiPrime... should be replaced with \dprime etc. smartly
-\cs_new_protected:Npn \umiPrime{ \__umi_prime }  % indirection layer for fast meaning-equality checking
+\cs_new_protected:Npn \umiPrime{ \__umi_prime 1 }  % note. Keep this short for fast meaning-equality checking
 \cs_new_eq:NN \umiPrimeNormalDefinition \umiPrime
-\cs_new_protected:Npn \__umi_prime {
-	\peek_meaning_collect_inline:Nn \umiPrime {
-		% note that ##1 misses one \prime as expands to this current function
-		\int_case:nnF { \tl_count:n {##1} } {
-			1 {\__umi_alternatives_iisafe \dprime {\prime\prime}}
-			2 {\__umi_alternatives_iisafe \trprime{\prime\prime\prime}}
-			3 {\__umi_alternatives_iisafe \qprime {\prime\prime\prime\prime}}
+\cs_new_protected:Npn \__umi_prime #1 {
+	\peek_meaning_remove:NTF \umiPrime {
+		\exp_args:Nf \__umi_prime {\int_eval:n{#1+1}}
+	} {
+		\int_case:nnF { #1 } {
+			2 {\__umi_alternatives_iisafe \dprime {\prime\prime}}
+			3 {\__umi_alternatives_iisafe \trprime{\prime\prime\prime}}
+			4 {\__umi_alternatives_iisafe \qprime {\prime\prime\prime\prime}}
 		} {
-			% complicated way to repeat '\prime' <count #1> times
-			\cs_gset_eq:NN \umiPrime \prime
-			\prime ##1
-			\cs_gset_eq:NN \umiPrime \umiPrimeNormalDefinition
+			\prg_replicate:nn {#1} {\prime}
 		}
 	}
 }
 
 % similar for backprime
-\cs_new_protected:Npn \umiBackprime{ \__umi_backprime }
+\cs_new_protected:Npn \umiBackprime{ \__umi_backprime 1 }
 \cs_new_eq:NN \umiBackprimeNormalDefinition \umiBackprime
-\cs_new_protected:Npn \__umi_backprime {
-	\peek_meaning_collect_inline:Nn \umiBackprime {
-		\int_case:nnF { \tl_count:n {##1} } {
-			1 {\__umi_alternatives_iisafe \backdprime {\backprime\backprime}}
-			2 {\__umi_alternatives_iisafe \backtrprime {\backprime\backprime\backprime}}
+\cs_new_protected:Npn \__umi_backprime #1 {
+	\peek_meaning_remove:NTF \umiBackprime {
+		\exp_args:Nf \__umi_backprime {\int_eval:n{#1+1}}
+	} {
+		\int_case:nnF { #1 } {
+			2 {\__umi_alternatives_iisafe \backdprime {\backprime\backprime}}
+			3 {\__umi_alternatives_iisafe \backtrprime {\backprime\backprime\backprime}}
 		} {
-			\cs_gset_eq:NN \umiBackprime \backprime
-			\backprime ##1
-			\cs_gset_eq:NN \umiBackprime \umiBackprimeNormalDefinition
+			\prg_replicate:nn {#1} {\backprime}
 		}
 	}
 }

@@ -53,8 +53,6 @@ The $α$ and $β$ must be in mono font instead of math font below:
 
 $a\overbrace{a}b$
 
-Type with ASCII gives $a''$ and $a'''''$.
-
 $𝒜ℬ𝒞$
 
 \ifdefined\dprime
@@ -62,6 +60,10 @@ $𝒜ℬ𝒞$
 \fi
 
 $a‵$ is $a^{\backprime}$
+
+$a‶$ is the same as $a‵‵$
+
+$a‶‵‶$ is the same as $a‵‵‵‵‵$
 
 $a`$ is not $a^{\backprime}$ without unicode-math
 
@@ -107,8 +109,10 @@ $G'^{34}$
 
 $G'^\bgroup34\egroup$
 \umiPatchPrime
-% the definition of TeX is somewhat interesting to make this correct
+% the definition of TeX is somewhat interesting to make the above correct
 % (or happens to be correct)
+
+Type with ASCII gives $a''$, $a''''$ and $a'''''$.
 
 default fraction: \[½\]
 \let\umiFrac\tfrac
@@ -163,10 +167,16 @@ $'=↑$
 \nonstopmode
 \errorcontextlines=10
 \umiDeclareMathChar {12} {34}  % if is Unicode engine this will raise error, otherwise it's not checked
+\errmessage{Expected "Redefining this special character..."}
 \umiDeclareMathChar {&} {34}   % will raise an error
+\errmessage{^}
+\errmessage{Expected "...already patched..."}
 \umiPatchPrime    % error: already patched
+\errmessage{^}
 \umiUnpatchPrime  % success
+\errmessage{Expected "...not patched..."}
 \umiUnpatchPrime  % error: not patched
+\errmessage{^}
 \errorstopmode
 }}  % throw away the box to avoid \tracinglostchars giving fatal error
 
