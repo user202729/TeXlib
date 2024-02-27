@@ -87,6 +87,15 @@ Some options are possible:
     If not passed or empty, defaults to some location in the temporary directory.
 \end{variable}
 
+\begin{variable}{cache-format=}
+    Specify the format of the cache. Possible formats are |json| and |shelve|.
+    
+    The default is |shelve|, but the problem is that if multiple concurrent runs are ongoing,
+    the error message "Resources temporarily available" may be raised.
+
+    There doesn't appear to be a good solution against it.
+\end{variable}
+
 \begin{variable}{watch-template-change=}
     If |true|, compare if the template has changed since the last run.
 
