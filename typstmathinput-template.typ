@@ -260,6 +260,7 @@ asserte(adddelimsize((body: "") , "", "l" )        , (body: "."))
       if spacebefore and spaceafter { ("\\mid ",) } else { ("\\vert ",) }
     }
     else if content=="‖" and spacebefore and spaceafter { ("\\parallel ",) }
+    else if content==":" and not spacebefore and spaceafter { ("\\colon ",) }
     else {
       // currently Typst code such as `x "is natural"` will make the TeX code omit the space before the quote.
       // there seems to be no good solution? Just stick with typing `x" is natural"` instead
