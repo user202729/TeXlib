@@ -89,7 +89,12 @@ def initialize_cache()->MutableMapping[str, str]:
 	global cache_location
 	if not cache_location:
 		tmpdir=initialize_tmpdir()
-		cache_location=str(tmpdir/"cache")
+		if cache_format=="json":
+			cache_location=str(tmpdir/("cache.json"))
+		elif cache_format=="shelve":
+			cache_location=str(tmpdir/("cache.dbm"))
+		else:
+			cache_location=str(tmpdir/("cache"))
 	cache: MutableMapping[str, str]
 	if cache_format=="shelve":
 		import shelve
@@ -161,15 +166,15 @@ def typst_formulas_to_tex(l: list[str], extra_preamble: str)->list[str]:
 	with tempfile.NamedTemporaryFile(dir=tmpdir, prefix="", suffix=".typ", delete=False, mode="w") as f:
 		n=Path(f.name)
 		f.write(r"""
-#import "typstmathinput-template.typ": equation_to_latex
+#import "typstmathinput-template.typ": equation_to_latex, textformat
 """ + extra_preamble + r"""
 #set page(width: 10000cm)
-#raw("<start>""" + delimiter + r"""\n")
+#textformat("<start>""" + delimiter + r"""\n")
 """ + # we do the above to avoid pdftotext removing spaces when they coincide with newlines
 
-(r'#raw("\n' + delimiter + r'\n")').join(
+(r'#textformat("\n' + delimiter + r'\n")').join(
 r"""
-#raw(equation_to_latex($""" + s + r"""$))
+#textformat(equation_to_latex($""" + s + r"""$))
 """ for s in l)
 		  )
 		# .replace(" ", "<SP>")
@@ -470,6 +475,8 @@ def handle_formula()->None:
 
 	>>> _end_to_end_test(r'\typstmathinputenable{\$}${integral x² dif x\{}$')
 	'{∫ 𝑥2 d𝑥{}'
+	>>> _end_to_end_test(r'\typstmathinputenable{\$}$ℬ α$')  # ℬ character is not in raw font, also note that the output α is the math italic letter
+	'ℬ𝛼'
 	"""
 	global total_formula_counter
 	total_formula_counter += 1
@@ -687,7 +694,7 @@ def typstmathinputprepare()->Optional[str]:
 	assert delimiter in enabled
 	lineno: int=T.inputlineno.int()
 	path: str=T.currfileabspath.str()
-	assert path
+	assert path, "Currently you must have --recorder flag and [abspath]currfile package"
 	text=Path(path).read_text(encoding='u8')
 	a=text.splitlines()
 	assert r'\typstmathinputprepare' in a[lineno-1]

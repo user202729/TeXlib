@@ -3,9 +3,19 @@
 #let mathstyle=$upright(A)$.body.func()
 #let space=$a b$.body.children.at(1).func()
 
-#let primes={
+#let get_tr_or_t(x)={
+  // new version $x'$ is attach(x, tr: prime())
+  // old version $x'$ is attach(x, t: prime())
+  if x.has("tr"){
+    x.tr
+  }else{
+    x.t
+  }
+}
+
+#let primes={ // in newer version this may be math.primes
   if $x''$.body.func()==math.attach{
-    $x''$.body.t.func()
+    get_tr_or_t($x''$.body).func()
   }else{
     none
   }
@@ -16,7 +26,7 @@
 
 #{
 assert_in(repr(alignpoint), ("alignpoint", "align-point"))
-assert_in(repr(mathstyle), ("mathstyle", "math-style"))
+assert_in(repr(mathstyle), ("mathstyle", "math-style", "styled"))
 asserte(repr(sequence), "sequence")
 asserte(repr(space), "space")
 assert(repr(primes)=="primes" or primes==none)
@@ -284,9 +294,9 @@ asserte(adddelimsize((body: "") , "", "l" )        , (body: "."))
     ("}",)
   }else if x.func()==math.attach{
     (equation_body_to_latex(x.base, style),)
-    if x.has("t") and not x.has("b") and not x.has("top") and not x.has("bottom") and x.t.func()==primes{
+    if x.has("t") and not x.has("b") and not x.has("top") and not x.has("bottom") and get_tr_or_t(x).func()==primes{
       // special handler for primes -- we need to do this to translate M'^2 to M'^{2} instead of M^{\prime }^{2}
-      ("'"*x.t.count,)
+      ("'"*get_tr_or_t(x).count,)
     }else{
       // old version, use top: and bottom:
       if x.has("top"){
@@ -308,6 +318,12 @@ asserte(adddelimsize((body: "") , "", "l" )        , (body: "."))
       if x.has("b"){
         ("_{",
         equation_body_to_latex(x.b, nextscriptstyle(style)),
+        "}")
+      }
+      // newer version, use "tr" for ^primes(...)
+      if x.has("tr"){
+        ("^{",
+        equation_body_to_latex(x.tr, nextscriptstyle(style)),
         "}")
       }
     }
@@ -354,10 +370,16 @@ asserte(adddelimsize((body: "") , "", "l" )        , (body: "."))
         "}")
       }
     }else{
-      (variant_to_latex_lookup.at(x.variant),
-      "{",
-      equation_body_to_latex(x.body, style),
-      "}")
+      if x.has("variant"){
+        (variant_to_latex_lookup.at(x.variant),
+        "{",
+        equation_body_to_latex(x.body, style),
+        "}")
+      }else{
+        // TODO (best effort)
+        // this only happen with styled() element
+        (equation_body_to_latex(x.child, style),)
+      }
     }
   }else if x.func()==alignpoint{
     let tmp=cat(style, "&")
@@ -397,7 +419,8 @@ asserte(adddelimsize((body: "") , "", "l" )        , (body: "."))
   }
 }
 
-
+#let textformat(x) = x
+// used to be raw(x), but raw font doesn't contain many characters
 
 
 
@@ -422,6 +445,7 @@ asserte( equation_body_to_latex($mat(1, 2/3; 3, 4; 5, 6)$.body, displaystyle).he
 //#import "/home/user202729/TeX/typstmathinput-template.typ": equation_to_latex
 
 #let a =($ 
+∫ dif x +
 limits(lim)_← +
 scripts(lim)_← +
 op("lim sup")_3
