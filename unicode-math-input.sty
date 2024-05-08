@@ -18,6 +18,11 @@
 	ignore-refresh-delimiter-list   .bool_set:N=\__umi_ignore_refresh_delimiter_list,
 	ignore-patch-delimiter-commands .bool_set:N=\__umi_ignore_patch_delimiter_commands,
 	ignore-patch-prime              .bool_set:N=\__umi_ignore_patch_prime,
+	deunicode	                    .code:n    ={
+		\RequirePackage{pythonimmediate}
+		\pyfilekpse{unicode-math-input-helper.py}
+		\__umi_register_deunicode{#1}
+	},
 }
 \ProcessKeysOptions{unicode-math-input}
 
@@ -46,12 +51,15 @@
 \cs_new_protected:Npn \umiMathsfbfit{\__umi_check_math_alphabet \mathsfbfit \umiMathsfbfit }
 \cs_new_protected:Npn \umiMathtt    {\__umi_check_math_alphabet \mathtt     \umiMathtt     }
 
+\cs_new_eq:NN \__umi_callback \relax
+% complicated to explain, is helper for retrieving expansion
+
 \msg_new:nnn {unicode-math-input} {define-math-alphabet} {
 	Please~load~a~package~that~defines~#1,~or~manually~define~#2.
 }
 \cs_new_protected:Npn \__umi_check_math_alphabet#1#2{
 	\ifdefined#1
-		\expandafter#1
+		\expandafter\__umi_callback \expandafter#1
 	\else
 		\msg_error:nnnn {unicode-math-input} {define-math-alphabet} #1 #2
 	\fi
@@ -69,15 +77,15 @@
 }
 % take 2 control sequences, return the first one that is defined. They must not peek ahead
 \cs_new_protected:Npn \__umi_alternatives #1 #2 {
-	\ifdefined #1
-		#1
-	\else
-		\ifdefined #2
-			#2
-		\else
+	\__umi_if_defined #1 {
+		\__umi_callback #1
+	} {
+		\__umi_if_defined #2 {
+			\__umi_callback #2
+		} {
 			\__umi_raise_error {#1#2}
-		\fi
-	\fi
+		}
+	}
 }
 
 \cs_new_protected:Npn \__umi_alternatives_m #1 {
@@ -95,33 +103,41 @@
 % #1 is control sequence, #2 is anything (must not peek ahead!)
 \cs_new_protected:Npn \__umi_alternatives_iisafe #1 #2 {
 	\ifdefined #1
-		\expandafter#1
+		\expandafter\__umi_callback \expandafter#1
 	\else
 		#2
+	\fi
+}
+
+\cs_new_protected:Npn \__umi_if_defined #1 {  % :NTF
+	\ifdefined #1
+		\expandafter \use_i:nn
+	\else
+		\expandafter \use_ii:nn
 	\fi
 }
 
 % e.g. '\__umi_alternatives_not \nexists \exists' → \nexists or \not\exists
 % both must be control sequences
 \cs_new_protected:Npn \__umi_alternatives_not #1 #2 {
-	\ifdefined #1
-		#1
-	\else
-		\ifdefined #2
-			\not#2
-		\else
+	\__umi_if_defined #1 {
+		\__umi_callback #1
+	} {
+		\__umi_if_defined #2 {
+			\__umi_callback \not#2
+		} {
 			\msg_error:nnn {unicode-math-input} {undefined-cs} {#1#2}
-		\fi
-	\fi
+		}
+	}
 }
 
 \cs_new_protected:Npn \__umi_alternatives_not_two #1 #2 #3 #4{
-	\ifdefined #1   #1       \else
-	\ifdefined #2   #2       \else
-	\ifdefined #3   \not#3   \else
-	\ifdefined #4   \not#4   \else
+	\__umi_if_defined #1   { \__umi_callback #1 } {
+	\__umi_if_defined #2   { \__umi_callback #2 } {
+	\__umi_if_defined #3   { \__umi_callback \not#3 } {
+	\__umi_if_defined #4   { \__umi_callback \not#4 } {
 		\msg_error:nnn {unicode-math-input} {undefined-cs} {#1#2#3#4}
-	\fi \fi \fi \fi
+	}}}}
 }
 
 
@@ -342,6 +358,8 @@
 
 \cs_new_eq:NN \umiFrac \frac
 
+\cs_generate_variant:Nn \use:nn {nx}
+
 % ======== after the superscript collection, \umiPrime\umiPrime... should be replaced with \dprime etc. smartly
 \cs_new_protected:Npn \umiPrime{ \__umi_prime 1 }  % note. Keep this short for fast meaning-equality checking
 \cs_new_eq:NN \umiPrimeNormalDefinition \umiPrime
@@ -354,7 +372,7 @@
 			3 {\__umi_alternatives_iisafe \trprime{\prime\prime\prime}}
 			4 {\__umi_alternatives_iisafe \qprime {\prime\prime\prime\prime}}
 		} {
-			\prg_replicate:nn {#1} {\prime}
+			\use:nx \__umi_callback {\prg_replicate:nn {#1} {\noexpand\prime}}
 		}
 	}
 }
@@ -370,7 +388,7 @@
 			2 {\__umi_alternatives_iisafe \backdprime {\backprime\backprime}}
 			3 {\__umi_alternatives_iisafe \backtrprime {\backprime\backprime\backprime}}
 		} {
-			\prg_replicate:nn {#1} {\backprime}
+			\use:nx \__umi_callback {\prg_replicate:nn {#1} {\noexpand\backprime}}
 		}
 	}
 }
@@ -642,6 +660,7 @@
 \bool_if:NF\__umi_ignore_patch_prime{
 	\AtBeginDocument{\umiPatchPrime}
 }
+
 
 \__umi_special_handle{′}{\__umi_superscript \umiPrime}
 \__umi_special_handle{″}{\__umi_superscript{\umiPrime\umiPrime}}
