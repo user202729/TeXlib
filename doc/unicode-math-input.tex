@@ -36,12 +36,12 @@
 \maketitle
 
 \begin{abstract}
-Allow entering Unicode symbols in math formulas.
+Allow entering Unicode symbols in math formulas, and also allow converting them to \LaTeX\ commands.
 \end{abstract}
 
 \section{Introduction}
 
-This package allows entering Unicode symbols in math formulas.
+This package allows entering Unicode symbols in math formulas, as well as a feature to replace Unicode characters in the source code with equivalent \LaTeX\ commands e.g. for journal submissions (see \cref{sec:deunicode}).
 
 \subsection{Existing packages}
 
@@ -236,6 +236,25 @@ Simply include the package.
 
 Because by default the \pkg{unicode-math} package will already allow entering Unicode symbols in math formulas, this package will raise an error if \pkg{unicode-math} is already loaded.
 
+\section{Deunicode feature}
+\label{sec:deunicode}
+
+This feature allows replacing Unicode characters in the input with the corresponding \LaTeX\ commands, e.g. for journal submission or compatibility reasons.
+
+Simply modify the line to include the package to add one or several |deunicode| options.
+Each option will specify the input file and the output file.
+\begin{verbatim}
+\usepackage[
+	deunicode={input=main.tex, output=main_deunicode.tex},
+	deunicode={input=chapter1.tex, output=chapter1_deunicode.tex},
+]{unicode-math-input}
+\end{verbatim}
+
+Special characters in file name might be supported by escaping them as follows.
+\begin{verbatim}
+deunicode={input=main\ \ \%\"\~.tex, output=main_deunicode.tex},
+\end{verbatim}
+
 \section{Advanced commands and options}
 
 \begin{function}{
@@ -319,6 +338,10 @@ or |\RenewCommandCopy| suffices.
 	\csref{umiRefreshDelimiterList} will be run |\AtBeginDocument|. Pass this to disable it running.
 
 	Only needed if there's some package clash or if there's spurious warning on "not determined to be a delimiter" etc.
+\end{option}
+
+\begin{option}{deunicode}
+	Refer to \cref{sec:deunicode}.
 \end{option}
 
 \begin{function}{\umiPatchCmdUnicodeArg,\umiUnpatchCmdUnicodeArg}
@@ -411,7 +434,7 @@ then |\big⟨| will eventually execute |\oldbig{⟨}| which is the desired behav
 
 \section{Compatibility}
 
-This package should have tested with various \TeX\ distribution versions on Overleaf.
+This package should have been tested with various \TeX\ distribution versions on Overleaf.
 
 \section{Advanced remarks}
 
