@@ -90,10 +90,10 @@
 
 \cs_new_protected:Npn \__umi_alternatives_m #1 {
 	\tl_map_inline:nn {#1} {
-		\ifdefined ##1
+		\__umi_if_defined ##1 {
 			##1
 			\tl_map_break:n {\use_none:nn}
-		\fi
+		} {}
 	}
 	\__umi_raise_error {#1}
 }
